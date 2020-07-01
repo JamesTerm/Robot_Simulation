@@ -1,0 +1,1 @@
+This simulation takes advantage of modern c++ to have modular code at each stage of the simulation.  Doing this makes it possible swap out legacy code with never code with ease, and then keeps each module simple to and allows for easier collaberation.
