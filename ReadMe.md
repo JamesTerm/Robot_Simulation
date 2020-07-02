@@ -1,1 +1,55 @@
-This simulation takes advantage of modern c++ to have modular code at each stage of the simulation.  Doing this makes it possible swap out legacy code with never code with ease, and then keeps each module simple to and allows for easier collaberation.
+# Robot Simulation
+
+## *Description*
+
+This simulation takes advantage of modern c++ to have modular code at each stage of the simulation.  Doing this makes it possible swap out legacy code with never code with ease, and then keeps each module simple to and allows for easier collaboration.
+
+---
+
+## *Launcher*
+
+The launcher is the main code which is responsible for instantiating each module, and will need to link them together.  Hopefully the linking part should be abstract enough to where the properties can manage the details as needed.  The idea is that the linking involved should be able to not be robot specific at this level, and could last many seasons.
+
+---
+
+## *Modules*
+
+Each Module is self contained and can run independently to make this work if it's dependency is not linked yet it can default to some kind of unit test to act as the filler so that it can be maintained without need from any other module.
+
+In "Moduler_Design.ppt" has a high level list of the modules and their general flow of information.  The standard convention will be a method driven callback where it's default implementation can be a test stub.  This makes it possible to avoid any class coupling which should be avoided between each module.
+
+An overall view of the module layout consist of the input group, the robot group, and the output group.
+
+---
+
+### Input Group
+
+- AI Input
+- Input
+- Controller Properties
+
+The *Input* with its controller properties defines tele-op or the controller's implementation.  The Launcher will provide the Robot object and then input can bind its controls (specified by the properties)
+
+*AI Input* is the autonomous that manages and executes goals.  If designed properly it should only need SLAM, and may need other sensors from the Robot object (which could be routed through SLAM)
+
+The way the design currently stands is that robot gets the time slices and each input module can get a time slice for its operations and the robot reads from the input to translate what it needs to do for output.
+
+### Robot Group
+
+- Robot
+- Robot Properties
+- SLAM
+
+The *Robot* will pull input and push output.  This is where the drive kinematics resides, it will use properties and if done correct should be able to survive multiple seasons.  The most common component of the robot is the rotary system, and so this is the front end for what is to be the output.
+
+*SLAM* (Simultaneous localization and mapping) is the object that keeps track of it's position on the field.  It will bind to robot to get sensor information (localization) to determine where it really is.  The mapping aspect can be addressed per game as needed.
+
+### Output Group
+
+- Simulated Output
+- WPI Output
+- Output properties
+
+The simulated output can make use of SLAM data and present it in a way that can help see how the output will behave.  Typically in the past this has been used to monitor the drive from a top view 2D analyses of motion, but could indeed by translated to a 3D representation.  It can alternative pull data from the Robot to show some representation of this data.  The SmartDashboard could be considered a simulated output.
+
+Finally the WPI Output can pull data from the robot to update components as well as give data from sensors back to the robot, where the properties can help map out the slot assignments for each component.
