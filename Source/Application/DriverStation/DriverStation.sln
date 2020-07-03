@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.28307.1169
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "DriverStation", "DriverStation\DriverStation.vcxproj", "{80908663-65CD-4F17-A924-C8B006AB9A88}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{80908663-65CD-4F17-A924-C8B006AB9A88}.Debug|x64.ActiveCfg = Debug|x64
+		{80908663-65CD-4F17-A924-C8B006AB9A88}.Debug|x64.Build.0 = Debug|x64
+		{80908663-65CD-4F17-A924-C8B006AB9A88}.Debug|x86.ActiveCfg = Debug|Win32
+		{80908663-65CD-4F17-A924-C8B006AB9A88}.Debug|x86.Build.0 = Debug|Win32
+		{80908663-65CD-4F17-A924-C8B006AB9A88}.Release|x64.ActiveCfg = Release|x64
+		{80908663-65CD-4F17-A924-C8B006AB9A88}.Release|x64.Build.0 = Release|x64
+		{80908663-65CD-4F17-A924-C8B006AB9A88}.Release|x86.ActiveCfg = Release|Win32
+		{80908663-65CD-4F17-A924-C8B006AB9A88}.Release|x86.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {5EC5D2B8-9EBC-41DF-ACAF-9C9B6D8AE741}
+	EndGlobalSection
+EndGlobal
