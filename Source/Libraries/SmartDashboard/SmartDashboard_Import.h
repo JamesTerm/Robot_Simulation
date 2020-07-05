@@ -4,7 +4,7 @@
 #include <string>
 //we could include this if Sendable.h would declare the iTable class without including it
 //#include "SmartDashboard/NamedSendable.h"
-#include "NetworkTables/cpp/include/src/main/include/networktables2/type/ComplexData.h"
+#include "networktables2/type/ComplexData.h"
 //#include "NetworkTables/cpp/include/src/main/include/ErrorBase.h"
 
 class NamedSendable
@@ -20,7 +20,7 @@ public:
 class ITable;
 class Sendable;
 
-class __declspec(dllimport) SmartDashboard //: public SensorBase
+class SmartDashboard //: public SensorBase
 {
 public:
 	static void init();
@@ -39,7 +39,8 @@ public:
 	static void PutString(std::string keyName, std::string value);
 	static int GetString(std::string keyName, char *value, unsigned int valueLen);
 	static std::string GetString(std::string keyName);
-	
+	static std::string GetString(std::string keyName, std::string defaultValue);
+
 	static void PutValue(std::string keyName, ComplexData& value);
 	static void RetrieveValue(std::string keyName, ComplexData& value);
 
@@ -52,9 +53,10 @@ public:
 	static void SetTeam(int team);
 	 /// @param address the address that network tables will connect to in client mode
 	static void SetIPAddress(const char* address);
+	static  bool IsConnected();
 private:
 	SmartDashboard();
-	//virtual ~SmartDashboard();
+	virtual ~SmartDashboard();
 	//DISALLOW_COPY_AND_ASSIGN(SmartDashboard);
 
 	/** The {@link NetworkTable} used by {@link SmartDashboard} */
