@@ -29,4 +29,3 @@ SLAM entity
 Robot properties for kinematics and entity
 
 ---
-

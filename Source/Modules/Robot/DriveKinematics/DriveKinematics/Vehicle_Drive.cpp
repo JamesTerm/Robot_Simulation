@@ -8,7 +8,7 @@
 
 using namespace Module::Robot;
 
-
+#pragma region _Tank Drive_
   /***********************************************************************************************************************************/
  /*															Tank_Drive																*/
 /***********************************************************************************************************************************/
@@ -35,10 +35,45 @@ void Tank_Drive::UpdateVelocities(double FWD, double RCW)
 	m_LeftLinearVelocity = FWD + RCW;
 	m_RightLinearVelocity = FWD - RCW;
 }
+#pragma endregion
+#pragma region _Inv Tank Drive_
+  /***********************************************************************************************************************************/
+ /*														Inv_Tank_Drive																*/
+/***********************************************************************************************************************************/
 
+void Inv_Tank_Drive::ResetPos()
+{
+	m_LocalVelocity_y = m_LocalVelocity_x =  m_AngularVelocity = 0.0;
+}
 
+void Inv_Tank_Drive::InterpolateVelocities(double LeftLinearVelocity, double RightLinearVelocity)
+{
+	const double D = m_props.TurningDiameter;
 
+	//const double FWD = (LeftLinearVelocity*cos(1.0)+RightLinearVelocity*cos(1.0))/2.0;
+	const double FWD = (LeftLinearVelocity + RightLinearVelocity) * 0.5;
+	//const double STR = (LeftLinearVelocity*sin(0.0)+ RightLinearVelocity*sin(0.0))/2.0;
+	const double STR = 0.0;
 
+	//const double HP=Pi/2;
+	//const double HalfDimLength=GetWheelDimensions().length()/2;
+
+	//L is the vehicle’s wheelbase
+	const double L = m_props.WheelBase;
+	//W is the vehicle’s track width
+	const double W = m_props.TrackWidth;
+
+	const double skid = cos(atan2(L, W));
+	const double omega = ((LeftLinearVelocity*skid) + (RightLinearVelocity*-skid)) * 0.5;
+
+	m_LocalVelocity_x = STR;
+	m_LocalVelocity_y = FWD;
+
+	m_AngularVelocity = (omega / (Pi * D)) * Pi2;
+}
+
+#pragma endregion
+#pragma region _Swerve Drive_
   /***********************************************************************************************************************************/
  /*														Swerve_Drive																*/
 /***********************************************************************************************************************************/
@@ -95,8 +130,43 @@ void Swerve_Drive::UpdateVelocities(double FWD, double STR, double RCW)
 	//DOUT4("%f %f %f",FWD,STR,RCW);  //Test accuracy
 
 }
+#pragma endregion
+#pragma region _Inv Swerve Drive_
+void Inv_Swerve_Drive::ResetPos()
+{
+	m_LocalVelocity_y = m_LocalVelocity_x = m_AngularVelocity = 0.0;
+}
 
+void Inv_Swerve_Drive::InterpolateVelocities(const SwerveVelocities &Velocities)
+{
+	const SwerveVelocities::uVelocity::Explicit &_ = Velocities.Velocity.Named;
+	//L is the vehicle’s wheelbase
+	const double L = m_props.WheelBase;
+	//W is the vehicle’s track width
+	const double W = m_props.TrackWidth;
 
+	const double D = m_props.TurningDiameter;
+
+	const double FWD = (_.sFR*cos(_.aFR) + _.sFL*cos(_.aFL) + _.sRL*cos(_.aRL) + _.sRR*cos(_.aRR))*0.25;
+
+	const double STR = (_.sFR*sin(_.aFR) + _.sFL*sin(_.aFL) + _.sRL*sin(_.aRL) + _.sRR*sin(_.aRR))*0.25;
+	const double HP = Pi / 2;
+	//const double HalfDimLength=GetWheelDimensions().length()/2;
+
+	//Here we go it is finally working I just needed to take out the last division
+	const double omega = ((_.sFR*cos(atan2(W, L) + (HP - _.aFR)) + _.sFL*cos(atan2(-W, L) + (HP - _.aFL))
+		+ _.sRL*cos(atan2(-W, -L) + (HP - _.aRL)) + _.sRR*cos(atan2(W, -L) + (HP - _.aRR)))*0.25);
+
+	//const double omega = (((_.sFR*cos(atan2(W,L)+(HP-_.aFR))/4)+(_.sFL*cos(atan2(-W,L)+(HP-_.aFL))/4)
+	//	+(_.sRL*cos(atan2(-W,-L)+(HP-_.aRL))/4)+(_.sRR*cos(atan2(W,-L)+(HP-_.aRR))/4)));
+
+	m_LocalVelocity_x = STR;
+	m_LocalVelocity_y = FWD;
+
+	m_AngularVelocity = (omega / (Pi * D)) * Pi2;
+}
+#pragma endregion
+#pragma region _future drives_
 //TODO later
 #if 0
   /***********************************************************************************************************************************/
@@ -275,3 +345,4 @@ void Nona_Drive::ApplyThrusters(PhysicsEntity_2D &PhysicsToUse,const Vec2D &Loca
 }
 
 #endif
+#pragma endregion

@@ -26,6 +26,29 @@ private:
 	properties m_props;
 };
 
+class Inv_Tank_Drive
+{
+public:
+	struct properties
+	{
+		double TurningDiameter;  //distance from diagonal for 4WD or one set of 4 wheels for 6WD
+		double WheelBase;  //Length between wheels
+		double TrackWidth; //Width between wheels
+	};
+	void SetProperties(const properties &props) { m_props = props; }
+	void ResetPos();
+	//Given the current velocities from both sides interpret the linear and angular velocity
+	void InterpolateVelocities(double LeftLinearVelocity, double RightLinearVelocity);
+	double GetLocalVelocityX() const { return m_LocalVelocity_x; }
+	double GetLocalVelocityY() const { return m_LocalVelocity_y; }
+	double GetAngularVelocity() const { return m_AngularVelocity; }
+private:
+	double m_LocalVelocity_y=0.0;
+	double m_LocalVelocity_x=0.0;
+	double m_AngularVelocity=0.0;
+	properties m_props;
+};
+
 struct SwerveVelocities
 {
 	enum SectionOrder
@@ -52,28 +75,52 @@ struct SwerveVelocities
 
 class Swerve_Drive
 {
-	public:
-		struct properties
-		{
-			double TurningDiameter;  //distance from diagonal for 4WD or one set of 4 wheels for 6WD
-			double WheelBase;  //Length between wheels
-			double TrackWidth; //Width between wheels
-		};
-		void SetProperties(const properties &props) { m_props = props; }
-		// Places the ship back at its initial position and resets all vectors
-		void ResetPos();
+public:
+	struct properties
+	{
+		double TurningDiameter;  //distance from diagonal for 4WD or one set of 4 wheels for 6WD
+		double WheelBase;  //Length between wheels
+		double TrackWidth; //Width between wheels
+	};
+	void SetProperties(const properties &props) { m_props = props; }
+	// Places the ship back at its initial position and resets all vectors
+	void ResetPos();
 
-		double GetIntendedVelocitiesFromIndex(size_t index) const { return m_Velocities.Velocity.AsArray[index]; }
-		double GetSwerveVelocitiesFromIndex(size_t index) const { return m_Velocities.Velocity.AsArray[index+4]; }
-		//Overload this for optimal time between the update and position to avoid oscillation
-		void UpdateVelocities(double FWD, double STR, double RCW);
+	double GetIntendedVelocitiesFromIndex(size_t index) const { return m_Velocities.Velocity.AsArray[index]; }
+	double GetSwerveVelocitiesFromIndex(size_t index) const { return m_Velocities.Velocity.AsArray[index+4]; }
+	//Overload this for optimal time between the update and position to avoid oscillation
+	void UpdateVelocities(double FWD, double STR, double RCW);
 
-		const SwerveVelocities &GetIntendedVelocities() const { return m_Velocities; }
+	const SwerveVelocities &GetIntendedVelocities() const { return m_Velocities; }
 private:
-		SwerveVelocities m_Velocities;
-		properties m_props;
+	SwerveVelocities m_Velocities;
+	properties m_props;
 };
 
+class Inv_Swerve_Drive
+{
+public:
+	struct properties
+	{
+		double TurningDiameter;  //distance from diagonal for 4WD or one set of 4 wheels for 6WD
+		double WheelBase;  //Length between wheels
+		double TrackWidth; //Width between wheels
+	};
+	void SetProperties(const properties &props) { m_props = props; }
+	void ResetPos();
+	//Given the current velocities from both sides interpret the linear and angular velocity
+	void InterpolateVelocities(const SwerveVelocities &Velocities);
+	double GetLocalVelocityX() const { return m_LocalVelocity_x; }
+	double GetLocalVelocityY() const { return m_LocalVelocity_y; }
+	double GetAngularVelocity() const { return m_AngularVelocity; }
+private:
+	double m_LocalVelocity_y = 0.0;
+	double m_LocalVelocity_x = 0.0;
+	double m_AngularVelocity = 0.0;
+	properties m_props;
+};
+
+#pragma region _future drives_
 //TODO later
 #if 0
 class COMMON_API Butterfly_Drive : public Swerve_Drive
@@ -114,3 +161,4 @@ class COMMON_API Nona_Drive : public Butterfly_Drive
 #endif
 
 }}
+#pragma endregion
