@@ -18,16 +18,5 @@ I have also included the inverse kinematics here even though these pertain more 
 
 The swerve equations were given to me from Ether on CD back around December 2011, he also provided the inverse equations.  I've kept the code variable the names the same as they were presented to me.
 
-TODO:
-Add inverse kinematics
-
 ---
 
-## SLAM
-
-I'll expand more on this here.  The most important piece is the entity.  This is used for prediction as well as a trapezoidal motion profile.  AI can manipulate a 2D entity and it can then be used to drive to waypoints.  In addition the predicting of the motion profile is the essential ingredient for closed loop programming.
-
-TODO:
-Add Entity object
-
----
