@@ -25,9 +25,18 @@ Add inverse kinematics
 
 ## SLAM
 
-I'll expand more on this here.  The most important piece is the entity.  This is used for prediction as well as a trapezoidal motion profile.  AI can manipulate a 2D entity and it can then be used to drive to waypoints.  In addition the predicting of the motion profile is the essential ingredient for closed loop programming.
+*Simulateous Localization and Mapping*
+I'll expand more on this here.  The most important piece is the entity.  This is used for prediction as well as a trapezoidal motion profile.  AI can manipulate a 2D entity and it can then be used to drive to waypoints.  In addition the predicting of the motion profile is the essential ingredient for closed loop programming.  Closed loop feedback from sensors like encoders and vision can be used to calibrate the prediction to where it physically resides at that moment.  1D entities can be used in the same regard for manipulators, we can include them in this group even though they do not necessarily contribute to localization.  
+
+For now we needn't worry about mapping especially because it is hard to find a common ground between seasons, that said... we may wish to consider providing an automated way to plot waypoints onto a virtual field, which is easy because they give us the placement of field elements.  It's even possible to add path algorithms and run cycles from them... for that it could ideal for autonomous and if its possible to recognize robots in the way... we can consider object avoidance algorithms (Like what has been done with rim space / the fringe).
 
 TODO:
 Add Entity object
+
+---
+
+## Robot properties
+
+This is mostly reserved.  I may add this back with LUA, but it will much later and evaluated if wanted.  This is more of an automated task, so I may leave this up to the students to work out.  For early iterations I'll just hard code properties to keep it simple and all c++.  One other thing I hope to achieve is to avoid modules from being dependent on it.
 
 ---
