@@ -76,7 +76,7 @@ public:
 			{
 				if (m_joystick.read_joystick(JoyNum, joyinfo))
 				{
-					//To use the Kinematics correctly the vector needs to keep the magnitude at 1.0, typicaly the joy axis
+					//To use the Kinematics correctly the vector needs to keep the magnitude at 1.0, typically the joy axis
 					//goes to 1.0 for all axis so the diagonal result is a greater magnitude.  To fix we'll normalize the 
 					//direction with 1.0, and clip via min of the current value.. the result is the joystick has a circle
 					//instead of a square on its range of motion.
@@ -87,13 +87,13 @@ public:
 					if (Magnitude > 1.0)
 					{
 						test_clipping = true;
-						//clip with a 1.0 magnitude
-						JoyInput_To_Use = NormalizedDirection * 1.0;
+						//clip with the normalized direction
+						JoyInput_To_Use = NormalizedDirection;
 						//sanity check... for some reason the magnitude is still high with some combinations
 						//Even this check may fail, this is probably a result of floating point precision lost
 						//however, it's still effective enough, and we can observe that when we remain within the clipping
 						//region the limit of the velocities are correct, most of these issues will not be a real problem
-						//especially when making the input logrithmec, and even less of a problem by reducing the maximum
+						//especially when making the input logarithmic, and even less of a problem by reducing the maximum
 						//turning rate
 						if (JoyInput_To_Use.length() > 1.0)
 						{
@@ -112,7 +112,11 @@ public:
 						Meters2Feet(m_robot.GetLeftVelocity()), Meters2Feet(m_robot.GetRightVelocity()),
 						test_clipping ? "[!]" : ""
 					);
-					//TODO smart dashboard output here
+					//Use smart dashboard to see progress bar representation (gets a better idea of the clipping)
+					//Roll the joystick around each direction when doing this... to confirm it's correct
+					//set progress bar to 12 to -12 on the range in its properties
+					SmartDashboard::PutNumber("Left", Meters2Feet(m_robot.GetLeftVelocity()));
+					SmartDashboard::PutNumber("Right", Meters2Feet(m_robot.GetRightVelocity()));
 					if (joyinfo.ButtonBank[0] == 2)
 						done = true;
 				}
@@ -130,11 +134,13 @@ public:
 #pragma region _main_
 int main()
 {
+	SmartDashboard::init();
 	//Reserved... this may become command driven
 	//For now we are just typing in the test here
 	Test01_Tank_Kinematics_with_Joystick test;
 	test.init();  //good habit to late bind your classes (if possible), makes them easier to work with
 	test();
+	SmartDashboard::shutdown();
 	return 0;
 }
 #pragma endregion
