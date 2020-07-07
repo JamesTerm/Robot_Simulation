@@ -163,7 +163,7 @@ public:
 		Inv_Tank_Drive::properties *props2;
 		//This works, for test code but not recommended for actual code
 		props2 = (Inv_Tank_Drive::properties *)&props;
-		m_tank_steering.SetProperties(*props2);  
+		m_tank_steering.SetProperties(*props2);
 
 		//Assume our robot's top speed is 12 fps
 		m_maxspeed = 12.0;
@@ -190,11 +190,10 @@ public:
 				{
 					//unlike in previous test... no magnitude check... we can see how well they work together
 					//Note the right up/down axis may be different on your controller... just hard code the right one for now
-					m_tank_steering.InterpolateVelocities(joyinfo.lY, joyinfo.lZ);
+					m_tank_steering.InterpolateVelocities(Feet2Meters(m_maxspeed * joyinfo.lY), Feet2Meters(m_maxspeed *  joyinfo.lZ));
 
 					//Now we can pull the interpolated values to be passed in... Note: we have no strafe, so we can ignore
-					//Note: due to vector clipping on the interpolation we can get best results by scaling down the angular acceleration
-					m_robot.UpdateVelocities(Feet2Meters(m_maxspeed * m_tank_steering.GetLocalVelocityY()), m_tank_steering.GetAngularVelocity() * m_max_heading_rad * 0.8);
+					m_robot.UpdateVelocities(m_tank_steering.GetLocalVelocityY(), m_tank_steering.GetAngularVelocity());
 
 					printf("\r Left=%f Right=%f             ",
 						Meters2Feet(m_robot.GetLeftVelocity()), Meters2Feet(m_robot.GetRightVelocity())	);
