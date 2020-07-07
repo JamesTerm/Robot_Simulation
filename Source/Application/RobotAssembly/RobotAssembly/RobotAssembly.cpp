@@ -197,8 +197,11 @@ public:
 
 					printf("\r Left=%f Right=%f             ",
 						Meters2Feet(m_robot.GetLeftVelocity()), Meters2Feet(m_robot.GetRightVelocity())	);
-					//Use smart dashboard to see progress bar representation (gets a better idea of the clipping)
+					//Use smart dashboard to see progress bar representation
 					//set progress bar to 12 to -12 on the range in its properties
+					//Tests show the inputs match the final velocities virtually exact
+					SmartDashboard::PutNumber("Left_input", m_maxspeed * joyinfo.lY);
+					SmartDashboard::PutNumber("Right_input", m_maxspeed * joyinfo.lZ);
 					SmartDashboard::PutNumber("Left", Meters2Feet(m_robot.GetLeftVelocity()));
 					SmartDashboard::PutNumber("Right", Meters2Feet(m_robot.GetRightVelocity()));
 					if (joyinfo.ButtonBank[0] == 2)
