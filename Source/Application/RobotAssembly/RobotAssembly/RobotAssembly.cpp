@@ -181,7 +181,7 @@ public:
 		size_t NoJoySticks = m_joystick.GetNoJoysticksFound();
 		if (NoJoySticks)
 		{
-			printf("Button: 2=exit, x axis=left, z axis=right \n");
+			printf("Button: 2=exit, y axis=left, z axis=right \n");
 			dx_Joystick::JoyState joyinfo;
 			memset(&joyinfo, 0, sizeof(dx_Joystick::JoyState));
 			bool done = false;
@@ -205,6 +205,182 @@ public:
 					SmartDashboard::PutNumber("Right_input", m_maxspeed * joyinfo.lZ);
 					SmartDashboard::PutNumber("Left", Meters2Feet(m_robot.GetLeftVelocity()));
 					SmartDashboard::PutNumber("Right", Meters2Feet(m_robot.GetRightVelocity()));
+					if (joyinfo.ButtonBank[0] == 2)
+						done = true;
+				}
+				Sleep(22); //about 30 times a sec
+			}
+		}
+		else
+		{
+			printf("None found\n");
+			Sleep(2000);
+		}
+	}
+};
+#pragma endregion
+#pragma region _Test03_Swerve_Kinematics_with_Joystick_
+
+class Test03_Swerve_Kinematics_with_Joystick
+{
+private:
+	Module::Input::dx_Joystick m_joystick;  //Note: always late binding, so we can aggregate direct easy here
+	Module::Robot::Swerve_Drive m_robot;
+	//These typically are constants, but if we have gear shifting they can change
+	double m_maxspeed; //max velocity forward in feet per second
+	double m_max_heading_rad;  //max angular velocity in radians
+public:
+	void init()
+	{
+		m_joystick.Init();
+
+		using namespace Module::Robot;
+		//setup some robot properties
+		using properties = Swerve_Drive::properties;
+		//We'll make a square robot for ease to interpret angles
+		Vec2D wheel_dimensions(Inches2Meters(24), Inches2Meters(24));
+		properties props =
+		{
+		wheel_dimensions.length(),	//distance from diagonal for 4WD
+		wheel_dimensions[0], //Length between wheels
+		wheel_dimensions[1] //Width between wheels
+		};
+		//Set the properties... this should be a one-time setup operation
+		m_robot.SetProperties(props);
+
+		//Assume our robot's top speed is 12 fps
+		m_maxspeed = 12.0;
+		//I could omit, but I want to show no skid; however, we can reserve this if in practice the 2-3 degrees
+		//of precision loss actually does (I don't believe this would ever be significant)
+		const double skid = 1.0;  
+		//We'll compute the max angular velocity to use in equation
+		//like with tank spinning in place needs to be half of spinning with full forward
+		//this time... no skid
+		m_max_heading_rad = (2 * Feet2Meters(m_maxspeed) / wheel_dimensions.length()) * skid;
+	}
+	void operator()()
+	{
+		using namespace Module::Input;
+		using JoystickInfo = dx_Joystick::JoystickInfo;
+		size_t JoyNum = 0;
+
+		size_t NoJoySticks = m_joystick.GetNoJoysticksFound();
+		if (NoJoySticks)
+		{
+			printf("Button: 2=exit, x axis=strafe, y axis=forward/reverse, z axis turn \n");
+			dx_Joystick::JoyState joyinfo;
+			memset(&joyinfo, 0, sizeof(dx_Joystick::JoyState));
+			bool done = false;
+			while (!done)
+			{
+				if (m_joystick.read_joystick(JoyNum, joyinfo))
+				{
+					//In this test we will not have magnitude clipping, but I may change that later
+					//Get an input from the controllers to feed in... we'll hard code the x and y axis
+					m_robot.UpdateVelocities(Feet2Meters(m_maxspeed*joyinfo.lY), Feet2Meters(m_maxspeed*joyinfo.lX), joyinfo.lZ * m_max_heading_rad);
+
+					//I've added SmartLayout_Swerve1.xml in the design folder to test
+					//Use smart dashboard to see progress bar representation (gets a better idea of the clipping)
+					//Roll the joystick around each direction when doing this... to confirm it's correct
+					//set progress bar to 12 to -12 on the range in its properties
+					SmartDashboard::PutNumber("Wheel_fl_Velocity", Meters2Feet(m_robot.GetIntendedVelocitiesFromIndex(0)));
+					SmartDashboard::PutNumber("Wheel_fr_Velocity", Meters2Feet(m_robot.GetIntendedVelocitiesFromIndex(1)));
+					SmartDashboard::PutNumber("Wheel_rl_Velocity", Meters2Feet(m_robot.GetIntendedVelocitiesFromIndex(2)));
+					SmartDashboard::PutNumber("Wheel_rr_Velocity", Meters2Feet(m_robot.GetIntendedVelocitiesFromIndex(3)));
+					//For the angles either show raw or use simple dial using 180 to -180 with a 45 tick interval
+					//its not perfect, but it gives a good enough direction to tell (especially when going down)
+					SmartDashboard::PutNumber("swivel_fl_Raw", RAD_2_DEG(m_robot.GetSwerveVelocitiesFromIndex(0)));
+					SmartDashboard::PutNumber("swivel_fr_Raw", RAD_2_DEG(m_robot.GetSwerveVelocitiesFromIndex(1)));
+					SmartDashboard::PutNumber("swivel_rl_Raw", RAD_2_DEG(m_robot.GetSwerveVelocitiesFromIndex(2)));
+					SmartDashboard::PutNumber("swivel_rr_Raw", RAD_2_DEG(m_robot.GetSwerveVelocitiesFromIndex(3)));
+					if (joyinfo.ButtonBank[0] == 2)
+						done = true;
+				}
+				Sleep(22); //about 30 times a sec
+			}
+		}
+		else
+		{
+			printf("None found\n");
+			Sleep(2000);
+		}
+	}
+};
+#pragma endregion
+#pragma region _Test04_Swerve_Kinematics_with_TankSteering_
+
+class Test04_Swerve_Kinematics_with_TankSteering
+{
+private:
+	Module::Input::dx_Joystick m_joystick;
+	Module::Robot::Swerve_Drive m_robot;
+	Module::Robot::Inv_Tank_Drive m_tank_steering; //yes still tank (for *tank* steering)
+	//These typically are constants, but if we have gear shifting they can change
+	double m_maxspeed; //max velocity forward in feet per second
+	double m_max_heading_rad;  //max angular velocity in radians
+public:
+	void init()
+	{
+		m_joystick.Init();
+
+		using namespace Module::Robot;
+		//setup some robot properties
+		using properties = Swerve_Drive::properties;
+		//For test 3 for more information
+		Vec2D wheel_dimensions(Inches2Meters(24), Inches2Meters(24));
+		properties props =
+		{
+		wheel_dimensions.length(),	//distance from diagonal for 4WD
+		wheel_dimensions[0], //Length between wheels
+		wheel_dimensions[1] //Width between wheels
+		};
+		//Set the properties... this should be a one-time setup operation
+		m_robot.SetProperties(props);
+		Inv_Tank_Drive::properties *props2;
+		//This works, for test code but not recommended for actual code
+		props2 = (Inv_Tank_Drive::properties *)&props;
+		m_tank_steering.SetProperties(*props2);
+
+		//Assume our robot's top speed is 12 fps
+		m_maxspeed = 12.0;
+		//see test 3 for more info on skid
+		const double skid = 1.0;
+		//See test 3 for more information
+		m_max_heading_rad = (2 * Feet2Meters(m_maxspeed) / wheel_dimensions.length()) * skid;
+	}
+	void operator()()
+	{
+		using namespace Module::Input;
+		using JoystickInfo = dx_Joystick::JoystickInfo;
+		size_t JoyNum = 0;
+
+		size_t NoJoySticks = m_joystick.GetNoJoysticksFound();
+		if (NoJoySticks)
+		{
+			printf("Button: 2=exit, x axis=strafe, y axis=left, z axis=right \n");
+			dx_Joystick::JoyState joyinfo;
+			memset(&joyinfo, 0, sizeof(dx_Joystick::JoyState));
+			bool done = false;
+			while (!done)
+			{
+				if (m_joystick.read_joystick(JoyNum, joyinfo))
+				{
+					//unlike in previous test... no magnitude check... we can see how well they work together
+					//Note the right up/down axis may be different on your controller... just hard code the right one for now
+					m_tank_steering.InterpolateVelocities(Feet2Meters(m_maxspeed * joyinfo.lY), Feet2Meters(m_maxspeed *  joyinfo.lZ));
+
+					//Now we can pull the interpolated values to be passed in... Note: we have strafe too!
+					m_robot.UpdateVelocities(m_tank_steering.GetLocalVelocityY(), Feet2Meters(m_maxspeed*joyinfo.lX), m_tank_steering.GetAngularVelocity());
+
+					//Use smart dashboard to see progress bar representation
+					SmartDashboard::PutNumber("Wheel_fl_Velocity", Meters2Feet(m_robot.GetIntendedVelocitiesFromIndex(0)));
+					SmartDashboard::PutNumber("Wheel_fr_Velocity", Meters2Feet(m_robot.GetIntendedVelocitiesFromIndex(1)));
+					SmartDashboard::PutNumber("Wheel_rl_Velocity", Meters2Feet(m_robot.GetIntendedVelocitiesFromIndex(2)));
+					SmartDashboard::PutNumber("Wheel_rr_Velocity", Meters2Feet(m_robot.GetIntendedVelocitiesFromIndex(3)));
+					SmartDashboard::PutNumber("swivel_fl_Raw", RAD_2_DEG(m_robot.GetSwerveVelocitiesFromIndex(0)));
+					SmartDashboard::PutNumber("swivel_fr_Raw", RAD_2_DEG(m_robot.GetSwerveVelocitiesFromIndex(1)));
+					SmartDashboard::PutNumber("swivel_rl_Raw", RAD_2_DEG(m_robot.GetSwerveVelocitiesFromIndex(2)));
+					SmartDashboard::PutNumber("swivel_rr_Raw", RAD_2_DEG(m_robot.GetSwerveVelocitiesFromIndex(3)));
 					if (joyinfo.ButtonBank[0] == 2)
 						done = true;
 				}
@@ -278,7 +454,6 @@ void tester(const char *csz_test)
 	}
 		break;
 	case eTankTest_tank_steering:
-	case eCurrent:
 	{
 		Test02_Tank_Kinematics_with_TankSteering test;
 		test.init();
@@ -287,9 +462,22 @@ void tester(const char *csz_test)
 	}
 		break;
 	case eSwerveTest_Joy:
-		break;
+	case eCurrent:
+	{
+		Test03_Swerve_Kinematics_with_Joystick test;
+		test.init();  //good habit to late bind your classes (if possible), makes them easier to work with
+		test();
+		printf("complete\n");
+	}
+	break;
 	case eSwerveTest_tank_steering:
-		break;
+	{
+		Test04_Swerve_Kinematics_with_TankSteering test;
+		test.init();
+		test();
+		printf("complete\n");
+	}
+	break;
 	}
 }
 
