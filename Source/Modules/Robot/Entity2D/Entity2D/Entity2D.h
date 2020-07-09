@@ -71,6 +71,7 @@ public:
 	};
 	Vector2D Get_SetVelocity_local() const;  //Returns last velocity requested
 	Vector2D Get_SetVelocity_global() const;  //these are recorded separately
+	double Get_IntendedOrientation() const; //Get set point heading where 0 is north in radians
 	Vector2D GetCurrentVelocity() const;  //returns the current velocity in raw global form
 	Vector2D GetCurrentPosition() const;  //returns x y coordinates of current position
 	double GetCurrentHeading() const;  //returns heading where 0 is north in radians

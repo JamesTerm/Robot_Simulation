@@ -23,8 +23,6 @@ keyboard driving with entities
 This is a work in progress, where we have various tests that can test various object interactions.  This is open for any kind of test which can be command drive, and open for unit testing.
 
 TODO I have some tests that will be coming soon:
-Swerve Kinematics Test 2
-Tank Steering Test 3
 SLAM entity
 Robot properties for kinematics and entity
 

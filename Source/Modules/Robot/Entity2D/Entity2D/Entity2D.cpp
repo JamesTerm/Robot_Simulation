@@ -58,6 +58,7 @@ private:
 	Vec2D m_current_position;
 	double m_requested_heading=0.0;  //always absolute relative method solves on the spot
 	double m_requested_angular_velocity=0.0;
+	double m_current_angular_velocity = 0.0;
 	double m_current_heading=0.0;
 	double m_driven_max_speed=0.0;
 	//keep note of last modes
@@ -67,9 +68,51 @@ private:
 	bool m_stop_at_waypoint = true;
 	bool m_can_strafe = true;
 	#pragma endregion
+	#pragma region _normalize rotation_
+	inline void NormalizeRotation(double &Rotation)
+	{
+		const double Pi2 = M_PI * 2.0;
+		//Normalize the rotation
+		if (Rotation > M_PI)
+			Rotation -= Pi2;
+		else if (Rotation < -M_PI)
+			Rotation += Pi2;
+	}
+
+	inline double NormalizeRotation2(double Rotation)
+	{
+		const double Pi2 = M_PI * 2.0;
+		//Normalize the rotation
+		if (Rotation > M_PI)
+			Rotation -= Pi2;
+		else if (Rotation < -M_PI)
+			Rotation += Pi2;
+		return Rotation;
+	}
+
+	inline double NormalizeRotation_HalfPi(double Orientation)
+	{
+		if (Orientation > PI_2)
+			Orientation -= M_PI;
+		else if (Orientation < -PI_2)
+			Orientation += M_PI;
+		return Orientation;
+	}
+
+	inline double SaturateRotation(double Rotation)
+	{
+		//Normalize the rotation
+		if (Rotation > M_PI)
+			Rotation = M_PI;
+		else if (Rotation < -M_PI)
+			Rotation = -M_PI;
+		return Rotation;
+	}
+
+	#pragma endregion
 	void process_slice(double d_time_s)
 	{
-		//apply linear velocity first, then anglar
+		//apply linear velocity first, then angular
 
 		//For linear determine if we are driving or driven
 		if (m_is_linear_driven == false)
@@ -80,22 +123,22 @@ private:
 			const Vec2D DesiredVelocity =(m_is_velocity_global)? m_requested_global : LocalToGlobal(m_current_heading,m_requested_local);
 			//break this apart
 			Vec2D normalized_request = DesiredVelocity;
-			double request_magnitute = normalized_request.normalize();  //always use this direction
+			double request_magnitude = normalized_request.normalize();  //always use this direction
 			//use current direction if the requested magnitude is zero (because there is no direction then)
-			if (request_magnitute == 0.0)
+			if (request_magnitude == 0.0)
 				normalized_request = normlized_current;
 			double adjusted_magnitude = current_magnitude;
 			//adjust the velocity to match request
-			if (current_magnitude < request_magnitute)
+			if (current_magnitude < request_magnitude)
 			{
 				//accelerate and clip as needed
 				 adjusted_magnitude = std::min(
 					current_magnitude + (m_properties.max_acceleration_linear * d_time_s), m_properties.max_speed_linear
 					);
 			}
-			else if (current_magnitude > request_magnitute)
+			else if (current_magnitude > request_magnitude)
 			{
-				//decelarate and clip as needed
+				//decelerate and clip as needed
 				 adjusted_magnitude = std::max(
 					current_magnitude - (m_properties.max_deceleration_linear * d_time_s), 0.0
 				);
@@ -113,9 +156,41 @@ private:
 		{
 			if (m_is_angular_driven == false)
 			{
-
+				//Very similar trapezoidal profile as with the velocity except we are 1D, so the direction is easier to manage
+				//First break apart current heading into magnitude and direction
+				const double current_magnitude = fabs(m_current_angular_velocity);
+				const double current_direction = current_magnitude>0.0?current_magnitude / m_current_angular_velocity:0.0;  //order does not matter
+				const double request_magnitude = fabs(m_requested_angular_velocity);
+				double direction_to_use = request_magnitude>0.0? request_magnitude / m_requested_angular_velocity : 0.0;
+				//use current direction if the requested magnitude is zero (because there is no direction then)
+				if (request_magnitude == 0.0)
+					direction_to_use = current_direction;
+				double adjusted_magnitude = current_magnitude;
+				//adjust the velocity to match request
+				if (current_magnitude < request_magnitude)
+				{
+					//accelerate and clip as needed
+					adjusted_magnitude = std::min(
+						current_magnitude + (m_properties.max_acceleration_angular * d_time_s), m_properties.max_speed_angular
+					);
+				}
+				else if (current_magnitude > request_magnitude)
+				{
+					//decelerate and clip as needed
+					adjusted_magnitude = std::max(
+						current_magnitude - (m_properties.max_acceleration_angular * d_time_s), 0.0
+					);
+				}
+				//now update the current velocity,  Note: this can go beyond the boundary of 2 pi
+				m_current_angular_velocity = direction_to_use * adjusted_magnitude;
+				//from current velocity we can update the position
+				m_current_heading += m_current_angular_velocity;
+				//Almost there... the heading needs to be adjusted to fit in the range from -pi2 to pi2
+				m_current_heading = NormalizeRotation2(m_current_heading);  //written out for ease of debugging
 			}
-			//TODO update intended orientation
+			else
+			{
+			}
 		}
 	}
 public:
@@ -133,7 +208,7 @@ public:
 		m_requested_local = m_requested_global = m_current_velocity = Vec2D(0.0, 0.0);
 		m_current_position[0] = X;
 		m_current_position[1] = Y;
-		m_requested_heading = m_requested_angular_velocity = 0.0;
+		m_requested_heading = m_requested_angular_velocity = m_current_angular_velocity=0.0;
 		m_current_heading = heading;
 		//optional update last modes for consistency
 		m_is_linear_driven = m_is_angular_driven = m_is_velocity_global = false;
@@ -142,7 +217,7 @@ public:
 	//Tele-op methods:-----------------------------------------------------------------------
 	void SetLinearVelocity_local(double forward, double right)
 	{
-		//for ease of debugging, keep this in local here (translate in timeslice)
+		//for ease of debugging, keep this in local here (translate in time slice)
 		m_requested_local[0] = right;
 		m_requested_local[1] = forward;
 	}
@@ -154,11 +229,13 @@ public:
 	void SetAngularVelocity(double clockwise)
 	{
 		m_requested_angular_velocity = clockwise;
+		m_is_angular_driven = false;
 	}
 	//AI methods: ---------------------------------------------------------------------------
 	void SetIntendedOrientation(double intended_orientation, bool absolute = true)
 	{
 		m_requested_heading = absolute?intended_orientation:m_current_heading+intended_orientation;
+		m_is_angular_driven = true;
 	}
 	void DriveToLocation(double north, double east, bool stop_at_destination = true, double max_speed = 0.0, bool can_strafe = true)
 	{
@@ -188,6 +265,10 @@ public:
 	Vec2D Get_SetVelocity_global() const
 	{
 		return m_requested_global;
+	}
+	double Get_IntendedOrientation() const
+	{
+		return m_requested_heading;
 	}
 	Vec2D GetCurrentVelocity() const
 	{
@@ -271,6 +352,10 @@ Entity2D::Vector2D Entity2D::Get_SetVelocity_local() const
 Entity2D::Vector2D Entity2D::Get_SetVelocity_global() const
 {
 	return as_vector_2d(m_Entity2D->Get_SetVelocity_global());
+}
+double Entity2D::Get_IntendedOrientation() const
+{
+	return m_Entity2D->Get_IntendedOrientation();
 }
 Entity2D::Vector2D Entity2D::GetCurrentVelocity() const
 {
