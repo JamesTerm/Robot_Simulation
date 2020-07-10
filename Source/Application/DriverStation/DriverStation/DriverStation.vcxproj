@@ -145,9 +145,11 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\RobotAssembly\RobotAssembly\TeleOpV1.h" />
     <ClInclude Include="DriverStation.h" />
     <ClInclude Include="Keyboard.h" />
     <ClInclude Include="Resource.h" />
+    <ClInclude Include="Robot_Tester.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="targetver.h" />
   </ItemGroup>
@@ -160,6 +162,7 @@
     </ClCompile>
     <ClCompile Include="DriverStation.cpp" />
     <ClCompile Include="Keyboard.cpp" />
+    <ClCompile Include="Robot_Tester.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
@@ -180,6 +183,14 @@
   </ItemGroup>
   <ItemGroup>
     <Xml Include="..\config.xml" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Libraries\SmartDashboard\SmartDashboard.vcxproj">
+      <Project>{556fc434-d0c3-4b96-bf29-e9cf5cd24f02}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\RobotAssembly\RobotAssembly\RobotAssembly_static.vcxproj">
+      <Project>{8b571083-a29d-482d-9fa2-d3630e3d6bb6}</Project>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

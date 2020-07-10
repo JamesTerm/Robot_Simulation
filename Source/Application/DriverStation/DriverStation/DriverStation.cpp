@@ -1,28 +1,8 @@
-// DriverStation.cpp : Defines the entry point for the application.
-//
-
+#pragma region _includes macros_
 #include "stdafx.h"
 #include "DriverStation.h"
 #include <algorithm>
 #include <functional>
-
-//These have no use here, but need to be implemented
-std::string DefaultCommandPrompt()
-{
-	return "NotUsedHere";
-}
-
-void SetCommandPromptCallback(std::function<std::string(void)> callback)
-{
-}
-
-
-#define MAX_LOADSTRING 100
-
-// Global Variables:
-HINSTANCE hInst;                                // current instance
-WCHAR szTitle[MAX_LOADSTRING];                  // The title bar text
-WCHAR szWindowClass[MAX_LOADSTRING];            // the main window class name
 
 #pragma comment (lib,"winmm")
 #pragma comment (lib,"Shlwapi.lib")
@@ -38,9 +18,18 @@ WCHAR szWindowClass[MAX_LOADSTRING];            // the main window class name
 //#include "../../../Base/Joystick.h"
 //#include "../../../Base/JoystickBinder.h"
 #include "Keyboard.h"
+#include "Robot_Tester.h"
+#pragma endregion
+
+#define MAX_LOADSTRING 100
+
+// Global Variables:
+HINSTANCE hInst;                                // current instance
+WCHAR szTitle[MAX_LOADSTRING];                  // The title bar text
+WCHAR szWindowClass[MAX_LOADSTRING];            // the main window class name
 
 //Since the lambda cannot capture, we must give it access to the robot here
-//RobotTester *s_pRobotTester = nullptr;  
+RobotTester *s_pRobotTester = nullptr;  
 //void BindRobot(RobotTester &_robot_tester);  //forward declare
 void SetupPreferences();
 Keyboard *s_Keyboard = nullptr;
@@ -109,14 +98,14 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 				OutputDebugStringW(L"Start\n");
 				//printf("start");
 				//SetupPreferences();
-				//s_pRobotTester->StartStreaming();
+				s_pRobotTester->StartStreaming();
 				CheckDlgButton(hWnd, IDC_Stop, BST_UNCHECKED);
 				CheckDlgButton(hWnd, IDC_Start, BM_SETCHECK);
 				break;
 			case IDC_Stop:
 				OutputDebugStringW(L"Stop\n");
 				//printf("stop");
-				//s_pRobotTester->StopStreaming();
+				s_pRobotTester->StopStreaming();
 				CheckDlgButton(hWnd, IDC_Stop, BM_SETCHECK);
 				CheckDlgButton(hWnd, IDC_Start, BST_UNCHECKED);
 				break;
@@ -143,7 +132,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 					game_mode = 2; 
 					break;
 				}
-				//s_pRobotTester->SetGameMode(game_mode);
+				s_pRobotTester->SetGameMode(game_mode);
 				break;
 			}
 			case IDM_EXIT:
@@ -195,12 +184,12 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	}
 
 	//We made it this far... start up the robot
-	//RobotTester _robot_tester;
-	//s_pRobotTester = &_robot_tester;
-	//_robot_tester.RobotTester_create();
+	RobotTester _robot_tester;
+	s_pRobotTester = &_robot_tester;
+	_robot_tester.RobotTester_create();
 	//Bind robot for Keyboard binding
 	//BindRobot(_robot_tester);
-	//_robot_tester.RobotTester_init();
+	_robot_tester.RobotTester_init();
 	ShowWindow(m_hDlg, nCmdShow);
 	UpdateWindow(m_hDlg);
 
@@ -248,7 +237,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	}
 
 
-
+	_robot_tester.Shutdown();
 
 	return (int)msg.wParam;
 }
