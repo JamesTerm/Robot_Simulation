@@ -1,5 +1,19 @@
 <xml version="1.0">
 <dashboard>
+	<widget field="Travel_Heading" type="Number" class="edu.wpi.first.smartdashboard.gui.elements.SimpleDial">
+		<location x="295" y="10"/>
+		<width>103</width>
+		<height>74</height>
+		<property name="Upper Limit" value="180.0"/>
+		<property name="Lower Limit" value="-180.0"/>
+		<property name="Tick Interval" value="45.0"/>
+	</widget>
+	<widget field="Y" type="Number" class="edu.wpi.first.smartdashboard.gui.elements.TextBox">
+		<location x="605" y="397"/>
+	</widget>
+	<widget field="X" type="Number" class="edu.wpi.first.smartdashboard.gui.elements.TextBox">
+		<location x="604" y="362"/>
+	</widget>
 	<widget field="Wheel_fr_Velocity" type="Number" class="edu.wpi.first.smartdashboard.gui.elements.ProgressBar">
 		<location x="356" y="350"/>
 		<property name="Foreground" value="204.0.0.255"/>
@@ -15,31 +29,32 @@
 		<property name="Minimum" value="-12.0"/>
 	</widget>
 	<widget field="Wheel_rr_Velocity" type="Number" class="edu.wpi.first.smartdashboard.gui.elements.TextBox">
-		<location x="349" y="495"/>
+		<location x="349" y="499"/>
+		<height>22</height>
 	</widget>
 	<widget field="Wheel_rl_Velocity" type="Number" class="edu.wpi.first.smartdashboard.gui.elements.TextBox">
-		<location x="60" y="493"/>
+		<location x="60" y="496"/>
 	</widget>
 	<widget field="swivel_rr_Raw" type="Number" class="edu.wpi.first.smartdashboard.gui.elements.SimpleDial">
-		<location x="352" y="382"/>
+		<location x="351" y="387"/>
 		<width>167</width>
-		<height>123</height>
+		<height>107</height>
 		<property name="Upper Limit" value="180.0"/>
 		<property name="Lower Limit" value="-180.0"/>
 		<property name="Tick Interval" value="45.0"/>
 	</widget>
 	<widget field="swivel_rl_Raw" type="Number" class="edu.wpi.first.smartdashboard.gui.elements.SimpleDial">
-		<location x="57" y="389"/>
+		<location x="57" y="384"/>
 		<width>163</width>
-		<height>117</height>
+		<height>109</height>
 		<property name="Upper Limit" value="180.0"/>
 		<property name="Lower Limit" value="-180.0"/>
 		<property name="Tick Interval" value="45.0"/>
 	</widget>
 	<widget field="swivel_fr_Raw" type="Number" class="edu.wpi.first.smartdashboard.gui.elements.SimpleDial">
-		<location x="353" y="258"/>
+		<location x="353" y="261"/>
 		<width>154</width>
-		<height>104</height>
+		<height>98</height>
 		<property name="Upper Limit" value="180.0"/>
 		<property name="Lower Limit" value="-180.0"/>
 		<property name="Tick Interval" value="45.0"/>
@@ -67,7 +82,7 @@
 		<property name="Minimum" value="-2.0"/>
 	</widget>
 	<widget field="Distance" type="Number" class="edu.wpi.first.smartdashboard.gui.elements.ProgressBar">
-		<location x="422" y="70"/>
+		<location x="925" y="366"/>
 		<property name="Foreground" value="204.102.0.255"/>
 		<property name="Maximum" value="2.0"/>
 	</widget>
@@ -106,8 +121,8 @@
 		<location x="29" y="20"/>
 		<property name="Foreground" value="0.153.0.255"/>
 		<property name="Background" value="0.51.153.255"/>
-		<property name="Maximum" value="9.0"/>
-		<property name="Minimum" value="-9.0"/>
+		<property name="Maximum" value="12.0"/>
+		<property name="Minimum" value="-12.0"/>
 	</widget>
 	<widget field="clasp_angle" type="Number" class="edu.wpi.first.smartdashboard.gui.elements.FormattedField">
 		<location x="131" y="629"/>
@@ -140,23 +155,23 @@
 		<width>116</width>
 	</widget>
 	<widget field="FieldCentricDrive_Mode" type="Boolean" class="edu.wpi.first.smartdashboard.gui.elements.BooleanBox">
-		<location x="312" y="50"/>
+		<location x="723" y="199"/>
 	</widget>
 	<widget field="Timer" type="Number" class="edu.wpi.first.smartdashboard.gui.elements.FormattedField">
 		<location x="851" y="83"/>
 		<property name="Font Size" value="20"/>
 	</widget>
 	<widget field="Edit Position Main" type="Boolean" class="edu.wpi.first.smartdashboard.gui.elements.BooleanBox">
-		<location x="302" y="75"/>
+		<location x="744" y="170"/>
 	</widget>
 	<widget field="AutoPilot" type="Boolean" class="edu.wpi.first.smartdashboard.gui.elements.BooleanBox">
-		<location x="367" y="20"/>
+		<location x="771" y="230"/>
 	</widget>
 	<widget field="Main_Is_Targeting" type="Boolean" class="edu.wpi.first.smartdashboard.gui.elements.BooleanBox">
 		<location x="996" y="128"/>
 	</widget>
 	<widget field="Sequence" type="Number" class="edu.wpi.first.smartdashboard.gui.elements.FormattedField">
-		<location x="305" y="96"/>
+		<location x="761" y="140"/>
 		<width>78</width>
 	</widget>
 	<widget field="Y Position" type="Number" class="edu.wpi.first.smartdashboard.gui.elements.ProgressBar">
@@ -234,7 +249,7 @@
 		<property name="Minimum" value="-10.0"/>
 	</widget>
 	<widget field="IsSlide" type="Boolean" class="edu.wpi.first.smartdashboard.gui.elements.BooleanBox">
-		<location x="307" y="22"/>
+		<location x="782" y="255"/>
 	</widget>
 	<widget field="Wheel_fr_Voltage" type="Number" class="edu.wpi.first.smartdashboard.gui.elements.ProgressBar">
 		<location x="305" y="140"/>
@@ -339,42 +354,4 @@
 </dashboard>
 <live-window>
 </live-window>
-	<hidden field="Wheel_clDisable"/>
-	<hidden field="turretPot_Raw"/>
-	<hidden field="TurretVoltage"/>
-	<hidden field="BucketDisable"/>
-	<hidden field="Disable_Setpoints"/>
-	<hidden field="claspPot_Raw"/>
-	<hidden field="Arm_yposVoltage"/>
-	<hidden field="BucketHeight"/>
-	<hidden field="BucketShaftLength"/>
-	<hidden field="arm_Raw"/>
-	<hidden field="arm_xpos"/>
-	<hidden field="BoomVoltage"/>
-	<hidden field="ArmDisable"/>
-	<hidden field="Wheel_cl_Voltage"/>
-	<hidden field="Arm_xposVoltage"/>
-	<hidden field="wheel_cr_Encoder"/>
-	<hidden field="TurretDisable"/>
-	<hidden field="Wheel_cr_Voltage"/>
-	<hidden field="bucketPot_Raw"/>
-	<hidden field="SafetyLock_Arm"/>
-	<hidden field="ClaspShaftLength"/>
-	<hidden field="bucket_Raw"/>
-	<hidden field="boom_Raw"/>
-	<hidden field="Boom_ShaftLength"/>
-	<hidden field="ArmVoltage"/>
-	<hidden field="BoomDisable"/>
-	<hidden field="BigArm_ShaftLength"/>
-	<hidden field="boomPot_Raw"/>
-	<hidden field="ClaspVoltage"/>
-	<hidden field="arm_ypos"/>
-	<hidden field="ClaspDisable"/>
-	<hidden field="Wheel_crDisable"/>
-	<hidden field="clasp_Raw"/>
-	<hidden field="wheel_cl_Encoder"/>
-	<hidden field="BucketVoltage"/>
-	<hidden field="armPot_Raw"/>
-	<hidden field="turret_Raw"/>
-	<hidden field="BucketDistance"/>
 </xml>

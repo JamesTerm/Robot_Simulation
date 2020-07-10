@@ -146,7 +146,7 @@ private:
 			//now update the current velocity
 			m_current_velocity = normalized_request * adjusted_magnitude;
 			//from current velocity we can update the position
-			m_current_position += m_current_velocity;
+			m_current_position += m_current_velocity * d_time_s;
 		}
 		//TODO way point here
 
@@ -184,7 +184,7 @@ private:
 				//now update the current velocity,  Note: this can go beyond the boundary of 2 pi
 				m_current_angular_velocity = direction_to_use * adjusted_magnitude;
 				//from current velocity we can update the position
-				m_current_heading += m_current_angular_velocity;
+				m_current_heading += m_current_angular_velocity * d_time_s;
 				//Almost there... the heading needs to be adjusted to fit in the range from -pi2 to pi2
 				m_current_heading = NormalizeRotation2(m_current_heading);  //written out for ease of debugging
 			}
