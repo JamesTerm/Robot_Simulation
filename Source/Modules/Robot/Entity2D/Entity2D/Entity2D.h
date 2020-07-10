@@ -35,7 +35,7 @@ public:
 	//Recommended units: Linear meters per second, Angular radians per second
 	//For most of the methods the heading and linear are independent of each other and for each there is a hidden driving
 	//or driven mode depending on which method was last called So if you set a way point (drive to location) and you call 
-	//set linear velocity you change from driving to drive for linear only, and vise versa
+	//set linear velocity you change from driving to driven for linear only, and vise versa
 	//
 	//For non-strafe robots, 
 	//never use the global method and SetIntendedOrientation works only in local
