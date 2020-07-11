@@ -67,6 +67,7 @@ private:
 		SmartDashboard::PutNumber("CurrentVelocity_yaw", RAD_2_DEG(atan2(velocity_normalized[0], velocity_normalized[1])));
 		SmartDashboard::PutNumber("yaw", RAD_2_DEG(entity.GetCurrentHeading()));
 		SmartDashboard::PutNumber("heading", RAD_2_DEG(entity.Get_IntendedOrientation()));
+		SmartDashboard::PutNumber("yaw_rate", RAD_2_DEG(entity.GetCurrentAngularVelocity()));
 	}
 	void TimeSliceLoop(DWORD SleepTime)
 	{
@@ -90,9 +91,9 @@ public:
 		using namespace std::chrono_literals;
 		//It's considered standard practice to wait for 0ms to obtain the current status without really waiting
 		const bool in_flight = m_TaskState_TimeSliceLoop.valid() && m_TaskState_TimeSliceLoop.wait_for(0ms) != std::future_status::ready;
-		//DWORD time_interval = 10; //actual robot time easy to step calculations a bit slower
+		DWORD time_interval = 10; //actual robot time easy to step calculations a bit slower
 		//DWORD time_interval = 33;   //better timing with refresh
-		DWORD time_interval = 1000;  //debugging
+		//DWORD time_interval = 1000;  //debugging
 		if (!in_flight)
 			m_TaskState_TimeSliceLoop = std::async(std::launch::async, &Entity2D_Tester::TimeSliceLoop, this, time_interval);
 		_CP_("in_flight =%d", in_flight);

@@ -75,6 +75,7 @@ public:
 	Vector2D GetCurrentVelocity() const;  //returns the current velocity in raw global form
 	Vector2D GetCurrentPosition() const;  //returns x y coordinates of current position
 	double GetCurrentHeading() const;  //returns heading where 0 is north in radians
+	double GetCurrentAngularVelocity() const; //radians per second
 
 private:
 	std::shared_ptr<Entity2D_internal> m_Entity2D; //implementation

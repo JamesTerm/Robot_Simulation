@@ -104,20 +104,25 @@ private:
 				direction_to_use = current_direction;
 			double adjusted_magnitude = current_magnitude;
 			//adjust the velocity to match request
-			if (current_magnitude < request_magnitude)
+			const double acc_increment = (m_properties.max_acceleration * d_time_s);
+			const double dec_increment = (m_properties.max_deceleration * d_time_s);
+			//Check if we can go a full increment in either direction
+			if (current_magnitude+ acc_increment < request_magnitude)
 			{
 				//accelerate and clip as needed
-				adjusted_magnitude = std::min(
-					current_magnitude + (m_properties.max_acceleration * d_time_s), m_properties.max_speed
-				);
+				adjusted_magnitude = std::min(current_magnitude + acc_increment, m_properties.max_speed);
 			}
-			else if (current_magnitude > request_magnitude)
+			else if (current_magnitude - dec_increment > request_magnitude)
 			{
 				//decelerate and clip as needed
-				adjusted_magnitude = std::max(
-					current_magnitude - (m_properties.max_deceleration * d_time_s), 0.0
-				);
+				adjusted_magnitude = std::max(current_magnitude - dec_increment, 0.0);
 			}
+			else if (fabs(current_magnitude - request_magnitude) < acc_increment)
+			{
+				//we are close enough to the requested to just become it
+				adjusted_magnitude = request_magnitude;
+			}
+
 			//now update the current velocity,  Note: this can go beyond the boundary of 2 pi
 			m_current_velocity = direction_to_use * adjusted_magnitude;
 			//from current velocity we can update the position

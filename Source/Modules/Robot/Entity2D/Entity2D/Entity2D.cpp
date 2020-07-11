@@ -129,20 +129,25 @@ private:
 				normalized_request = normlized_current;
 			double adjusted_magnitude = current_magnitude;
 			//adjust the velocity to match request
+			const double acc_increment = (m_properties.max_acceleration_linear * d_time_s);
+			const double dec_increment = (m_properties.max_deceleration_linear * d_time_s);
+			//Check if we can go a full increment in either direction
 			if (current_magnitude < request_magnitude)
 			{
 				//accelerate and clip as needed
-				 adjusted_magnitude = std::min(
-					current_magnitude + (m_properties.max_acceleration_linear * d_time_s), m_properties.max_speed_linear
-					);
+				 adjusted_magnitude = std::min(current_magnitude + acc_increment, m_properties.max_speed_linear);
 			}
 			else if (current_magnitude > request_magnitude)
 			{
 				//decelerate and clip as needed
-				 adjusted_magnitude = std::max(
-					current_magnitude - (m_properties.max_deceleration_linear * d_time_s), 0.0
-				);
+				 adjusted_magnitude = std::max(current_magnitude - dec_increment, 0.0);
 			}
+			else if (fabs(current_magnitude - request_magnitude) < acc_increment)
+			{
+				//we are close enough to the requested to just become it
+				adjusted_magnitude = request_magnitude;
+			}
+
 			//now update the current velocity
 			m_current_velocity = normalized_request * adjusted_magnitude;
 			//from current velocity we can update the position
@@ -167,19 +172,22 @@ private:
 					direction_to_use = current_direction;
 				double adjusted_magnitude = current_magnitude;
 				//adjust the velocity to match request
-				if (current_magnitude < request_magnitude)
+				const double acc_increment = (m_properties.max_acceleration_angular * d_time_s);
+				//Check if we can go a full increment in either direction
+				if (current_magnitude + acc_increment < request_magnitude)
 				{
 					//accelerate and clip as needed
-					adjusted_magnitude = std::min(
-						current_magnitude + (m_properties.max_acceleration_angular * d_time_s), m_properties.max_speed_angular
-					);
+					adjusted_magnitude = std::min(current_magnitude + acc_increment, m_properties.max_speed_angular);
 				}
-				else if (current_magnitude > request_magnitude)
+				else if (current_magnitude - acc_increment > request_magnitude)
 				{
 					//decelerate and clip as needed
-					adjusted_magnitude = std::max(
-						current_magnitude - (m_properties.max_acceleration_angular * d_time_s), 0.0
-					);
+					adjusted_magnitude = std::max(current_magnitude - acc_increment, 0.0);
+				}
+				else if (fabs(current_magnitude- request_magnitude)< acc_increment)
+				{
+					//we are close enough to the requested to just become it
+					adjusted_magnitude = request_magnitude;
 				}
 				//now update the current velocity,  Note: this can go beyond the boundary of 2 pi
 				m_current_angular_velocity = direction_to_use * adjusted_magnitude;
@@ -282,6 +290,10 @@ public:
 	{
 		return m_current_heading;
 	}
+	double GetCurrentAngularVelocity() const
+	{
+		return m_current_angular_velocity;
+	}
 };
 #pragma endregion
 
@@ -368,6 +380,10 @@ Entity2D::Vector2D Entity2D::GetCurrentPosition() const
 double Entity2D::GetCurrentHeading() const
 {
 	return m_Entity2D->GetCurrentHeading();
+}
+double Entity2D::GetCurrentAngularVelocity() const
+{
+	return m_Entity2D->GetCurrentAngularVelocity();
 }
 #pragma endregion
 
