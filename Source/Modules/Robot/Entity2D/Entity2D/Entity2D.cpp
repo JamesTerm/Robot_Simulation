@@ -124,6 +124,8 @@ private:
 			//break this apart
 			Vec2D normalized_request = DesiredVelocity;
 			double request_magnitude = normalized_request.normalize();  //always use this direction
+			//This shouldn't be needed but just in case
+			request_magnitude = std::max(std::min(request_magnitude, m_properties.max_speed_linear), 0.0);
 			//use current direction if the requested magnitude is zero (because there is no direction then)
 			if (request_magnitude == 0.0)
 				normalized_request = normlized_current;
@@ -131,17 +133,14 @@ private:
 			//adjust the velocity to match request
 			const double acc_increment = (m_properties.max_acceleration_linear * d_time_s);
 			const double dec_increment = (m_properties.max_deceleration_linear * d_time_s);
+			//TODO while a 1D I can get perfect handling of switching direction stresses, I can't do that here
+			//for now I'll let this go as it will do the correct math most of the time, and will address this
+			//again once I start working with feedback
 			//Check if we can go a full increment in either direction
-			if (current_magnitude < request_magnitude)
-			{
-				//accelerate and clip as needed
-				 adjusted_magnitude = std::min(current_magnitude + acc_increment, m_properties.max_speed_linear);
-			}
+			if (current_magnitude + acc_increment < request_magnitude)
+				 adjusted_magnitude += acc_increment; //accelerate and clip as needed
 			else if (current_magnitude > request_magnitude)
-			{
-				//decelerate and clip as needed
-				 adjusted_magnitude = std::max(current_magnitude - dec_increment, 0.0);
-			}
+				 adjusted_magnitude -= dec_increment; //decelerate and clip as needed
 			else if (fabs(current_magnitude - request_magnitude) < acc_increment)
 			{
 				//we are close enough to the requested to just become it
@@ -165,7 +164,9 @@ private:
 				//First break apart current heading into magnitude and direction
 				const double current_magnitude = fabs(m_current_angular_velocity);
 				const double current_direction = current_magnitude>0.0?current_magnitude / m_current_angular_velocity:0.0;  //order does not matter
-				const double request_magnitude = fabs(m_requested_angular_velocity);
+				double request_magnitude = fabs(m_requested_angular_velocity);
+				//This shouldn't be needed but just in case
+				request_magnitude = std::max(std::min(request_magnitude, m_properties.max_speed_linear), 0.0);
 				double direction_to_use = request_magnitude>0.0? request_magnitude / m_requested_angular_velocity : 0.0;
 				//use current direction if the requested magnitude is zero (because there is no direction then)
 				if (request_magnitude == 0.0)
@@ -173,22 +174,35 @@ private:
 				double adjusted_magnitude = current_magnitude;
 				//adjust the velocity to match request
 				const double acc_increment = (m_properties.max_acceleration_angular * d_time_s);
-				//Check if we can go a full increment in either direction
-				if (current_magnitude + acc_increment < request_magnitude)
+				const double dec_increment = -(m_properties.max_acceleration_angular * d_time_s);
+				//Check the signs
+				if (current_direction * direction_to_use >= 0.0)
 				{
-					//accelerate and clip as needed
-					adjusted_magnitude = std::min(current_magnitude + acc_increment, m_properties.max_speed_angular);
+					//Check if we can go a full increment in either direction
+					if (current_magnitude + acc_increment < request_magnitude)
+						adjusted_magnitude += acc_increment; //accelerate and clip as needed
+					else if (current_magnitude - acc_increment > request_magnitude)
+						adjusted_magnitude -= acc_increment; //decelerate and clip as needed
+					else if (fabs(current_magnitude - request_magnitude) < acc_increment)
+					{
+						//we are close enough to the requested to just become it
+						adjusted_magnitude = request_magnitude;
+					}
 				}
-				else if (current_magnitude - acc_increment > request_magnitude)
+				else
 				{
-					//decelerate and clip as needed
-					adjusted_magnitude = std::max(current_magnitude - acc_increment, 0.0);
+					//signs are different, so the checking is as well
+					//To keep this easy to debug we'll preserve current_magnitude, and create a combined one
+					const double combined_magnitude = current_magnitude + request_magnitude;
+					if (combined_magnitude < acc_increment)
+						adjusted_magnitude = request_magnitude;  //close enough; otherwise...
+					else
+					{
+						adjusted_magnitude += dec_increment;  //always decelerate when going towards opposite sign
+						direction_to_use = current_direction;  //always keep the sign
+					}
 				}
-				else if (fabs(current_magnitude- request_magnitude)< acc_increment)
-				{
-					//we are close enough to the requested to just become it
-					adjusted_magnitude = request_magnitude;
-				}
+
 				//now update the current velocity,  Note: this can go beyond the boundary of 2 pi
 				m_current_angular_velocity = direction_to_use * adjusted_magnitude;
 				//from current velocity we can update the position

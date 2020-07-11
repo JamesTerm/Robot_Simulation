@@ -122,13 +122,18 @@ public:
 		{
 			eCurrent,
 			eMoveForward,
-
+			eRangeFlip,
+			eRangeFlip2,
+			eOppositeClose
 		};
 
 		const char * const csz_tests[] =
 		{
 			"current",
-			"forward"
+			"forward",
+			"range",
+			"range2",
+			"close_flip"
 		};
 
 		int Test = atoi(csz_test);
@@ -174,6 +179,35 @@ public:
 				UpdateVariables();
 				Sleep(33);
 			}
+			break;
+		case eRangeFlip:
+			//So here's a good example of why I have a tester, this allows me to unit test a stress that my code failed initially
+			//now I can tag the actual stress here and step through the code with ease to ensure it works properly
+			entity.Reset();
+			entity.SetVelocity(-Pi);
+			for (size_t i = 0; i < 200; i++)
+				entity.TimeSlice(0.010);
+			UpdateVariables();
+			entity.SetVelocity(Pi);
+			entity.TimeSlice(0.010);
+			break;
+		case eRangeFlip2:
+			entity.Reset();
+			entity.SetVelocity(Pi);
+			for (size_t i = 0; i < 200; i++)
+				entity.TimeSlice(0.010);
+			UpdateVariables();
+			entity.SetVelocity(-Pi);
+			entity.TimeSlice(0.010);
+			break;
+		case eOppositeClose:
+			entity.Reset();
+			entity.SetVelocity(-0.01);
+			for (size_t i = 0; i < 200; i++)
+				entity.TimeSlice(0.010);
+			UpdateVariables();
+			entity.SetVelocity(0.01);
+			entity.TimeSlice(0.010);
 			break;
 		}
 	}

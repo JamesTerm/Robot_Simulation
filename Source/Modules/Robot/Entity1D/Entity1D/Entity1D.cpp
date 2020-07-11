@@ -97,30 +97,43 @@ private:
 			//First break apart current heading into magnitude and direction
 			const double current_magnitude = fabs(m_current_velocity);
 			const double current_direction = current_magnitude > 0.0 ? current_magnitude / m_current_velocity : 0.0;  //order does not matter
-			const double request_magnitude = fabs(m_requested_velocity);
+			double request_magnitude = fabs(m_requested_velocity);
 			double direction_to_use = request_magnitude > 0.0 ? request_magnitude / m_requested_velocity : 0.0;
+			//This shouldn't be needed but just in case (must be after direction_to_use)
+			request_magnitude = std::max(std::min(request_magnitude, m_properties.max_speed), 0.0);
 			//use current direction if the requested magnitude is zero (because there is no direction then)
 			if (request_magnitude == 0.0)
 				direction_to_use = current_direction;
 			double adjusted_magnitude = current_magnitude;
 			//adjust the velocity to match request
 			const double acc_increment = (m_properties.max_acceleration * d_time_s);
-			const double dec_increment = (m_properties.max_deceleration * d_time_s);
-			//Check if we can go a full increment in either direction
-			if (current_magnitude+ acc_increment < request_magnitude)
+			const double dec_increment = -(m_properties.max_deceleration * d_time_s);
+			//Check the signs
+			if (current_direction * direction_to_use >= 0.0)
 			{
-				//accelerate and clip as needed
-				adjusted_magnitude = std::min(current_magnitude + acc_increment, m_properties.max_speed);
+				//Check if we can go a full increment in either direction
+				if (current_magnitude + acc_increment < request_magnitude)
+					adjusted_magnitude += acc_increment;  //accelerate and clip as needed
+				else if (current_magnitude + dec_increment > request_magnitude)
+					adjusted_magnitude += dec_increment;  //decelerate and clip as needed
+				else if (fabs(current_magnitude - request_magnitude) < acc_increment)
+				{
+					//we are close enough to the requested to just become it
+					adjusted_magnitude = request_magnitude;
+				}
 			}
-			else if (current_magnitude - dec_increment > request_magnitude)
+			else
 			{
-				//decelerate and clip as needed
-				adjusted_magnitude = std::max(current_magnitude - dec_increment, 0.0);
-			}
-			else if (fabs(current_magnitude - request_magnitude) < acc_increment)
-			{
-				//we are close enough to the requested to just become it
-				adjusted_magnitude = request_magnitude;
+				//signs are different, so the checking is as well
+				//To keep this easy to debug we'll preserve current_magnitude, and create a combined one
+				const double combined_magnitude = current_magnitude + request_magnitude;
+				if (combined_magnitude < acc_increment)
+					adjusted_magnitude = request_magnitude;  //close enough; otherwise...
+				else
+				{
+					adjusted_magnitude += dec_increment;  //always decelerate when going towards opposite sign
+					direction_to_use = current_direction;  //always keep the sign
+				}
 			}
 
 			//now update the current velocity,  Note: this can go beyond the boundary of 2 pi
