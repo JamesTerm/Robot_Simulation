@@ -132,15 +132,15 @@ private:
 			double adjusted_magnitude = current_magnitude;
 			//adjust the velocity to match request
 			const double acc_increment = (m_properties.max_acceleration_linear * d_time_s);
-			const double dec_increment = (m_properties.max_deceleration_linear * d_time_s);
+			const double dec_increment = -(m_properties.max_deceleration_linear * d_time_s);
 			//TODO while a 1D I can get perfect handling of switching direction stresses, I can't do that here
 			//for now I'll let this go as it will do the correct math most of the time, and will address this
 			//again once I start working with feedback
 			//Check if we can go a full increment in either direction
 			if (current_magnitude + acc_increment < request_magnitude)
 				 adjusted_magnitude += acc_increment; //accelerate and clip as needed
-			else if (current_magnitude > request_magnitude)
-				 adjusted_magnitude -= dec_increment; //decelerate and clip as needed
+			else if (current_magnitude + dec_increment > request_magnitude)
+				 adjusted_magnitude += dec_increment; //decelerate and clip as needed
 			else if (fabs(current_magnitude - request_magnitude) < acc_increment)
 			{
 				//we are close enough to the requested to just become it
@@ -165,9 +165,9 @@ private:
 				const double current_magnitude = fabs(m_current_angular_velocity);
 				const double current_direction = current_magnitude>0.0?current_magnitude / m_current_angular_velocity:0.0;  //order does not matter
 				double request_magnitude = fabs(m_requested_angular_velocity);
-				//This shouldn't be needed but just in case
-				request_magnitude = std::max(std::min(request_magnitude, m_properties.max_speed_linear), 0.0);
 				double direction_to_use = request_magnitude>0.0? request_magnitude / m_requested_angular_velocity : 0.0;
+				//This shouldn't be needed but just in case (must be after direction_to_use)
+				request_magnitude = std::max(std::min(request_magnitude, m_properties.max_speed_linear), 0.0);
 				//use current direction if the requested magnitude is zero (because there is no direction then)
 				if (request_magnitude == 0.0)
 					direction_to_use = current_direction;
@@ -181,8 +181,8 @@ private:
 					//Check if we can go a full increment in either direction
 					if (current_magnitude + acc_increment < request_magnitude)
 						adjusted_magnitude += acc_increment; //accelerate and clip as needed
-					else if (current_magnitude - acc_increment > request_magnitude)
-						adjusted_magnitude -= acc_increment; //decelerate and clip as needed
+					else if (current_magnitude + dec_increment > request_magnitude)
+						adjusted_magnitude += dec_increment; //decelerate and clip as needed
 					else if (fabs(current_magnitude - request_magnitude) < acc_increment)
 					{
 						//we are close enough to the requested to just become it
