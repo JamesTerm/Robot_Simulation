@@ -132,13 +132,16 @@ public:
 		{
 			eCurrent,
 			eMoveForward,
-
+			eFlip180,
+			eTurn90
 		};
 
 		const char * const csz_tests[] =
 		{
 			"current",
-			"forward"
+			"forward",
+			"flip180",
+			"Turn90"
 		};
 
 		int Test = atoi(csz_test);
@@ -184,6 +187,28 @@ public:
 				UpdateVariables();
 				Sleep(33);
 			}
+			break;
+
+		//The follow stress tests show why physics are needed, because it is not so easy to compute the resulting velocity
+		//Added that there is a change in direction.  It may be possible to solve without physics which can be documented
+		//from within the entity implementation, we can swap different techniques for these same tests here
+		case eFlip180:
+			entity.Reset();
+			entity.SetLinearVelocity_local(Feet2Meters(12.0), 0.0);
+			for (size_t i = 0; i < 200; i++)
+				entity.TimeSlice(0.010);
+			UpdateVariables();
+			entity.SetLinearVelocity_local(Feet2Meters(-12.0), 0.0);
+			entity.TimeSlice(0.010);
+			break;
+		case eTurn90:
+			entity.Reset();
+			entity.SetLinearVelocity_local(Feet2Meters(12.0), 0.0);
+			for (size_t i = 0; i < 200; i++)
+				entity.TimeSlice(0.010);
+			UpdateVariables();
+			entity.SetLinearVelocity_local(0.0,Feet2Meters(12.0));
+			entity.TimeSlice(0.010);
 			break;
 		}
 	}

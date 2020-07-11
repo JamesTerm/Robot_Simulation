@@ -31,7 +31,10 @@ I'll expand more on this here.  The most important piece is the entity.  This is
 For now we needn't worry about mapping especially because it is hard to find a common ground between seasons, that said... we may wish to consider providing an automated way to plot waypoints onto a virtual field, which is easy because they give us the placement of field elements.  It's even possible to add path algorithms and run cycles from them... for that it could ideal for autonomous and if its possible to recognize robots in the way... we can consider object avoidance algorithms (Like what has been done with rim space / the fringe).
 
 TODO:
-Add Entity object
+Add Entity using physics-  One thing to work out for Entity 2D position is what happens to the velocity when the direction changes.
+Say for example you go full speed and then do a sharp 90 degree turn.  While the kinematics ignore physics and make this possible it may wreck havok on the robot's drive and may cause robot to tip over.  Using an entity with physics takes into consideration the mass's current momentum and the direction at any given moment, since it deals fundementally with force and torque at the mass entity itself, it can ensure no excessive force will be applied.
+
+I am going to keep the Entity2D without physics to see how far it can be developed, and then make it possible to switch which to use.
 
 ---
 
