@@ -66,7 +66,6 @@ private:
 		//for swerve the direction of travel is not necessarily the heading, so we show this as well as heading
 		SmartDashboard::PutNumber("CurrentVelocity_yaw", RAD_2_DEG(atan2(velocity_normalized[0], velocity_normalized[1])));
 		SmartDashboard::PutNumber("yaw", RAD_2_DEG(entity.GetCurrentHeading()));
-		SmartDashboard::PutNumber("heading", RAD_2_DEG(entity.Get_IntendedOrientation()));
 		SmartDashboard::PutNumber("yaw_rate", RAD_2_DEG(entity.GetCurrentAngularVelocity()));
 	}
 	void TimeSliceLoop(DWORD SleepTime)
@@ -115,10 +114,6 @@ public:
 	{
 		//Make sure we are stopped
 		Stop();
-	}
-	void Heading(double heading)
-	{
-		m_Entity.SetIntendedOrientation(heading);
 	}
 	void Turn(double clockwise)
 	{
@@ -252,7 +247,6 @@ static void DisplayHelp()
 		"test <test name or number>\n"
 		"start\n"
 		"stop\n"
-		"heading <degrees>\n"
 		"turn <degrees per second>\n"
 		"Help (displays this)\n"
 		"\nType \"Quit\" at anytime to exit this application\n"
@@ -309,10 +303,6 @@ bool CommandLineInterface()
 			else if (!_strnicmp(input_line, "stop", 5))
 			{
 				entity_test.Stop();
-			}
-			else if (!_strnicmp(input_line, "heading", 5))
-			{
-				entity_test.Heading(DEG_2_RAD(atof(str_1)));
 			}
 			else if (!_strnicmp(input_line, "turn", 4))
 			{
