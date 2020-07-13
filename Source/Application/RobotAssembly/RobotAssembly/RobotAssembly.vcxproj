@@ -154,6 +154,7 @@
     <ClCompile Include="..\..\..\Modules\Input\dx_Joystick_Controller\dx_Joystick_Controller\dx_Joystick.cpp" />
     <ClCompile Include="..\..\..\Modules\Robot\DriveKinematics\DriveKinematics\Vehicle_Drive.cpp" />
     <ClCompile Include="..\..\..\Modules\Robot\Entity2D\Entity2D\Entity2D.cpp" />
+    <ClCompile Include="..\..\..\Modules\Robot\MotionControl2D_simple\MotionControl2D\MotionControl2D.cpp" />
     <ClCompile Include="RobotAssembly.cpp" />
     <ClCompile Include="TeleOpV1.cpp" />
   </ItemGroup>
@@ -161,6 +162,7 @@
     <ClInclude Include="..\..\..\Modules\Input\dx_Joystick_Controller\dx_Joystick_Controller\dx_Joystick.h" />
     <ClInclude Include="..\..\..\Modules\Robot\DriveKinematics\DriveKinematics\Vehicle_Drive.h" />
     <ClInclude Include="..\..\..\Modules\Robot\Entity2D\Entity2D\Entity2D.h" />
+    <ClInclude Include="..\..\..\Modules\Robot\MotionControl2D_simple\MotionControl2D\MotionControl2D.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="TeleOpV1.h" />
   </ItemGroup>

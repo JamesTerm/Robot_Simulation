@@ -9,7 +9,8 @@
 //For AI, way points can be set to travel to, we also can set an intended orientation
 
 namespace Module {
-	namespace Localization	{
+	namespace Robot	{
+		namespace Simple {
 //Using Vec2D internally
 class MotionControl2D_internal;
 class MotionControl2D
@@ -59,16 +60,25 @@ public:
 	//if can strafe is true caller manages its own orientation as it deems fit; otherwise if it can't strafe
 	//it must manage the orientation to always drive forward in the direction toward the way point
 	void DriveToLocation(double north, double east, bool stop_at_destination=true, double max_speed = 0.0, bool can_strafe = true);
+	//Use a simple struct to keep methods simple
+	struct Vector2D
+	{
+		double x, y;
+	};
+	//Linker callbacks:  This will link a type of entity object to be updated with the output of this module to the input
+	//of the adjoining module.  This is optional (important) because each module should be completely independent of other
+	//classes or modules.  These are called on the time slice
+	void Set_UpdateGlobalVelocity(std::function<void(const Vector2D &new_velocity)> callback);
+	void Set_UpdateHeadingVelocity(std::function<void(double new_velocity)> callback);
+	//These are needed for driven functions, optional as well because we have internal method if its not outsourced
+	//The dependency on the position and heading is needed for set-point computations
+	void Set_GetCurrentPosition(std::function <Vector2D()> callback);  //returns x y coordinates of current position
+	void Set_GetCurrentHeading(std::function <double()> callback);  //returns heading where 0 is north in radians
 
 	//Accessors:---------------------------------------------
 	bool GetIsDrivenLinear() const; //returns if its driving or driven (false by default)
 	bool GetIsVelocityGlobal() const;  //returns last method called (local / false by default)
 	bool GetIsDrivenAngular() const; //returns if its driving or driven (false by default)
-	//Use a simple struct to keep methods of return
-	struct Vector2D
-	{
-		double x, y;
-	};
 	Vector2D Get_SetVelocity_local() const;  //Returns last velocity requested
 	Vector2D Get_SetVelocity_global() const;  //these are recorded separately
 	double Get_IntendedOrientation() const; //Get set point heading where 0 is north in radians
@@ -80,6 +90,7 @@ public:
 private:
 	std::shared_ptr<MotionControl2D_internal> m_MotionControl2D; //implementation
 };
+		}
 	}
 }
 	

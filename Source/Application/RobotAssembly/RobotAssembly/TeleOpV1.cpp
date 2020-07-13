@@ -14,6 +14,7 @@
 #include "../../../Modules/Input/dx_Joystick_Controller/dx_Joystick_Controller/dx_Joystick.h"
 #include "../../../Modules/Robot/DriveKinematics/DriveKinematics/Vehicle_Drive.h"
 #include "../../../Modules/Robot/Entity2D/Entity2D/Entity2D.h"
+#include "../../../Modules/Robot/MotionControl2D_simple/MotionControl2D/MotionControl2D.h"
 
 #include "TeleOpV1.h"
 #pragma endregion
@@ -29,6 +30,7 @@ private:
 	#pragma region _member variables_
 	std::future<void> m_TaskState_TimeSliceLoop;  //Use future to monitor task status
 	Module::Localization::Entity2D m_Entity;
+	Module::Robot::Simple::MotionControl2D m_MotionControl2D;
 	bool m_Done = false;
 	Module::Input::dx_Joystick m_joystick;  //Note: always late binding, so we can aggregate direct easy here
 	Module::Robot::Swerve_Drive m_robot;
@@ -86,9 +88,20 @@ private:
 				m_robot.UpdateVelocities(Feet2Meters(m_maxspeed*joyinfo.lY*-1.0), Feet2Meters(m_maxspeed*joyinfo.lX), joyinfo.lZ * m_max_heading_rad);
 				//because of properties to factor we need to interpret the actual velocities resolved from the kinematics by inverse kinematics
 				m_Entity_Input.InterpolateVelocities(m_robot.GetIntendedVelocities());
+
+				//Here is how is we can use or not use motion control, some interface... the motion control is already linked to entity
+				//so this makes it easy to use
+
+				#if 0
 				//Now we can update the entity with this inverse kinematic input
 				m_Entity.SetAngularVelocity(m_Entity_Input.GetAngularVelocity());
 				m_Entity.SetLinearVelocity_local(m_Entity_Input.GetLocalVelocityY(), m_Entity_Input.GetLocalVelocityX());
+				#else
+				//Now we can update the entity with this inverse kinematic input
+				m_MotionControl2D.SetAngularVelocity(m_Entity_Input.GetAngularVelocity());
+				m_MotionControl2D.SetLinearVelocity_local(m_Entity_Input.GetLocalVelocityY(), m_Entity_Input.GetLocalVelocityX());
+				#endif
+
 				//This comes in handy for testing
 				if (joyinfo.ButtonBank[0] == 1)
 					Reset();
@@ -102,8 +115,10 @@ private:
 		{
 			//Grab kinematic velocities from controller
 			GetInputSlice();
+			const double time_delta = 0.010;
 			//Update the predicted motion for this time slice
-			m_Entity.TimeSlice(0.010);
+			m_MotionControl2D.TimeSlice(time_delta);
+			m_Entity.TimeSlice(time_delta);
 			UpdateVariables();
 			Sleep(SleepTime);
 		}
@@ -150,6 +165,29 @@ public:
 		//like with tank spinning in place needs to be half of spinning with full forward
 		//this time... no skid
 		m_max_heading_rad = (2 * Feet2Meters(m_maxspeed) / wheel_dimensions.length()) * skid;
+		//Note: We'll skip properties for motion control since we have good defaults
+		#pragma region _optional linking of entity to motion control_
+		//Now to link up the callbacks for motion control:  Note we can link them up even if we are not using it
+		using Vector2D = Module::Robot::Simple::MotionControl2D::Vector2D;
+		m_MotionControl2D.Set_UpdateGlobalVelocity([&](const Vector2D &new_velocity)
+			{	m_Entity.SetLinearVelocity_global(new_velocity.y, new_velocity.x);
+			});
+		m_MotionControl2D.Set_UpdateHeadingVelocity([&](double new_velocity)
+		{	m_Entity.SetAngularVelocity(new_velocity);
+			});
+		m_MotionControl2D.Set_GetCurrentPosition([&]() -> Vector2D
+		{	
+			//This is a bit annoying, but for the sake of keeping modules independent (not dependent on vector objects)
+			//its worth the hassle
+			Vector2D ret = { m_Entity.GetCurrentPosition().x, m_Entity.GetCurrentPosition().y };
+			return ret;
+		});
+		m_MotionControl2D.Set_GetCurrentHeading([&]() -> double
+		{
+			return m_Entity.GetCurrentHeading();
+		});
+
+		#pragma endregion
 		Reset();  //for entity variables
 	}
 

@@ -39,9 +39,8 @@
 #include "MotionControl2D.h"
 #pragma region _MotionControl2D Tester_
 namespace Module {
-	namespace Localization
-	{
-
+	namespace Robot	{
+		namespace Simple {
 class MotionControl2D_Tester
 {
 private:
@@ -55,7 +54,7 @@ private:
 	void UpdateVariables()
 	{
 		MotionControl2D &entity = m_Entity;
-		using namespace Module::Localization;
+		using namespace Module::Robot::Simple;
 		MotionControl2D::Vector2D linear_velocity = entity.GetCurrentVelocity();
 		Vec2D velocity_normalized(linear_velocity.x, linear_velocity.y);
 		double magnitude = velocity_normalized.normalize();
@@ -213,8 +212,8 @@ public:
 		}
 	}
 };
-	}
-}
+
+}}}
 
 
 #pragma endregion
@@ -282,7 +281,7 @@ bool CommandLineInterface()
 	cout << "Ready." << endl;
 #pragma endregion
 
-	Module::Localization::MotionControl2D_Tester entity_test;  //setup our entity now
+	Module::Robot::Simple::MotionControl2D_Tester entity_test;  //setup our entity now
 
 	while (prompt(), cin.getline(input_line, 128))
 	{

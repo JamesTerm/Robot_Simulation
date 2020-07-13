@@ -20,7 +20,8 @@
 #include "MotionControl2D.h"
 
 namespace Module {
-	namespace Localization	{
+	namespace Robot	{
+		namespace Simple {
 
 #pragma region _Motion Control 2D Internal_
 
@@ -34,6 +35,18 @@ __inline Vec2D GlobalToLocal(double Heading, const Vec2D &GlobalVector)
 {
 	return Vec2D(sin(-Heading)*GlobalVector[1] + cos(Heading)*GlobalVector[0],
 		cos(-Heading)*GlobalVector[1] + sin(Heading)*GlobalVector[0]);
+}
+
+__inline MotionControl2D::Vector2D as_vector_2d(Vec2D input)
+{
+	MotionControl2D::Vector2D ret = { input[0],input[1] };
+	return ret;
+}
+
+__inline  Vec2D as_Vec2d( MotionControl2D::Vector2D input)
+{
+	Vec2D ret(input.x,input.y);
+	return ret;
 }
 
 class MotionControl2D_internal
@@ -67,6 +80,12 @@ private:
 	bool m_is_velocity_global = false;
 	bool m_stop_at_waypoint = true;
 	bool m_can_strafe = true;
+
+	std::function<void(const MotionControl2D::Vector2D &new_velocity)> m_ExternSetVelocity=nullptr;
+	std::function<void(double new_velocity)> m_ExternSetHeadingVelocity=nullptr;
+	std::function <MotionControl2D::Vector2D()> m_ExternGetCurrentVelocity=nullptr;
+	std::function <double()> m_ExternGetCurrentHeading=nullptr;
+
 	#pragma endregion
 	#pragma region _normalize rotation_
 	inline void NormalizeRotation(double &Rotation)
@@ -120,7 +139,7 @@ private:
 			//First break apart current velocity into magnitude and direction
 			Vec2D normlized_current = m_current_velocity;
 			const double current_magnitude = normlized_current.normalize();  //observe for diagnostics
-			const Vec2D DesiredVelocity =(m_is_velocity_global)? m_requested_global : LocalToGlobal(m_current_heading,m_requested_local);
+			const Vec2D DesiredVelocity =(m_is_velocity_global)? m_requested_global : LocalToGlobal(GetCurrentHeading(),m_requested_local);
 			//break this apart
 			Vec2D normalized_request = DesiredVelocity;
 			double request_magnitude = normalized_request.normalize();  //always use this direction
@@ -149,8 +168,15 @@ private:
 
 			//now update the current velocity
 			m_current_velocity = normalized_request * adjusted_magnitude;
-			//from current velocity we can update the position
-			m_current_position += m_current_velocity * d_time_s;
+			//send this velocity to entity if it exists
+			if (m_ExternSetVelocity)
+				m_ExternSetVelocity(as_vector_2d(m_current_velocity));
+			//If we don't have the callbacks for both set and get... we'll update our own default implementation
+			if ((!m_ExternGetCurrentVelocity) || (!m_ExternSetVelocity))
+			{
+				//from current velocity we can update the position
+				m_current_position += m_current_velocity * d_time_s;
+			}
 		}
 		//TODO way point here
 
@@ -205,10 +231,18 @@ private:
 
 				//now update the current velocity,  Note: this can go beyond the boundary of 2 pi
 				m_current_angular_velocity = direction_to_use * adjusted_magnitude;
-				//from current velocity we can update the position
-				m_current_heading += m_current_angular_velocity * d_time_s;
-				//Almost there... the heading needs to be adjusted to fit in the range from -pi2 to pi2
-				m_current_heading = NormalizeRotation2(m_current_heading);  //written out for ease of debugging
+				//send this velocity to entity if it exists
+				if (m_ExternSetHeadingVelocity)
+					m_ExternSetHeadingVelocity(m_current_angular_velocity);
+				//If we don't have the callbacks for both set and get... we'll update our own default implementation
+				if ((!m_ExternGetCurrentHeading)||(!m_ExternSetHeadingVelocity))
+				{
+					//from current velocity we can update the position
+					m_current_heading += m_current_angular_velocity * d_time_s;
+					//Almost there... the heading needs to be adjusted to fit in the range from -pi2 to pi2
+					m_current_heading = NormalizeRotation2(m_current_heading);  //written out for ease of debugging
+
+				}
 			}
 			else
 			{
@@ -256,7 +290,7 @@ public:
 	//AI methods: ---------------------------------------------------------------------------
 	void SetIntendedOrientation(double intended_orientation, bool absolute = true)
 	{
-		m_requested_heading = absolute?intended_orientation:m_current_heading+intended_orientation;
+		m_requested_heading = absolute?intended_orientation:GetCurrentHeading()+intended_orientation;
 		m_is_angular_driven = true;
 	}
 	void DriveToLocation(double north, double east, bool stop_at_destination = true, double max_speed = 0.0, bool can_strafe = true)
@@ -266,7 +300,7 @@ public:
 		m_driven_max_speed = max_speed;
 		m_can_strafe = can_strafe;
 	}
-
+	#pragma region _Accessors_
 	//Accessors:---------------------------------------------
 	bool GetIsDrivenLinear() const
 	{
@@ -298,16 +332,42 @@ public:
 	}
 	Vec2D GetCurrentPosition() const
 	{
-		return m_current_position;
+		if (m_ExternGetCurrentVelocity)
+			return as_Vec2d(m_ExternGetCurrentVelocity());
+		else
+			return m_current_position;
 	}
 	double GetCurrentHeading() const
 	{
-		return m_current_heading;
+		if (m_ExternGetCurrentHeading)
+			return m_ExternGetCurrentHeading();
+		else
+			return m_current_heading;
 	}
 	double GetCurrentAngularVelocity() const
 	{
 		return m_current_angular_velocity;
 	}
+	#pragma endregion
+	#pragma region _Callbacks_
+	//Optional Linker callbacks:
+	void Set_UpdateGlobalVelocity(std::function<void(const MotionControl2D::Vector2D &new_velocity)> callback)
+	{
+		m_ExternSetVelocity = callback;
+	}
+	void Set_UpdateHeadingVelocity(std::function<void(double new_velocity)> callback)
+	{
+		m_ExternSetHeadingVelocity = callback;
+	}
+	void Set_GetCurrentPosition(std::function <MotionControl2D::Vector2D()> callback)
+	{
+		m_ExternGetCurrentVelocity = callback;
+	}
+	void Set_GetCurrentHeading(std::function <double()> callback)
+	{
+		m_ExternGetCurrentHeading = callback;
+	}
+	#pragma endregion
 };
 #pragma endregion
 
@@ -365,11 +425,6 @@ bool MotionControl2D::GetIsDrivenAngular() const
 {
 	return m_MotionControl2D->GetIsDrivenAngular();
 }
-__inline MotionControl2D::Vector2D as_vector_2d(Vec2D input)
-{
-	MotionControl2D::Vector2D ret = { input[0],input[1] };
-	return ret;
-}
 
 MotionControl2D::Vector2D MotionControl2D::Get_SetVelocity_local() const
 {
@@ -399,6 +454,24 @@ double MotionControl2D::GetCurrentAngularVelocity() const
 {
 	return m_MotionControl2D->GetCurrentAngularVelocity();
 }
+//Optional Linker callbacks:
+void MotionControl2D::Set_UpdateGlobalVelocity(std::function<void(const Vector2D &new_velocity)> callback)
+{
+	m_MotionControl2D->Set_UpdateGlobalVelocity(callback);
+}
+void MotionControl2D::Set_UpdateHeadingVelocity(std::function<void(double new_velocity)> callback)
+{
+	m_MotionControl2D->Set_UpdateHeadingVelocity(callback);
+}
+void MotionControl2D::Set_GetCurrentPosition(std::function <Vector2D()> callback)
+{
+	m_MotionControl2D->Set_GetCurrentPosition(callback);
+}
+void MotionControl2D::Set_GetCurrentHeading(std::function <double()> callback)
+{
+	m_MotionControl2D->Set_GetCurrentHeading(callback);
+}
+
 #pragma endregion
 
-}}
+}}}
