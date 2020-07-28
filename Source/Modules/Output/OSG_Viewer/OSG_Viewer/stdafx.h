@@ -16,3 +16,8 @@
 #include <cassert>
 #include <math.h>
 #include <float.h>
+
+// No C library depreciation warnings
+#pragma warning ( disable : 4995 )
+#pragma warning ( disable : 4996 )
+#pragma warning ( disable : 4477 )
