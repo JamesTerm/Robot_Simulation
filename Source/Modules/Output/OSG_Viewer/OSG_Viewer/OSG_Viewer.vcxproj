@@ -118,7 +118,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy /D /Y "$(MSBuildProjectDirectory)/../../../../../../osg/OpenSceneGraph/VS2017_x64/INSTALL/bin/*.dll" "$(OutDir)"</Command>
+      <Command>xcopy   "$(MSBuildProjectDirectory)\..\..\..\..\..\..\osg\OpenSceneGraph\VS2017_x64\INSTALL\bin\*.dll" "$(OutDir)" /D /S /Y</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -158,10 +158,14 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
+    <PostBuildEvent>
+      <Command>xcopy   "$(MSBuildProjectDirectory)\..\..\..\..\..\..\osg\OpenSceneGraph\VS2017_x64\INSTALL\bin\*.dll" "$(OutDir)" /D /S /Y</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="OSG_Viewer.cpp" />
     <ClCompile Include="OSG_Viewer_Tester.cpp" />
+    <ClCompile Include="TextFontData.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="OSG_Viewer.h" />
