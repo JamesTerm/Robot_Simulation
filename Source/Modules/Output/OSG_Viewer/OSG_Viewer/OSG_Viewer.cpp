@@ -4116,6 +4116,7 @@ namespace GG_Framework
 #pragma region _Robot Tester (interface)_
 namespace Robot_Tester
 {
+#pragma region _GUI Thread_
 class GUIThread : public GG_Framework::Base::ThreadedClass
 {
 private:
@@ -4179,7 +4180,7 @@ public:
 		start();
 	}
 };
-
+#pragma endregion
 #pragma region _robot Actor Text objects_
 #pragma region _Common UI_
 
@@ -4468,6 +4469,10 @@ public:
 		double Att_r; //heading in radians
 		double &IntendedOrientation;  //EPIrrksa: Depicted as the way it wants to go (e.g. a carrot ^ character)
 		//These should remain static:
+	};
+
+	struct SwerveRobot_Properties
+	{
 		double WheelDiameter;
 		//EPI references these
 		std::string &entity_name;     //EPIrrksa
@@ -4479,12 +4484,20 @@ public:
 	{
 		static Vec2D Pos_m;
 		static double IntendedOrientation;
-		static std::string entity_name = "default";
-		static Vec2D Dimensions = Vec2D(5.0, 5.0);  //length, width (font chars not robot's (27.5, 19.5))
 
 		SwerveRobot_State ret = 
 		{ Pos_m, {}, 0,
-			IntendedOrientation,
+			IntendedOrientation
+		};
+		return ret;
+	}
+	static SwerveRobot_Properties DefaultRobotProps()
+	{
+		static std::string entity_name = "default";
+		static Vec2D Dimensions = Vec2D(5.0, 5.0);  //length, width (font chars not robot's (27.5, 19.5))
+
+		SwerveRobot_Properties ret =
+		{ 
 			Inches2Meters(6),
 			entity_name,
 			Dimensions,
@@ -4497,6 +4510,7 @@ private:
 	//Allow subclasses to change wheels look
 	Swivel_Wheel_UI *m_Wheel[4];
 	std::function<SwerveRobot_State()> m_SwerveRobot = DefaultRobotState;
+	std::function<SwerveRobot_Properties()> m_SwerveRobot_props = DefaultRobotProps;
 	virtual void UpdateVoltage(size_t index, double Voltage) {}
 	virtual void CloseSolenoid(size_t index, bool Close) {}
 	virtual Swivel_Wheel_UI *Create_WheelUI() { return new Swivel_Wheel_UI; }
@@ -4546,11 +4560,11 @@ protected: //from EntityPropertiesInterface
 	}
 	virtual const std::string &GetName() const
 	{
-		return m_SwerveRobot().entity_name;
+		return m_SwerveRobot_props().entity_name;
 	}
 	virtual const Vec2D &GetDimensions() const
 	{
-		return m_SwerveRobot().Dimensions;
+		return m_SwerveRobot_props().Dimensions;
 	}
 	virtual const double &GetIntendedOrientation() const
 	{
@@ -4575,6 +4589,11 @@ public:
 	{
 		m_SwerveRobot = callback;
 	}
+	//This one is for completion, the defaults should suffice
+	void SetSwerveRobot_props_Callback(std::function<SwerveRobot_Properties()> callback)
+	{
+		m_SwerveRobot_props = callback;
+	}
 	//Be sure to set callback before initialize
 	virtual void Initialize()
 	{
@@ -4589,13 +4608,13 @@ public:
 		{
 			Swivel_Wheel_UI::Wheel_Properties props;
 			props.m_Offset = Offsets[i];
-			props.m_Wheel_Diameter = m_SwerveRobot().WheelDiameter;
+			props.m_Wheel_Diameter = m_SwerveRobot_props().WheelDiameter;
 			m_Wheel[i] = Create_WheelUI();
 			m_Wheel[i]->Initialize(&props);
 		}
 		//setup our actor
-		m_Actor = new Actor_Text(m_SwerveRobot().text_image.c_str());
-		m_Actor->GetCharacterDimensions() = m_SwerveRobot().Dimensions;
+		m_Actor = new Actor_Text(m_SwerveRobot_props().text_image.c_str());
+		m_Actor->GetCharacterDimensions() = m_SwerveRobot_props().Dimensions;
 		//This can be removed if we do not want to see this image
 		m_Actor->Init_IntendedOrientation();
 		//Bind the EPI with its actor
@@ -4611,7 +4630,7 @@ public:
 			//For the linear velocities we'll convert to angular velocity and then extract the delta of this slice of time
 			const double LinearVelocity = _.SwerveVelocitiesFromIndex[i];
 			const double PixelHackScale = m_Wheel[i]->GetFontSize() / 8.0;  //scale the wheels to be pixel aesthetic
-			const double RPS = LinearVelocity / (PI * _.WheelDiameter * PixelHackScale);
+			const double RPS = LinearVelocity / (PI * m_SwerveRobot_props().WheelDiameter * PixelHackScale);
 			const double AngularVelocity = RPS * Pi2;
 			m_Wheel[i]->AddRotation(AngularVelocity*dTime_s);
 		}
@@ -5110,7 +5129,18 @@ private:
 		TestCallback_2() : m_IsSetup(false) {}
 		bool GetIsSetup() const { return m_IsSetup; }
 	};
-
+	#pragma endregion
+	#pragma region _Test 2 swerve_
+	inline double NormalizeRotation2(double Rotation)
+	{
+		const double Pi2 = M_PI * 2.0;
+		//Normalize the rotation
+		if (Rotation > M_PI)
+			Rotation -= Pi2;
+		else if (Rotation < -M_PI)
+			Rotation += Pi2;
+		return Rotation;
+	}
 	class TestCallback_3 : public Viewer_Callback_Interface
 	{
 	private:
@@ -5179,13 +5209,39 @@ public:
 			//m_UI_thread->GetUI()->SetUseSyntheticTimeDeltas(true);
 			static TestCallback_3 test;  //this needs to remain on after this test finishes
 			//set hooks here
+			test.Get_Robot().SetSwerveRobot_Callback(
+				[&]
+			{
+				static Vec2D Pos_m;
+				static double IntendedOrientation;
+
+				static Swerve_Robot_UI::SwerveRobot_State ret =
+				{ Pos_m, {}, 0,
+					IntendedOrientation
+				};
+				using namespace std::chrono;
+				using time_point = system_clock::time_point;
+				static time_point then = system_clock::now();
+				const time_point now = system_clock::now();
+				const duration<double> delta_t = now - then;
+				const double delta = delta_t.count();
+				//We get called back quite a bit (see why) so pace our updates accordingly
+				if (delta > 0.033)
+				{
+					static double m_Rho;
+					const double sample = SineInfluence(m_Rho);
+					//ret.Att_r += NormalizeRotation2(sample * 0.25);
+					//IntendedOrientation += NormalizeRotation2(sample * 0.25);
+					Pos_m[1] = sample * 10.0;
+					then = now;
+				}
+				return ret;
+			});
 			test.init(); //call back the UI thread
 			m_UI_thread->Init(&test);
 			assert(m_UI_thread);
-			size_t TimeOut = 0;
-			while (!test.GetIsSetup() && TimeOut++ < 100)
-				ThreadSleep(200);
-			m_UI_thread->GetUI()->SetCallbackInterface(NULL);
+			//since we are static we can leave the callback set, but only for this test
+			//actual app needs to unhook properly
 		}
 		break;
 		}

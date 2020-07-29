@@ -16,6 +16,8 @@
 #include <cassert>
 #include <math.h>
 #include <float.h>
+#include <ctime>
+#include <chrono>
 
 // No C library depreciation warnings
 #pragma warning ( disable : 4995 )
