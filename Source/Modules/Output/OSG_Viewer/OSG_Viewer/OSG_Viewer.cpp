@@ -3100,25 +3100,31 @@ namespace Robot_Tester
 	class Entity2D;
 	class COMMON_API Entity_Properties
 	{
-	public:
-		Entity_Properties();
-		virtual ~Entity_Properties() {}
-		//The prep script takes care of the outer layer global table setup
-		//override to search the appropriate global table
-		//virtual const char *SetUpGlobalTable(Scripting::Script& script) { return script.GetGlobalTable(m_EntityName.c_str()); }
-		//virtual void LoadFromScript(Scripting::Script& script);
-		void Initialize(Entity2D *NewEntity) const;
-	protected:
-		std::string m_EntityName;  //derived classes can let base class know what type to read
 	private:
 		//std::string m_NAME;  <-do not need this
 		//Stuff needed for physics
 		double m_Mass;
 		double m_Dimensions[2]; //Dimensions- Length Width
-
 		//Note: this is in Transmitted entity, but I don't think it belongs here as it doesn't describe what, but rather where
 		//! Positions in meters, rotation in degrees
 		//double m_X, m_Y, m_Heading;
+	protected:
+		std::string m_EntityName;  //derived classes can let base class know what type to read
+	public:
+		Entity_Properties()
+		{
+			m_EntityName = "Entity";
+			//m_NAME="default";
+			m_Mass = 25.0;
+			m_Dimensions[0] = 0.6477;
+			m_Dimensions[1] = 0.9525;
+		}
+		virtual ~Entity_Properties() {}
+		//The prep script takes care of the outer layer global table setup
+		//override to search the appropriate global table
+		//virtual const char *SetUpGlobalTable(Scripting::Script& script) { return script.GetGlobalTable(m_EntityName.c_str()); }
+		//virtual void LoadFromScript(Scripting::Script& script);
+		//void Initialize(Entity2D *NewEntity) const;
 	};
 
 #pragma endregion
@@ -3633,14 +3639,18 @@ const double PI = 3.1415926535897;
 const double Pi2 = M_PI * 2.0;
 const double PI_2 = 1.57079632679489661923;
 #if 1
-#if 1
+const double c_Scene_XRes_InPixels = 640.0;
+const double c_Scene_YRes_InPixels = 480.0;
+#endif
+#if 0
 const double c_Scene_XRes_InPixels = 1280.0;
 const double c_Scene_YRes_InPixels = 1024.0;
-#else
+#endif
+#if 0
 const double c_Scene_XRes_InPixels = 1680.0;
 const double c_Scene_YRes_InPixels = 1050.0;
 #endif
-#else
+#if 0
 const double c_Scene_XRes_InPixels = 1600.0;
 const double c_Scene_YRes_InPixels = 1200.0;
 #endif
@@ -3651,7 +3661,8 @@ const double c_halfyres = c_Scene_YRes_InPixels / 2.0;
 //double g_WorldScaleFactor=0.01; //This will give us about 128,000 x 102,400 meters resolution before wrap around
 //double g_WorldScaleFactor=0.1; //This will give us about 12,800 x 10,240 meters resolution before wrap around ideal size to see
 //double g_WorldScaleFactor=1.0; //This only give 1280 x 1024 meters but ideal to really see everything
-double g_WorldScaleFactor = 2.0; //This only give 640 x 512 good for windowed mode
+//double g_WorldScaleFactor = 2.0; //This only give 640 x 512 good for windowed mode
+double g_WorldScaleFactor = 8.0; //TODO this may change once I determine everything is correct on the swerve
 bool g_TestPhysics = false;
 
 class Actor
@@ -3760,7 +3771,7 @@ public:
 	{
 		//Keeping destructor for debugging purposes (make sure stuff is getting deleted)
 	}
-	Actor_Text(UI_GameClient *parent, const char TextImage[] = "X") : 
+	Actor_Text(const char TextImage[] = "X") : 
 		Actor(), 
 		//m_pParent(parent), 
 		m_TextImage(TextImage)
@@ -4168,6 +4179,448 @@ public:
 		start();
 	}
 };
+
+#pragma region _robot Actor Text objects_
+#pragma region _Common UI_
+
+#pragma region _local global 2D converters_
+inline Vec2D LocalToGlobal(double Heading, const Vec2D &LocalVector)
+{
+	return Vec2D(sin(Heading)*LocalVector[1] + cos(-Heading)*LocalVector[0],
+		cos(Heading)*LocalVector[1] + sin(-Heading)*LocalVector[0]);
+}
+
+inline Vec2D GlobalToLocal(double Heading, const Vec2D &GlobalVector)
+{
+	return Vec2D(sin(-Heading)*GlobalVector[1] + cos(Heading)*GlobalVector[0],
+		cos(-Heading)*GlobalVector[1] + sin(Heading)*GlobalVector[0]);
+}
+#pragma endregion
+
+class Side_Wheel_UI
+{
+public:
+	struct Wheel_Properties
+	{
+		osg::Vec2d m_Offset;  //Placement of the wheel in reference to the parent object (default 0,0)
+		osg::Vec4d m_Color;
+		const wchar_t *m_TextDisplay;
+	};
+private:
+	Actor_Text *m_UIParent;
+	Wheel_Properties m_props;
+	osg::ref_ptr<osgText::Text> m_Wheel;
+	double m_Rotation;
+
+	osg::Vec4d m_Color;
+	const wchar_t *m_TextDisplay;
+public:
+	Side_Wheel_UI() : m_UIParent(NULL), m_Rotation(0.0) {}
+	void UI_Init(Actor_Text *parent)
+	{
+		m_UIParent = parent;
+
+		osg::Vec3 position(0.5*c_Scene_XRes_InPixels, 0.5*c_Scene_YRes_InPixels, 0.0f);
+
+		m_Wheel = new osgText::Text;
+		m_Wheel->setColor(m_props.m_Color);
+		m_Wheel->setCharacterSize(m_UIParent->GetFontSize());
+		m_Wheel->setFontResolution(10, 10);
+		m_Wheel->setPosition(position);
+		m_Wheel->setAlignment(osgText::Text::CENTER_CENTER);
+		m_Wheel->setText(m_props.m_TextDisplay);
+		m_Wheel->setUpdateCallback(m_UIParent);
+	}
+	virtual void Initialize(const Wheel_Properties *props = NULL)
+	{
+		//Client code can manage the properties
+		if (props)
+			m_props = *props;
+		else
+		{
+			m_props.m_Offset = osg::Vec2d(0, 0);
+			m_props.m_Color = osg::Vec4(1.0, 0.0, 0.5, 1.0);
+			m_props.m_TextDisplay = L"|";
+		}
+	}
+	//Keep virtual for special kind of wheels
+	virtual void update(osg::NodeVisitor *nv, osg::Drawable *draw, const osg::Vec3 &parent_pos, double Heading)
+	{
+		double HeadingToUse = Heading + m_Rotation;
+		const double FS = m_UIParent->GetFontSize();
+		const osg::Vec2d WheelOffset(m_props.m_Offset[0], m_props.m_Offset[1]);
+		const osg::Vec2d WheelLocalOffset = GlobalToLocal(Heading, WheelOffset);
+		const osg::Vec3 WheelPos(parent_pos[0] + (WheelLocalOffset[0] * FS), parent_pos[1] + (WheelLocalOffset[1] * FS), parent_pos[2]);
+
+		if (m_Wheel.valid())
+		{
+			m_Wheel->setPosition(WheelPos);
+			m_Wheel->setRotation(FromLW_Rot_Radians(HeadingToUse, 0.0, 0.0));
+		}
+	}
+	virtual void Text_SizeToUse(double SizeToUse)
+	{
+		if (m_Wheel.valid()) m_Wheel->setCharacterSize(SizeToUse);
+	}
+
+	virtual void UpdateScene(osg::Geode *geode, bool AddOrRemove)
+	{
+		if (AddOrRemove)
+			if (m_Wheel.valid()) geode->addDrawable(m_Wheel);
+			else
+				if (m_Wheel.valid()) geode->removeDrawable(m_Wheel);
+	}
+	//This will add to the existing rotation and normalize
+	void AddRotation(double RadiansToAdd)
+	{
+		m_Rotation += RadiansToAdd;
+		if (m_Rotation > Pi2)
+			m_Rotation -= Pi2;
+		else if (m_Rotation < -Pi2)
+			m_Rotation += Pi2;
+	}
+	void UpdatePosition(double x, double y) { m_props.m_Offset[0] = x, m_props.m_Offset[1] = y; }
+	double GetFontSize() const { return m_UIParent ? m_UIParent->GetFontSize() : 10.0; }
+};
+
+class Swivel_Wheel_UI
+{
+public:
+	struct Wheel_Properties
+	{
+		Vec2D m_Offset;  //Placement of the wheel in reference to the parent object (default 0,0)
+		double m_Wheel_Diameter; //in meters default 0.1524  (6 inches)
+	};
+private:
+	Actor_Text *m_UIParent;
+	Wheel_Properties m_props;
+	osg::ref_ptr<osgText::Text> m_Front, m_Back, m_Tread; //Tread is really a line that helps show speed
+	double m_Rotation, m_Swivel;
+public:
+	Swivel_Wheel_UI() : m_UIParent(NULL) {}
+	virtual ~Swivel_Wheel_UI() {}
+
+	void UI_Init(Actor_Text *parent)
+	{
+		m_UIParent = parent;
+
+		osg::Vec3 position(0.5*c_Scene_XRes_InPixels, 0.5*c_Scene_YRes_InPixels, 0.0f);
+		m_Front = new osgText::Text;
+		m_Front->setColor(GetFrontWheelColor());
+		m_Front->setCharacterSize(m_UIParent->GetFontSize());
+		m_Front->setFontResolution(10, 10);
+		m_Front->setPosition(position);
+		m_Front->setAlignment(osgText::Text::CENTER_CENTER);
+		m_Front->setText(L"U");
+		m_Front->setUpdateCallback(m_UIParent);
+
+		m_Back = new osgText::Text;
+		m_Back->setColor(GetBackWheelColor());
+		m_Back->setCharacterSize(m_UIParent->GetFontSize());
+		m_Back->setFontResolution(10, 10);
+		m_Back->setPosition(position);
+		m_Back->setAlignment(osgText::Text::CENTER_CENTER);
+		m_Back->setText(L"U");
+		m_Back->setUpdateCallback(m_UIParent);
+
+		m_Tread = new osgText::Text;
+		m_Tread->setColor(osg::Vec4(1.0, 1.0, 1.0, 1.0));
+		m_Tread->setCharacterSize(m_UIParent->GetFontSize());
+		m_Tread->setFontResolution(10, 10);
+		m_Tread->setPosition(position);
+		m_Tread->setAlignment(osgText::Text::CENTER_CENTER);
+		//m_Tread->setText(L"\"");
+		m_Tread->setText(L"__");
+		m_Tread->setUpdateCallback(m_UIParent);
+	}
+
+	virtual void Initialize(const Wheel_Properties *props = NULL)
+	{
+		//Client code can manage the properties
+		m_props = *props;
+		m_Swivel = 0.0;
+		m_Rotation = 0.0;
+	}
+	virtual void update(osg::NodeVisitor *nv, osg::Drawable *draw, const osg::Vec3 &parent_pos, double Heading)
+	{
+		using Vec2d = osg::Vec2d;
+		//Keep virtual for special kind of wheels
+		const double FS = m_UIParent->GetFontSize();
+		Vec2d FrontSwivel(0.0, 0.5);
+		Vec2d BackSwivel(0.0, -0.5);
+		//Vec2d TreadRotPos(0.0,cos(m_Rotation)-0.3);
+		Vec2d TreadRotPos(sin(m_Rotation)*((fabs(m_Swivel) > PI_2) ? 0.5 : -0.5), (cos(m_Rotation)*.8) + 0.5);
+		FrontSwivel = GlobalToLocal(m_Swivel, FrontSwivel);
+		BackSwivel = GlobalToLocal(m_Swivel, BackSwivel);
+		TreadRotPos = GlobalToLocal(m_Swivel, TreadRotPos);
+
+		const Vec2d frontOffset(m_props.m_Offset[0] + FrontSwivel[0], m_props.m_Offset[1] + FrontSwivel[1]);
+		const Vec2d backOffset(m_props.m_Offset[0] + BackSwivel[0], m_props.m_Offset[1] + BackSwivel[1]);
+		const Vec2d TreadOffset(m_props.m_Offset[0] + TreadRotPos[0], m_props.m_Offset[1] + TreadRotPos[1]);
+
+		const Vec2d FrontLocalOffset = GlobalToLocal(Heading, frontOffset);
+		const Vec2d BackLocalOffset = GlobalToLocal(Heading, backOffset);
+		const Vec2d TreadLocalOffset = GlobalToLocal(Heading, TreadOffset);
+		const osg::Vec3 frontPos(parent_pos[0] + (FrontLocalOffset[0] * FS), parent_pos[1] + (FrontLocalOffset[1] * FS), parent_pos[2]);
+		const osg::Vec3 backPos(parent_pos[0] + (BackLocalOffset[0] * FS), parent_pos[1] + (BackLocalOffset[1] * FS), parent_pos[2]);
+		const osg::Vec3 TreadPos(parent_pos[0] + (TreadLocalOffset[0] * FS), parent_pos[1] + (TreadLocalOffset[1] * FS), parent_pos[2]);
+
+		const double TreadColor = ((sin(-m_Rotation) + 1.0) / 2.0) * 0.8 + 0.2;
+		m_Tread->setColor(osg::Vec4(TreadColor, TreadColor, TreadColor, 1.0));
+
+		if (m_Front.valid())
+		{
+			m_Front->setPosition(frontPos);
+			m_Front->setRotation(FromLW_Rot_Radians(PI + Heading + m_Swivel, 0.0, 0.0));
+		}
+		if (m_Back.valid())
+		{
+			m_Back->setPosition(backPos);
+			m_Back->setRotation(FromLW_Rot_Radians(Heading + m_Swivel, 0.0, 0.0));
+		}
+		if (m_Tread.valid())
+		{
+			m_Tread->setPosition(TreadPos);
+			m_Tread->setRotation(FromLW_Rot_Radians(Heading + m_Swivel, 0.0, 0.0));
+		}
+	}
+	virtual void Text_SizeToUse(double SizeToUse)
+	{
+		if (m_Front.valid())	m_Front->setCharacterSize(SizeToUse);
+		if (m_Back.valid()) m_Back->setCharacterSize(SizeToUse);
+		if (m_Tread.valid()) m_Tread->setCharacterSize(SizeToUse);
+	}
+	virtual void UpdateScene(osg::Geode *geode, bool AddOrRemove)
+	{
+		if (AddOrRemove)
+		{
+			if (m_Front.valid()) geode->addDrawable(m_Front);
+			if (m_Back.valid()) geode->addDrawable(m_Back);
+			if (m_Tread.valid()) geode->addDrawable(m_Tread);
+		}
+		else
+		{
+			if (m_Front.valid()) geode->removeDrawable(m_Front);
+			if (m_Back.valid()) geode->removeDrawable(m_Back);
+			if (m_Tread.valid()) geode->removeDrawable(m_Tread);
+		}
+	}
+	//Where 0 is up and 1.57 is right and -1.57 is left
+	void SetSwivel(double SwivelAngle) { m_Swivel = -SwivelAngle; }
+	void AddRotation(double RadiansToAdd)
+	{
+		//This will add to the existing rotation and normalize
+		m_Rotation += RadiansToAdd;
+		if (m_Rotation > Pi2)
+			m_Rotation -= Pi2;
+		else if (m_Rotation < -Pi2)
+			m_Rotation += Pi2;
+	}
+	void SetRotation(double position) { m_Rotation = -position; }
+	double GetFontSize() const { return m_UIParent ? m_UIParent->GetFontSize() : 10.0; }
+	enum WheelEnum
+	{
+		eFront, eBack, eTread
+	};
+	void SetWheelColor(osg::Vec4 Color, WheelEnum Wheel)
+	{
+		switch (Wheel)
+		{
+		case eFront:
+			m_Front->setColor(Color);
+			break;
+		case eBack:
+			m_Back->setColor(Color);
+			break;
+		case eTread:
+			//all though this is in-effective its added for completion
+			m_Tread->setColor(Color);
+			break;
+		}
+	}
+
+	virtual osg::Vec4 GetFrontWheelColor() const { return osg::Vec4(0.0, 1.0, 0.0, 1.0); }
+	virtual osg::Vec4 GetBackWheelColor() const { return osg::Vec4(1.0, 0.0, 0.0, 1.0); }
+};
+
+#pragma endregion
+#pragma region _Swerve Robot UI_
+class Swerve_Robot_UI : public EntityPropertiesInterface
+{
+public:
+	struct SwerveRobot_State
+	{
+		//EPIrrksa=EPI references as read-only... keep scope available
+		Vec2D &Pos_m;  //EPIrrksa
+		enum Swerve_Robot_VelocityIndex
+		{
+			eWheel_FL,
+			eWheel_FR,
+			eWheel_RL,
+			eWheel_RR,
+			eSwivel_FL,
+			eSwivel_FR,
+			eSwivel_RL,
+			eSwivel_RR,
+			eNoSwerveRobotSpeedControllerDevices
+		};
+		double SwerveVelocitiesFromIndex[8]; //shows wheels angles and their velocities see Swerve_Robot_VelocityIndex
+		double Att_r; //heading in radians
+		double &IntendedOrientation;  //EPIrrksa: Depicted as the way it wants to go (e.g. a carrot ^ character)
+		//These should remain static:
+		double WheelDiameter;
+		//EPI references these
+		std::string &entity_name;     //EPIrrksa
+		Vec2D &Dimensions;            //EPIrrksa
+		std::string text_image;
+	};
+	//Note: this makes it possible to not need a callback, and provides a good template for new client code
+	static SwerveRobot_State DefaultRobotState()
+	{
+		static Vec2D Pos_m;
+		static double IntendedOrientation;
+		static std::string entity_name = "default";
+		static Vec2D Dimensions = Vec2D(5.0, 5.0);  //length, width (font chars not robot's (27.5, 19.5))
+
+		SwerveRobot_State ret = 
+		{ Pos_m, {}, 0,
+			IntendedOrientation,
+			Inches2Meters(6),
+			entity_name,
+			Dimensions,
+			"     \n,   ,\n(-+-)\n'   '\n     "
+		};
+		return ret;
+	}
+private:
+	osg::ref_ptr<Actor_Text> m_Actor;
+	//Allow subclasses to change wheels look
+	Swivel_Wheel_UI *m_Wheel[4];
+	std::function<SwerveRobot_State()> m_SwerveRobot = DefaultRobotState;
+	virtual void UpdateVoltage(size_t index, double Voltage) {}
+	virtual void CloseSolenoid(size_t index, bool Close) {}
+	virtual Swivel_Wheel_UI *Create_WheelUI() { return new Swivel_Wheel_UI; }
+	virtual void Destroy_WheelUI(Swivel_Wheel_UI *wheel_ui) { delete wheel_ui; }
+protected: //from EntityPropertiesInterface
+	#pragma region _EntityPropertiesInterface_
+	virtual void UI_Init(Actor_Text *parent)
+	{
+		for (size_t i = 0; i < 4; i++)
+		{
+			m_Wheel[i]->UI_Init(parent);
+		}
+	}
+	virtual void custom_update(osg::NodeVisitor *nv, osg::Drawable *draw, const osg::Vec3 &parent_pos)
+	{
+		//just dispatch the update to the wheels (for now)
+		for (size_t i = 0; i < 4; i++)
+			m_Wheel[i]->update(nv, draw, parent_pos, -(m_SwerveRobot().Att_r));
+	}
+	virtual void Text_SizeToUse(double SizeToUse)
+	{
+		for (size_t i = 0; i < 4; i++)
+			m_Wheel[i]->Text_SizeToUse(SizeToUse);
+	}
+	virtual void UpdateScene(osg::Geode *geode, bool AddOrRemove)
+	{
+		//m_Actor = new Actor_Text(m_SwerveRobot().text_image.c_str());
+		//m_Actor->GetCharacterDimensions() = m_SwerveRobot().Dimensions;
+		//m_Actor->Init_IntendedOrientation();
+		//m_Actor->SetEntityProperties_Interface(this);
+		geode->addDrawable(m_Actor->GetText());
+		if (m_Actor->GetIntendedOrientation().valid())
+			geode->addDrawable(m_Actor->GetIntendedOrientation());
+		//since we are calling directly here... do not need to call this
+		//m_Actor->UpdateScene_Additional(geode, true); //Add any additional nodes
+		for (size_t i = 0; i < 4; i++)
+			m_Wheel[i]->UpdateScene(geode, AddOrRemove);
+	}
+	//Implement with our callback, not going to force a coupling with entity 2D
+	virtual const Vec2D &GetPos_m() const
+	{
+		return m_SwerveRobot().Pos_m;
+	}
+	virtual double GetAtt_r() const
+	{
+		return m_SwerveRobot().Att_r;
+	}
+	virtual const std::string &GetName() const
+	{
+		return m_SwerveRobot().entity_name;
+	}
+	virtual const Vec2D &GetDimensions() const
+	{
+		return m_SwerveRobot().Dimensions;
+	}
+	virtual const double &GetIntendedOrientation() const
+	{
+		return m_SwerveRobot().IntendedOrientation;
+	}
+	#pragma endregion
+public:
+	Swerve_Robot_UI()
+	{
+		for (size_t i = 0; i < 4; i++)
+			m_Wheel[i] = NULL;
+	}
+	~Swerve_Robot_UI()
+	{
+		for (size_t i = 0; i < 4; i++)
+		{
+			Destroy_WheelUI(m_Wheel[i]);
+			m_Wheel[i] = NULL;
+		}
+	}
+	void SetSwerveRobot_Callback(std::function<SwerveRobot_State()> callback)
+	{
+		m_SwerveRobot = callback;
+	}
+	//Be sure to set callback before initialize
+	virtual void Initialize()
+	{
+		Vec2D Offsets[4] =
+		{
+			Vec2D(-1.6, 2.0),
+			Vec2D(1.6, 2.0),
+			Vec2D(-1.6,-2.0),
+			Vec2D(1.6,-2.0),
+		};
+		for (size_t i = 0; i < 4; i++)
+		{
+			Swivel_Wheel_UI::Wheel_Properties props;
+			props.m_Offset = Offsets[i];
+			props.m_Wheel_Diameter = m_SwerveRobot().WheelDiameter;
+			m_Wheel[i] = Create_WheelUI();
+			m_Wheel[i]->Initialize(&props);
+		}
+		//setup our actor
+		m_Actor = new Actor_Text(m_SwerveRobot().text_image.c_str());
+		m_Actor->GetCharacterDimensions() = m_SwerveRobot().Dimensions;
+		//This can be removed if we do not want to see this image
+		m_Actor->Init_IntendedOrientation();
+		//Bind the EPI with its actor
+		m_Actor->SetEntityProperties_Interface(this);
+	}
+	virtual void TimeChange(double dTime_s)
+	{
+		SwerveRobot_State _ = m_SwerveRobot();
+		for (size_t i = 0; i < 4; i++)
+		{
+			//TODO GetIntendedVelocities for intended UI
+			m_Wheel[i]->SetSwivel(_.SwerveVelocitiesFromIndex[i + 4]);
+			//For the linear velocities we'll convert to angular velocity and then extract the delta of this slice of time
+			const double LinearVelocity = _.SwerveVelocitiesFromIndex[i];
+			const double PixelHackScale = m_Wheel[i]->GetFontSize() / 8.0;  //scale the wheels to be pixel aesthetic
+			const double RPS = LinearVelocity / (PI * _.WheelDiameter * PixelHackScale);
+			const double AngularVelocity = RPS * Pi2;
+			m_Wheel[i]->AddRotation(AngularVelocity*dTime_s);
+		}
+	}
+	EntityPropertiesInterface &As_EPI() { return *this; }
+};
+
+#pragma endregion
+#pragma endregion
 
 #pragma region _Test Text_
 //const double PI = 3.1415926535897;
@@ -4658,6 +5111,29 @@ private:
 		bool GetIsSetup() const { return m_IsSetup; }
 	};
 
+	class TestCallback_3 : public Viewer_Callback_Interface
+	{
+	private:
+		Swerve_Robot_UI m_robot;
+		bool m_IsSetup = false;
+	protected:  //from UI_Callback_Interface
+		virtual void UpdateData(double dtime_s) 
+		{
+			m_robot.TimeChange(dtime_s);
+		}
+		virtual void UpdateScene(osg::Group *rootNode, osg::Geode *geode)
+		{
+			m_robot.As_EPI().UpdateScene(geode,true);
+			m_IsSetup = true;
+		}
+	public:
+		Swerve_Robot_UI &Get_Robot() { return m_robot; }  //access to set callbacks
+		void init()
+		{
+			m_robot.Initialize();
+		}
+		bool GetIsSetup() const { return m_IsSetup; }
+	};
 	#pragma endregion
 	void init(std::shared_ptr<GUIThread> ui_thread)
 	{
@@ -4696,372 +5172,27 @@ public:
 			m_UI_thread->GetUI()->SetCallbackInterface(NULL);
 		}
 		break;
+		case 2:
+		{
+			using namespace GG_Framework::Base;
+			init(ui_thread);
+			//m_UI_thread->GetUI()->SetUseSyntheticTimeDeltas(true);
+			static TestCallback_3 test;  //this needs to remain on after this test finishes
+			//set hooks here
+			test.init(); //call back the UI thread
+			m_UI_thread->Init(&test);
+			assert(m_UI_thread);
+			size_t TimeOut = 0;
+			while (!test.GetIsSetup() && TimeOut++ < 100)
+				ThreadSleep(200);
+			m_UI_thread->GetUI()->SetCallbackInterface(NULL);
+		}
+		break;
 		}
 	}
 };
 
 
-#pragma endregion
-
-#pragma region _robot Actor Text objects_
-#pragma region _Common UI_
-
-inline Vec2D LocalToGlobal(double Heading, const Vec2D &LocalVector)
-{
-	return Vec2D(sin(Heading)*LocalVector[1] + cos(-Heading)*LocalVector[0],
-		cos(Heading)*LocalVector[1] + sin(-Heading)*LocalVector[0]);
-}
-
-inline Vec2D GlobalToLocal(double Heading, const Vec2D &GlobalVector)
-{
-	return Vec2D(sin(-Heading)*GlobalVector[1] + cos(Heading)*GlobalVector[0],
-		cos(-Heading)*GlobalVector[1] + sin(Heading)*GlobalVector[0]);
-}
-
-class Side_Wheel_UI
-{
-public:
-	struct Wheel_Properties
-	{
-		osg::Vec2d m_Offset;  //Placement of the wheel in reference to the parent object (default 0,0)
-		osg::Vec4d m_Color;
-		const wchar_t *m_TextDisplay;
-	};
-private:
-	Actor_Text *m_UIParent;
-	Wheel_Properties m_props;
-	osg::ref_ptr<osgText::Text> m_Wheel;
-	double m_Rotation;
-
-	osg::Vec4d m_Color;
-	const wchar_t *m_TextDisplay;
-public:
-	Side_Wheel_UI() : m_UIParent(NULL), m_Rotation(0.0) {}
-	void UI_Init(Actor_Text *parent)
-	{
-		m_UIParent = parent;
-
-		osg::Vec3 position(0.5*c_Scene_XRes_InPixels, 0.5*c_Scene_YRes_InPixels, 0.0f);
-
-		m_Wheel = new osgText::Text;
-		m_Wheel->setColor(m_props.m_Color);
-		m_Wheel->setCharacterSize(m_UIParent->GetFontSize());
-		m_Wheel->setFontResolution(10, 10);
-		m_Wheel->setPosition(position);
-		m_Wheel->setAlignment(osgText::Text::CENTER_CENTER);
-		m_Wheel->setText(m_props.m_TextDisplay);
-		m_Wheel->setUpdateCallback(m_UIParent);
-	}
-	virtual void Initialize(const Wheel_Properties *props = NULL)
-	{
-		//Client code can manage the properties
-		if (props)
-			m_props = *props;
-		else
-		{
-			m_props.m_Offset = osg::Vec2d(0, 0);
-			m_props.m_Color = osg::Vec4(1.0, 0.0, 0.5, 1.0);
-			m_props.m_TextDisplay = L"|";
-		}
-	}
-	//Keep virtual for special kind of wheels
-	virtual void update(osg::NodeVisitor *nv, osg::Drawable *draw, const osg::Vec3 &parent_pos, double Heading)
-	{
-		double HeadingToUse = Heading + m_Rotation;
-		const double FS = m_UIParent->GetFontSize();
-		const osg::Vec2d WheelOffset(m_props.m_Offset[0], m_props.m_Offset[1]);
-		const osg::Vec2d WheelLocalOffset = GlobalToLocal(Heading, WheelOffset);
-		const osg::Vec3 WheelPos(parent_pos[0] + (WheelLocalOffset[0] * FS), parent_pos[1] + (WheelLocalOffset[1] * FS), parent_pos[2]);
-
-		if (m_Wheel.valid())
-		{
-			m_Wheel->setPosition(WheelPos);
-			m_Wheel->setRotation(FromLW_Rot_Radians(HeadingToUse, 0.0, 0.0));
-		}
-	}
-	virtual void Text_SizeToUse(double SizeToUse)
-	{
-		if (m_Wheel.valid()) m_Wheel->setCharacterSize(SizeToUse);
-	}
-
-	virtual void UpdateScene(osg::Geode *geode, bool AddOrRemove)
-	{
-		if (AddOrRemove)
-			if (m_Wheel.valid()) geode->addDrawable(m_Wheel);
-		else
-			if (m_Wheel.valid()) geode->removeDrawable(m_Wheel);
-	}
-	//This will add to the existing rotation and normalize
-	void AddRotation(double RadiansToAdd)
-	{
-		m_Rotation += RadiansToAdd;
-		if (m_Rotation > Pi2)
-			m_Rotation -= Pi2;
-		else if (m_Rotation < -Pi2)
-			m_Rotation += Pi2;
-	}
-	void UpdatePosition(double x, double y) { m_props.m_Offset[0] = x, m_props.m_Offset[1] = y; }
-	double GetFontSize() const { return m_UIParent ? m_UIParent->GetFontSize() : 10.0; }
-};
-
-class Swivel_Wheel_UI
-{
-public:
-	struct Wheel_Properties
-	{
-		Vec2D m_Offset;  //Placement of the wheel in reference to the parent object (default 0,0)
-		double m_Wheel_Diameter; //in meters default 0.1524  (6 inches)
-	};
-private:
-	Actor_Text *m_UIParent;
-	Wheel_Properties m_props;
-	osg::ref_ptr<osgText::Text> m_Front, m_Back, m_Tread; //Tread is really a line that helps show speed
-	double m_Rotation, m_Swivel;
-public:
-	Swivel_Wheel_UI() : m_UIParent(NULL) {}
-	virtual ~Swivel_Wheel_UI() {}
-
-	void UI_Init(Actor_Text *parent)
-	{
-		m_UIParent = parent;
-
-		osg::Vec3 position(0.5*c_Scene_XRes_InPixels, 0.5*c_Scene_YRes_InPixels, 0.0f);
-		m_Front = new osgText::Text;
-		m_Front->setColor(GetFrontWheelColor());
-		m_Front->setCharacterSize(m_UIParent->GetFontSize());
-		m_Front->setFontResolution(10, 10);
-		m_Front->setPosition(position);
-		m_Front->setAlignment(osgText::Text::CENTER_CENTER);
-		m_Front->setText(L"U");
-		m_Front->setUpdateCallback(m_UIParent);
-
-		m_Back = new osgText::Text;
-		m_Back->setColor(GetBackWheelColor());
-		m_Back->setCharacterSize(m_UIParent->GetFontSize());
-		m_Back->setFontResolution(10, 10);
-		m_Back->setPosition(position);
-		m_Back->setAlignment(osgText::Text::CENTER_CENTER);
-		m_Back->setText(L"U");
-		m_Back->setUpdateCallback(m_UIParent);
-
-		m_Tread = new osgText::Text;
-		m_Tread->setColor(osg::Vec4(1.0, 1.0, 1.0, 1.0));
-		m_Tread->setCharacterSize(m_UIParent->GetFontSize());
-		m_Tread->setFontResolution(10, 10);
-		m_Tread->setPosition(position);
-		m_Tread->setAlignment(osgText::Text::CENTER_CENTER);
-		//m_Tread->setText(L"\"");
-		m_Tread->setText(L"__");
-		m_Tread->setUpdateCallback(m_UIParent);
-	}
-
-	virtual void Initialize(const Wheel_Properties *props = NULL)
-	{
-		//Client code can manage the properties
-		m_props = *props;
-		m_Swivel = 0.0;
-		m_Rotation = 0.0;
-	}
-	virtual void update(osg::NodeVisitor *nv, osg::Drawable *draw, const osg::Vec3 &parent_pos, double Heading)
-	{
-		using Vec2d = osg::Vec2d;
-		//Keep virtual for special kind of wheels
-		const double FS = m_UIParent->GetFontSize();
-		Vec2d FrontSwivel(0.0, 0.5);
-		Vec2d BackSwivel(0.0, -0.5);
-		//Vec2d TreadRotPos(0.0,cos(m_Rotation)-0.3);
-		Vec2d TreadRotPos(sin(m_Rotation)*((fabs(m_Swivel) > PI_2) ? 0.5 : -0.5), (cos(m_Rotation)*.8) + 0.5);
-		FrontSwivel = GlobalToLocal(m_Swivel, FrontSwivel);
-		BackSwivel = GlobalToLocal(m_Swivel, BackSwivel);
-		TreadRotPos = GlobalToLocal(m_Swivel, TreadRotPos);
-
-		const Vec2d frontOffset(m_props.m_Offset[0] + FrontSwivel[0], m_props.m_Offset[1] + FrontSwivel[1]);
-		const Vec2d backOffset(m_props.m_Offset[0] + BackSwivel[0], m_props.m_Offset[1] + BackSwivel[1]);
-		const Vec2d TreadOffset(m_props.m_Offset[0] + TreadRotPos[0], m_props.m_Offset[1] + TreadRotPos[1]);
-
-		const Vec2d FrontLocalOffset = GlobalToLocal(Heading, frontOffset);
-		const Vec2d BackLocalOffset = GlobalToLocal(Heading, backOffset);
-		const Vec2d TreadLocalOffset = GlobalToLocal(Heading, TreadOffset);
-		const osg::Vec3 frontPos(parent_pos[0] + (FrontLocalOffset[0] * FS), parent_pos[1] + (FrontLocalOffset[1] * FS), parent_pos[2]);
-		const osg::Vec3 backPos(parent_pos[0] + (BackLocalOffset[0] * FS), parent_pos[1] + (BackLocalOffset[1] * FS), parent_pos[2]);
-		const osg::Vec3 TreadPos(parent_pos[0] + (TreadLocalOffset[0] * FS), parent_pos[1] + (TreadLocalOffset[1] * FS), parent_pos[2]);
-
-		const double TreadColor = ((sin(-m_Rotation) + 1.0) / 2.0) * 0.8 + 0.2;
-		m_Tread->setColor(osg::Vec4(TreadColor, TreadColor, TreadColor, 1.0));
-
-		if (m_Front.valid())
-		{
-			m_Front->setPosition(frontPos);
-			m_Front->setRotation(FromLW_Rot_Radians(PI + Heading + m_Swivel, 0.0, 0.0));
-		}
-		if (m_Back.valid())
-		{
-			m_Back->setPosition(backPos);
-			m_Back->setRotation(FromLW_Rot_Radians(Heading + m_Swivel, 0.0, 0.0));
-		}
-		if (m_Tread.valid())
-		{
-			m_Tread->setPosition(TreadPos);
-			m_Tread->setRotation(FromLW_Rot_Radians(Heading + m_Swivel, 0.0, 0.0));
-		}
-	}
-	virtual void Text_SizeToUse(double SizeToUse)
-	{
-		if (m_Front.valid())	m_Front->setCharacterSize(SizeToUse);
-		if (m_Back.valid()) m_Back->setCharacterSize(SizeToUse);
-		if (m_Tread.valid()) m_Tread->setCharacterSize(SizeToUse);
-	}
-	virtual void UpdateScene(osg::Geode *geode, bool AddOrRemove)
-	{
-		if (AddOrRemove)
-		{
-			if (m_Front.valid()) geode->addDrawable(m_Front);
-			if (m_Back.valid()) geode->addDrawable(m_Back);
-			if (m_Tread.valid()) geode->addDrawable(m_Tread);
-		}
-		else
-		{
-			if (m_Front.valid()) geode->removeDrawable(m_Front);
-			if (m_Back.valid()) geode->removeDrawable(m_Back);
-			if (m_Tread.valid()) geode->removeDrawable(m_Tread);
-		}
-	}
-	//Where 0 is up and 1.57 is right and -1.57 is left
-	void SetSwivel(double SwivelAngle) { m_Swivel = -SwivelAngle; }
-	void AddRotation(double RadiansToAdd)
-	{
-		//This will add to the existing rotation and normalize
-		m_Rotation += RadiansToAdd;
-		if (m_Rotation > Pi2)
-			m_Rotation -= Pi2;
-		else if (m_Rotation < -Pi2)
-			m_Rotation += Pi2;
-	}
-	void SetRotation(double position) { m_Rotation = -position; }
-	double GetFontSize() const { return m_UIParent ? m_UIParent->GetFontSize() : 10.0; }
-	enum WheelEnum
-	{
-		eFront, eBack, eTread
-	};
-	void SetWheelColor(osg::Vec4 Color, WheelEnum Wheel)
-	{
-		switch (Wheel)
-		{
-		case eFront:
-			m_Front->setColor(Color);
-			break;
-		case eBack:
-			m_Back->setColor(Color);
-			break;
-		case eTread:
-			//all though this is in-effective its added for completion
-			m_Tread->setColor(Color);
-			break;
-		}
-	}
-
-	virtual osg::Vec4 GetFrontWheelColor() const { return osg::Vec4(0.0, 1.0, 0.0, 1.0); }
-	virtual osg::Vec4 GetBackWheelColor() const { return osg::Vec4(1.0, 0.0, 0.0, 1.0); }
-};
-
-#pragma endregion
-#pragma region _Swerve Robot UI_
-class Swerve_Robot_UI
-{
-public:
-	struct SwerveRobot_State
-	{
-		double WheelDiameter;
-		double Att_r; //heading in radians
-		double SwerveVelocitiesFromIndex[8];
-	};
-private:
-	virtual void UpdateVoltage(size_t index, double Voltage) {}
-	virtual void CloseSolenoid(size_t index, bool Close) {}
-	virtual Swivel_Wheel_UI *Create_WheelUI() { return new Swivel_Wheel_UI; }
-	virtual void Destroy_WheelUI(Swivel_Wheel_UI *wheel_ui) { delete wheel_ui; }
-	//Allow subclasses to change wheels look
-	Swivel_Wheel_UI *m_Wheel[4];
-	std::function<SwerveRobot_State()> m_SwerveRobot=nullptr;
-public:
-	Swerve_Robot_UI()
-	{
-		for (size_t i = 0; i < 4; i++)
-			m_Wheel[i] = NULL;
-	}
-	~Swerve_Robot_UI()
-	{
-		for (size_t i = 0; i < 4; i++)
-		{
-			Destroy_WheelUI(m_Wheel[i]);
-			m_Wheel[i] = NULL;
-		}
-	}
-	void SetSwerveRobot_Callback(std::function<SwerveRobot_State()> callback)
-	{
-		m_SwerveRobot = callback;
-	}
-	virtual void Initialize(const Entity_Properties *props = NULL)
-	{
-		Vec2D Offsets[4] =
-		{
-			Vec2D(-1.6, 2.0),
-			Vec2D(1.6, 2.0),
-			Vec2D(-1.6,-2.0),
-			Vec2D(1.6,-2.0),
-		};
-		for (size_t i = 0; i < 4; i++)
-		{
-			Swivel_Wheel_UI::Wheel_Properties props;
-			props.m_Offset = Offsets[i];
-			props.m_Wheel_Diameter = m_SwerveRobot().WheelDiameter;
-			m_Wheel[i] = Create_WheelUI();
-			m_Wheel[i]->Initialize(&props);
-		}
-	}
-
-	virtual void UI_Init(Actor_Text *parent)
-	{
-		for (size_t i = 0; i < 4; i++)
-		{
-			m_Wheel[i]->UI_Init(parent);
-		}
-	}
-	virtual void custom_update(osg::NodeVisitor *nv, osg::Drawable *draw, const osg::Vec3 &parent_pos)
-	{
-		//just dispatch the update to the wheels (for now)
-		for (size_t i = 0; i < 4; i++)
-			m_Wheel[i]->update(nv, draw, parent_pos, -(m_SwerveRobot().Att_r));
-	}
-	virtual void Text_SizeToUse(double SizeToUse)
-	{
-		for (size_t i = 0; i < 4; i++)
-			m_Wheel[i]->Text_SizeToUse(SizeToUse);
-	}
-	virtual void UpdateScene(osg::Geode *geode, bool AddOrRemove)
-	{
-		for (size_t i = 0; i < 4; i++)
-			m_Wheel[i]->UpdateScene(geode, AddOrRemove);
-	}
-
-	virtual void TimeChange(double dTime_s)
-	{
-		SwerveRobot_State _ = m_SwerveRobot();
-		for (size_t i = 0; i < 4; i++)
-		{
-			//TODO GetIntendedVelocities for intended UI
-			m_Wheel[i]->SetSwivel(_.SwerveVelocitiesFromIndex[i + 4]);
-			//For the linear velocities we'll convert to angular velocity and then extract the delta of this slice of time
-			const double LinearVelocity = _.SwerveVelocitiesFromIndex[i];
-			const double PixelHackScale = m_Wheel[i]->GetFontSize() / 8.0;  //scale the wheels to be pixel aesthetic
-			const double RPS = LinearVelocity / (PI * _.WheelDiameter * PixelHackScale);
-			const double AngularVelocity = RPS * Pi2;
-			m_Wheel[i]->AddRotation(AngularVelocity*dTime_s);
-		}
-	}
-};
-
-#pragma endregion
 #pragma endregion
 
 class OSG_Viewer_Internal
