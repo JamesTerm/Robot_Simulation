@@ -2245,7 +2245,10 @@ namespace GG_Framework
 #pragma region _Main Window_
 
 #define DEBUG_SCREEN_RESIZE // printf
-#define THREADING_MODEL osgViewer::ViewerBase::AutomaticSelection
+//The AutomaticSelection may have changed over time to multi-threaded
+//#define THREADING_MODEL osgViewer::ViewerBase::AutomaticSelection
+//Life is good with a simple single thread... no miss fired artifacts, and do not need to worry about critical sections
+#define THREADING_MODEL osgViewer::ViewerBase::SingleThreaded
 
 namespace GG_Framework
 {
@@ -2391,7 +2394,14 @@ namespace GG_Framework
 			{
 				if (m_camGroup->done())
 					return false;
-				m_camGroup->frame(currTime_s);
+				//This is how it's done for ViewerBase, but may be redundant (need to check)
+				if (m_camGroup->checkNeedToDoFrame())
+					m_camGroup->frame(currTime_s);
+				//else
+				//{
+				//	static int counter = 0;
+				//	printf("Test %X\n",counter++);
+				//}
 				return true;
 			}
 			void UpdateSound(double dTick_s)
@@ -2834,7 +2844,8 @@ namespace GG_Framework
 					bool ret = false;
 					UpdateTimerLogger.Start();
 					#ifdef __UseSingleThreadMainLoop__
-					ThrottleFrame();  // Wait a bit if we need to
+					//TODO this causes jitters in test 1... if we really need this then we can revisit the use-case
+					//ThrottleFrame();  // Wait a bit if we need to
 					ret = Window::Update(currTime_s, dTick_s);
 					#else	
 					m_GUIThread.currTime_s() = currTime_s; //TODO this should be atomic but may need a critical section
@@ -3941,13 +3952,14 @@ public:
 		using namespace GG_Framework::Base;
 		using namespace GG_Framework::UI;
 
+		#pragma region _diabled code_
 		// Content Directory
 		//char contentDIR[512];
 		//_getcwd(contentDIR, 512);
 		//printf("Content Directory: %s\n", contentDIR);
 
 		//Audio::ISoundSystem* sound = new Audio::SoundSystem_Mock();
-
+		#pragma  endregion
 		// Create a new scope, so all auto-variables will be deleted when they fall out
 		{
 			// Create the singletons, These must be instantiated before the scene manager too - Rick
@@ -3973,6 +3985,7 @@ public:
 			DebugOut_PDCB* dpdcb = new DebugOut_PDCB(mainWin);
 			//mainWin.GetKeyboard_Mouse().AddKeyBindingR(false, "ShowDebug", osgGA::GUIEventAdapter::KEY_F9);
 			mainWin.GetMainCamera()->addPostDrawCallback(*dpdcb);
+			#pragma region _diabled code_
 			//mainWin.GetKeyboard_Mouse().GlobalEventMap.Event_Map["ShowDebug"].Subscribe(
 			//	dpdcb->ehl, (Text_PDCB&)(*dpdcb), &Text_PDCB::ToggleEnabled);
 
@@ -3987,8 +4000,10 @@ public:
 			// Set the scene and realize the camera at full size
 			//mainWin.GetMainCamera()->SetSceneNode(actorScene.GetScene(), 0.0f);
 			//mainWin.GetMainCamera()->SetSceneNode(createHUDText(), 0.0f);
+			#pragma endregion
 			// make sure the root node is group so we can add extra nodes to it.
 			osg::Group* group = new osg::Group;
+			#pragma region _Set up camera_
 			{
 				// create the hud.
 				osg::Camera* camera = new osg::Camera;
@@ -4006,6 +4021,7 @@ public:
 
 				group->addChild(camera);
 			}
+			#pragma endregion
 			mainWin.GetMainCamera()->SetSceneNode(group, 0.0f);
 
 			mainWin.Realize();
@@ -4028,6 +4044,8 @@ public:
 			// Loop while we are waiting for the Connection to be made and all of the scenes
 			double dTime_s = 0.0;
 			double currTime = 0.0;
+			//Note: This callback already happens in ViewerCallback prior to traverse and need not be in this loop
+			//m_Callback->UpdateScene(m_RootNode, m_Geode);
 			do
 			{
 				if (!m_UseSyntheticTimeDeltas)
@@ -4036,13 +4054,13 @@ public:
 				{
 					//dTime_s = 0.016;  //hard code a typical 60 fps
 					dTime_s = 0.010;  //Testing robot autonomous loop
+					timer.FireTimer();
 				}
 
 				currTime = timer.GetCurrTime_s();
 				if (m_Callback)
 				{
 					m_Callback->UpdateData(dTime_s);
-					m_Callback->UpdateScene(m_RootNode, m_Geode);
 				}
 				//Audio::ISoundSystem::Instance().SystemFrameUpdate();
 				//printf("\r %f      ",dTime_s);
@@ -4449,6 +4467,7 @@ public:
 class Swerve_Robot_UI : public EntityPropertiesInterface
 {
 public:
+	#pragma region _swerve robot state_
 	struct SwerveRobot_State
 	{
 		//EPIrrksa=EPI references as read-only... keep scope available
@@ -4470,7 +4489,19 @@ public:
 		double &IntendedOrientation;  //EPIrrksa: Depicted as the way it wants to go (e.g. a carrot ^ character)
 		//These should remain static:
 	};
+	static SwerveRobot_State DefaultRobotState()
+	{
+		static Vec2D Pos_m;
+		static double IntendedOrientation;
 
+		SwerveRobot_State ret =
+		{ Pos_m, {}, 0,
+			IntendedOrientation
+		};
+		return ret;
+	}
+	#pragma endregion
+	#pragma region _swerve robot properties_
 	struct SwerveRobot_Properties
 	{
 		double WheelDiameter;
@@ -4480,17 +4511,6 @@ public:
 		std::string text_image;
 	};
 	//Note: this makes it possible to not need a callback, and provides a good template for new client code
-	static SwerveRobot_State DefaultRobotState()
-	{
-		static Vec2D Pos_m;
-		static double IntendedOrientation;
-
-		SwerveRobot_State ret = 
-		{ Pos_m, {}, 0,
-			IntendedOrientation
-		};
-		return ret;
-	}
 	static SwerveRobot_Properties DefaultRobotProps()
 	{
 		static std::string entity_name = "default";
@@ -4505,18 +4525,21 @@ public:
 		};
 		return ret;
 	}
+	#pragma endregion
 private:
+	#pragma region _members_
 	osg::ref_ptr<Actor_Text> m_Actor;
 	//Allow subclasses to change wheels look
 	Swivel_Wheel_UI *m_Wheel[4];
 	std::function<SwerveRobot_State()> m_SwerveRobot = DefaultRobotState;
 	std::function<SwerveRobot_Properties()> m_SwerveRobot_props = DefaultRobotProps;
+	#pragma endregion
 	virtual void UpdateVoltage(size_t index, double Voltage) {}
 	virtual void CloseSolenoid(size_t index, bool Close) {}
 	virtual Swivel_Wheel_UI *Create_WheelUI() { return new Swivel_Wheel_UI; }
 	virtual void Destroy_WheelUI(Swivel_Wheel_UI *wheel_ui) { delete wheel_ui; }
-protected: //from EntityPropertiesInterface
 	#pragma region _EntityPropertiesInterface_
+protected: //from EntityPropertiesInterface
 	virtual void UI_Init(Actor_Text *parent)
 	{
 		for (size_t i = 0; i < 4; i++)
@@ -4537,17 +4560,27 @@ protected: //from EntityPropertiesInterface
 	}
 	virtual void UpdateScene(osg::Geode *geode, bool AddOrRemove)
 	{
-		//m_Actor = new Actor_Text(m_SwerveRobot().text_image.c_str());
-		//m_Actor->GetCharacterDimensions() = m_SwerveRobot().Dimensions;
-		//m_Actor->Init_IntendedOrientation();
-		//m_Actor->SetEntityProperties_Interface(this);
-		geode->addDrawable(m_Actor->GetText());
-		if (m_Actor->GetIntendedOrientation().valid())
-			geode->addDrawable(m_Actor->GetIntendedOrientation());
-		//since we are calling directly here... do not need to call this
-		//m_Actor->UpdateScene_Additional(geode, true); //Add any additional nodes
-		for (size_t i = 0; i < 4; i++)
-			m_Wheel[i]->UpdateScene(geode, AddOrRemove);
+		//Note: update scene get called repeatedly, so we only reconfigure this for new actors
+		//in our case at this level we'll never change, so in essence this will be called once
+		//in the past the Game client would add or remove actors, so this could be delegated to
+		//work that way if we are drawing multiple actors
+		if (!m_Actor)
+		{
+			//setup our actor
+			m_Actor = new Actor_Text(m_SwerveRobot_props().text_image.c_str());
+			m_Actor->GetCharacterDimensions() = m_SwerveRobot_props().Dimensions;
+			//This can be removed if we do not want to see this image
+			m_Actor->Init_IntendedOrientation();
+			//Bind the EPI with its actor
+			m_Actor->SetEntityProperties_Interface(this);
+			geode->addDrawable(m_Actor->GetText());
+			if (m_Actor->GetIntendedOrientation().valid())
+				geode->addDrawable(m_Actor->GetIntendedOrientation());
+			//since we are calling directly here... do not need to call this
+			//m_Actor->UpdateScene_Additional(geode, true); //Add any additional nodes
+			for (size_t i = 0; i < 4; i++)
+				m_Wheel[i]->UpdateScene(geode, AddOrRemove);
+		}
 	}
 	//Implement with our callback, not going to force a coupling with entity 2D
 	virtual const Vec2D &GetPos_m() const
@@ -4612,13 +4645,7 @@ public:
 			m_Wheel[i] = Create_WheelUI();
 			m_Wheel[i]->Initialize(&props);
 		}
-		//setup our actor
-		m_Actor = new Actor_Text(m_SwerveRobot_props().text_image.c_str());
-		m_Actor->GetCharacterDimensions() = m_SwerveRobot_props().Dimensions;
-		//This can be removed if we do not want to see this image
-		m_Actor->Init_IntendedOrientation();
-		//Bind the EPI with its actor
-		m_Actor->SetEntityProperties_Interface(this);
+		//Note: actor gets set up in the update scene
 	}
 	virtual void TimeChange(double dTime_s)
 	{
@@ -5119,10 +5146,15 @@ private:
 				text->setUpdateCallback(m_Actor);
 				geode->addDrawable(text);
 				#else
-				m_Actor = new Test_Actor2;
-				geode->addDrawable(m_Actor->GetText());
+				if (!m_Actor)
+				{
+					//Note: this is only setup one time
+					m_Actor = new Test_Actor2;
+					geode->addDrawable(m_Actor->GetText());
+				}
 				#endif
-				m_IsSetup = true;
+				//not sure if this is really necessary, but it allows an interesting local scope of the callback
+				m_IsSetup = true;  
 			}
 		}
 	public:
@@ -5145,16 +5177,17 @@ private:
 	{
 	private:
 		Swerve_Robot_UI m_robot;
-		bool m_IsSetup = false;
+		std::function<void(double dTime_s)> m_UpdateCallback=nullptr;
 	protected:  //from UI_Callback_Interface
 		virtual void UpdateData(double dtime_s) 
 		{
+			if (m_UpdateCallback)
+				m_UpdateCallback(dtime_s);
 			m_robot.TimeChange(dtime_s);
 		}
 		virtual void UpdateScene(osg::Group *rootNode, osg::Geode *geode)
 		{
 			m_robot.As_EPI().UpdateScene(geode,true);
-			m_IsSetup = true;
 		}
 	public:
 		Swerve_Robot_UI &Get_Robot() { return m_robot; }  //access to set callbacks
@@ -5162,7 +5195,10 @@ private:
 		{
 			m_robot.Initialize();
 		}
-		bool GetIsSetup() const { return m_IsSetup; }
+		void SetUpdateCallback(std::function<void(double dTime_s)> callback)
+		{
+			m_UpdateCallback = callback;
+		}
 	};
 	#pragma endregion
 	void init(std::shared_ptr<GUIThread> ui_thread)
@@ -5209,34 +5245,37 @@ public:
 			//m_UI_thread->GetUI()->SetUseSyntheticTimeDeltas(true);
 			static TestCallback_3 test;  //this needs to remain on after this test finishes
 			//set hooks here
-			test.Get_Robot().SetSwerveRobot_Callback(
-				[&]
-			{
-				static Vec2D Pos_m;
-				static double IntendedOrientation;
+			static Vec2D Pos_m;
+			static double IntendedOrientation;
 
-				static Swerve_Robot_UI::SwerveRobot_State ret =
-				{ Pos_m, {}, 0,
-					IntendedOrientation
-				};
-				using namespace std::chrono;
-				using time_point = system_clock::time_point;
-				static time_point then = system_clock::now();
-				const time_point now = system_clock::now();
-				const duration<double> delta_t = now - then;
-				const double delta = delta_t.count();
-				//We get called back quite a bit (see why) so pace our updates accordingly
-				if (delta > 0.033)
+			static Swerve_Robot_UI::SwerveRobot_State current_state =
+			{ Pos_m, {}, 0,
+				IntendedOrientation
+			};
+
+			test.Get_Robot().SetSwerveRobot_Callback([&]()	{	return current_state;	});
+			test.SetUpdateCallback(
+				[&](double dTime_s)
 				{
+					//profile check... ensure nothing is clogging the traversal and rendering
+					#if 0
+					using namespace std::chrono;
+					using time_point = system_clock::time_point;
+					static time_point then = system_clock::now();
+					const time_point now = system_clock::now();
+					const duration<double> delta_t = now - then;
+					const double delta = delta_t.count();
+					printf("test %.2f\n",delta);
+					then = now;
+					#endif
 					static double m_Rho;
 					const double sample = SineInfluence(m_Rho);
-					//ret.Att_r += NormalizeRotation2(sample * 0.25);
-					//IntendedOrientation += NormalizeRotation2(sample * 0.25);
+					current_state.Att_r += NormalizeRotation2(sample * 0.02);
+					IntendedOrientation += NormalizeRotation2(sample * 0.25);
+					current_state.SwerveVelocitiesFromIndex[0] += NormalizeRotation2(sample * 0.02);
+					current_state.SwerveVelocitiesFromIndex[5] += NormalizeRotation2(sample * 0.02);
 					Pos_m[1] = sample * 10.0;
-					then = now;
-				}
-				return ret;
-			});
+				});
 			test.init(); //call back the UI thread
 			m_UI_thread->Init(&test);
 			assert(m_UI_thread);
