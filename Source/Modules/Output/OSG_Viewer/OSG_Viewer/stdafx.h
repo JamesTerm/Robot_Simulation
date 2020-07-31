@@ -18,6 +18,7 @@
 #include <float.h>
 #include <ctime>
 #include <chrono>
+#include <future>
 
 // No C library depreciation warnings
 #pragma warning ( disable : 4995 )

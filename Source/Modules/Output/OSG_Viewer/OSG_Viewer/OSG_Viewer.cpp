@@ -3918,11 +3918,14 @@ namespace Robot_Tester
 class Viewer
 {
 private:
+	#pragma region _members_
 	GG_Framework::UI::MainWindow *m_MainWin;
 	//Exposing our node to render text
 	osg::ref_ptr<osg::Group> m_RootNode;
 	osg::ref_ptr<osg::Geode> m_Geode;
 	Viewer_Callback_Interface *m_Callback;
+	std::function<void(double dTime_s)> m_Callback2 = nullptr;
+	std::function<void(osg::Group *rootNode, osg::Geode *geode)> m_SceneCallback = nullptr;
 
 	class ViewerCallback : public osg::NodeCallback
 	{
@@ -3934,6 +3937,8 @@ private:
 		{
 			if (m_pParent->m_Callback)
 				m_pParent->m_Callback->UpdateScene(m_pParent->m_RootNode, m_pParent->m_Geode);
+			if (m_pParent->m_SceneCallback)
+				m_pParent->m_SceneCallback(m_pParent->m_RootNode, m_pParent->m_Geode);
 			traverse(node, nv);
 		}
 	public:
@@ -3943,10 +3948,14 @@ private:
 	//This will make all time deltas the same length (ideal for debugging)
 	bool m_UseSyntheticTimeDeltas;
 	bool m_UseUserPrefs;
+	#pragma endregion
 public:
 	Viewer(bool useUserPrefs = true) :m_Callback(NULL), m_UseSyntheticTimeDeltas(false), m_UseUserPrefs(useUserPrefs) {}
+	//Pick which callback you prefer
 	void SetCallbackInterface(Viewer_Callback_Interface *callback) { m_Callback = callback; }
-	void Start()
+	void SetUpdateCallback(std::function<void(double dTime_s)> callback) { m_Callback2 = callback; }
+	void SetSceneCallback(std::function<void(osg::Group *rootNode, osg::Geode *geode)> callback) 	{ m_SceneCallback = callback; }
+	void Init()
 	{
 		using namespace Robot_Tester;
 		using namespace GG_Framework::Base;
@@ -3960,83 +3969,91 @@ public:
 
 		//Audio::ISoundSystem* sound = new Audio::SoundSystem_Mock();
 		#pragma  endregion
+		
+		// Create the singletons, These must be instantiated before the scene manager too - Rick
+		m_MainWin = new MainWindow(true, 0.0, 0, 0, m_UseUserPrefs);
+		MainWindow &mainWin = *m_MainWin;
+
+		// Create the scene manager with each of the files
+		osg::Group* mainGroup = NULL;
+
+		// Here is a good example of setting up an easy text PDCB
+		Framerate_PDCB* fpdcb = new Framerate_PDCB(mainWin);
+		mainWin.GetMainCamera()->addPostDrawCallback(*fpdcb);
+		// And a debug one
+		DebugOut_PDCB* dpdcb = new DebugOut_PDCB(mainWin);
+		mainWin.GetMainCamera()->addPostDrawCallback(*dpdcb);
+		#pragma region _keyboard controls for viewer_
+		//mainWin.GetKeyboard_Mouse().AddKeyBindingR(false, "ShowFR", osgGA::GUIEventAdapter::KEY_F2);
+		//mainWin.GetKeyboard_Mouse().GlobalEventMap.Event_Map["ShowFR"].Subscribe(
+		//	fpdcb->ehl, (Text_PDCB&)(*fpdcb), &Text_PDCB::ToggleEnabled);
+		//mainWin.GetKeyboard_Mouse().AddKeyBindingR(false, "ShowDebug", osgGA::GUIEventAdapter::KEY_F9);
+		//mainWin.GetKeyboard_Mouse().GlobalEventMap.Event_Map["ShowDebug"].Subscribe(
+		//	dpdcb->ehl, (Text_PDCB&)(*dpdcb), &Text_PDCB::ToggleEnabled);
+
+		// Make the 'm' key record
+		//mainWin.GetKeyboard_Mouse().AddKeyBindingR(false, "RecordFrames", 'm');
+		//ScreenCaptureTool sct(mainWin, mainWin.GetKeyboard_Mouse().GlobalEventMap.Event_Map["RecordFrames"]);
+
+		// We can tie the events to Toggle fullscreen
+		//mainWin.GetKeyboard_Mouse().AddKeyBindingR(false, "ToggleFullScreen", osgGA::GUIEventAdapter::KEY_F3);
+		//mainWin.GetKeyboard_Mouse().GlobalEventMap.Event_Map["ToggleFullScreen"].Subscribe(mainWin.ehl, mainWin, &MainWindow::ToggleFullScreen);
+
+		// Set the scene and realize the camera at full size
+		//mainWin.GetMainCamera()->SetSceneNode(actorScene.GetScene(), 0.0f);
+		//mainWin.GetMainCamera()->SetSceneNode(createHUDText(), 0.0f);
+		#pragma endregion
+		// make sure the root node is group so we can add extra nodes to it.
+		osg::Group* group = new osg::Group;
+		#pragma region _Set up camera_
+		{
+			// create the hud.
+			osg::Camera* camera = new osg::Camera;
+			camera->setReferenceFrame(osg::Transform::ABSOLUTE_RF);
+			camera->setProjectionMatrixAsOrtho2D(0, c_Scene_XRes_InPixels, 0, c_Scene_YRes_InPixels);
+			camera->setViewMatrix(osg::Matrix::identity());
+			camera->setClearMask(GL_DEPTH_BUFFER_BIT);
+			m_RootNode = new osg::Group;
+			m_Geode = new osg::Geode;
+			m_ViewerCallback = new ViewerCallback(this);
+			m_RootNode->setUpdateCallback(m_ViewerCallback);
+			m_RootNode->addChild(m_Geode);
+			camera->addChild(m_RootNode);
+			camera->getOrCreateStateSet()->setMode(GL_LIGHTING, osg::StateAttribute::OFF);
+
+			group->addChild(camera);
+		}
+		#pragma endregion
+		mainWin.GetMainCamera()->SetSceneNode(group, 0.0f);
+
+		mainWin.Realize();
+		mainWin.SetFullScreen(false);
+		mainWin.SetWindowText("Robot Tester");
+
+		// Let all of the scene know we are starting
+		//mainWin.GetKeyboard_Mouse().GlobalEventMap.Event_Map["START"].Fire();
+
+		// Have a frame stamp to run the non-Actor parts
+		osg::ref_ptr<osg::FrameStamp> frameStamp = new osg::FrameStamp;
+		osgUtil::UpdateVisitor update;
+		update.setFrameStamp(frameStamp.get());
+		frameStamp->setSimulationTime(0.0);
+		frameStamp->setFrameNumber(0);
+	}
+	//This loop runs until StopLoop is called (or object closes)
+	void RunLoop()
+	{
+		using namespace Robot_Tester;
+		using namespace GG_Framework::Base;
+		using namespace GG_Framework::UI;
+		MainWindow &mainWin = *m_MainWin;
+
 		// Create a new scope, so all auto-variables will be deleted when they fall out
 		{
-			// Create the singletons, These must be instantiated before the scene manager too - Rick
-			m_MainWin = new MainWindow(true, 0.0, 0, 0, m_UseUserPrefs);
-			MainWindow &mainWin = *m_MainWin;
-
 			// We are going to use this single timer to fire against
 			OSG::OSG_Timer timer("OSGV Timer Log.csv");
 			//mainWin.GetKeyboard_Mouse().AddKeyBindingR(false, "ToggleFrameLog", osgGA::GUIEventAdapter::KEY_F7);
 			//timer.Logger.ListenForToggleEvent(mainWin.GetKeyboard_Mouse().GlobalEventMap.Event_Map["ToggleFrameLog"]);
-
-			// Create the scene manager with each of the files
-			osg::Group* mainGroup = NULL;
-
-			// Here is a good example of setting up an easy text PDCB
-			Framerate_PDCB* fpdcb = new Framerate_PDCB(mainWin);
-			//mainWin.GetKeyboard_Mouse().AddKeyBindingR(false, "ShowFR", osgGA::GUIEventAdapter::KEY_F2);
-			mainWin.GetMainCamera()->addPostDrawCallback(*fpdcb);
-			//mainWin.GetKeyboard_Mouse().GlobalEventMap.Event_Map["ShowFR"].Subscribe(
-			//	fpdcb->ehl, (Text_PDCB&)(*fpdcb), &Text_PDCB::ToggleEnabled);
-
-			// And a debug one
-			DebugOut_PDCB* dpdcb = new DebugOut_PDCB(mainWin);
-			//mainWin.GetKeyboard_Mouse().AddKeyBindingR(false, "ShowDebug", osgGA::GUIEventAdapter::KEY_F9);
-			mainWin.GetMainCamera()->addPostDrawCallback(*dpdcb);
-			#pragma region _diabled code_
-			//mainWin.GetKeyboard_Mouse().GlobalEventMap.Event_Map["ShowDebug"].Subscribe(
-			//	dpdcb->ehl, (Text_PDCB&)(*dpdcb), &Text_PDCB::ToggleEnabled);
-
-			// Make the 'm' key record
-			//mainWin.GetKeyboard_Mouse().AddKeyBindingR(false, "RecordFrames", 'm');
-			//ScreenCaptureTool sct(mainWin, mainWin.GetKeyboard_Mouse().GlobalEventMap.Event_Map["RecordFrames"]);
-
-			// We can tie the events to Toggle fullscreen
-			//mainWin.GetKeyboard_Mouse().AddKeyBindingR(false, "ToggleFullScreen", osgGA::GUIEventAdapter::KEY_F3);
-			//mainWin.GetKeyboard_Mouse().GlobalEventMap.Event_Map["ToggleFullScreen"].Subscribe(mainWin.ehl, mainWin, &MainWindow::ToggleFullScreen);
-
-			// Set the scene and realize the camera at full size
-			//mainWin.GetMainCamera()->SetSceneNode(actorScene.GetScene(), 0.0f);
-			//mainWin.GetMainCamera()->SetSceneNode(createHUDText(), 0.0f);
-			#pragma endregion
-			// make sure the root node is group so we can add extra nodes to it.
-			osg::Group* group = new osg::Group;
-			#pragma region _Set up camera_
-			{
-				// create the hud.
-				osg::Camera* camera = new osg::Camera;
-				camera->setReferenceFrame(osg::Transform::ABSOLUTE_RF);
-				camera->setProjectionMatrixAsOrtho2D(0, c_Scene_XRes_InPixels, 0, c_Scene_YRes_InPixels);
-				camera->setViewMatrix(osg::Matrix::identity());
-				camera->setClearMask(GL_DEPTH_BUFFER_BIT);
-				m_RootNode = new osg::Group;
-				m_Geode = new osg::Geode;
-				m_ViewerCallback = new ViewerCallback(this);
-				m_RootNode->setUpdateCallback(m_ViewerCallback);
-				m_RootNode->addChild(m_Geode);
-				camera->addChild(m_RootNode);
-				camera->getOrCreateStateSet()->setMode(GL_LIGHTING, osg::StateAttribute::OFF);
-
-				group->addChild(camera);
-			}
-			#pragma endregion
-			mainWin.GetMainCamera()->SetSceneNode(group, 0.0f);
-
-			mainWin.Realize();
-			mainWin.SetFullScreen(false);
-			mainWin.SetWindowText("Robot Tester");
-
-			// Let all of the scene know we are starting
-			//mainWin.GetKeyboard_Mouse().GlobalEventMap.Event_Map["START"].Fire();
-
-			// Have a frame stamp to run the non-Actor parts
-			osg::ref_ptr<osg::FrameStamp> frameStamp = new osg::FrameStamp;
-			osgUtil::UpdateVisitor update;
-			update.setFrameStamp(frameStamp.get());
-			frameStamp->setSimulationTime(0.0);
-			frameStamp->setFrameNumber(0);
 
 			// Connect the argParser to the camera, in case it wants to handle stats (I do not know that I like this here)
 			//argParser.AttatchCamera(&mainWin, &timer);
@@ -4059,9 +4076,9 @@ public:
 
 				currTime = timer.GetCurrTime_s();
 				if (m_Callback)
-				{
 					m_Callback->UpdateData(dTime_s);
-				}
+				if (m_Callback2)
+					m_Callback2(dTime_s);
 				//Audio::ISoundSystem::Instance().SystemFrameUpdate();
 				//printf("\r %f      ",dTime_s);
 			} while (mainWin.Update(currTime, dTime_s));
@@ -4084,14 +4101,17 @@ public:
 			getch();
 		}
 	}
-
+	void StopLoop()
+	{
+		m_MainWin->TryClose();
+	}
 	void SetUseSyntheticTimeDeltas(bool UseSyntheticTimeDeltas) { m_UseSyntheticTimeDeltas = UseSyntheticTimeDeltas; }
 	~Viewer()
 	{
 		using namespace GG_Framework::Base;
 		if (m_MainWin)
 		{
-			m_MainWin->TryClose();
+			StopLoop();
 			// Sleep to make sure everything completes
 			ThreadSleep(500);
 			delete m_MainWin;
@@ -4146,7 +4166,8 @@ protected:
 	{
 		assert(!m_Viewer);
 		m_Viewer = new Viewer(m_UseUserPrefs);
-		m_Viewer->Start();
+		m_Viewer->Init();
+		m_Viewer->RunLoop();
 		//printf("Exiting GUI Thread\n");
 		if (!m_IsBeingDestroyed)
 		{
@@ -4198,6 +4219,68 @@ public:
 		start();
 	}
 };
+
+class GUIThread2
+{
+private:
+	bool m_UseUserPrefs=true;
+	bool m_IsStreaming = false;
+	std::shared_ptr<Viewer> m_Viewer=nullptr;
+	std::future<void> m_TaskState_LaunchLoop;  //Use future to monitor task status
+	void dispatch_loop()
+	{
+		m_Viewer->RunLoop();
+	}
+public:
+	void init(bool useUserPrefs = true)
+	{
+		m_Viewer = std::make_shared<Viewer>();
+		m_Viewer->Init();
+	}
+	void SetCallbackInterface(Viewer_Callback_Interface *callback) { m_Viewer->SetCallbackInterface(callback); }
+	void SetUpdateCallback(std::function<void(double dTime_s)> callback) { m_Viewer->SetUpdateCallback(callback); }
+	void SetSceneCallback(std::function<void(osg::Group *rootNode, osg::Geode *geode)> callback) { m_Viewer->SetSceneCallback(callback); }
+	void SetUseSyntheticTimeDeltas(bool UseSyntheticTimeDeltas) { m_Viewer->SetUseSyntheticTimeDeltas(UseSyntheticTimeDeltas); }
+	void StartStreaming()
+	{
+		if (!m_IsStreaming)
+		{
+			//https://stackoverflow.com/questions/9094422/how-to-check-if-a-stdthread-is-still-running
+			using namespace std::chrono_literals;
+			//It's considered standard practice to wait for 0ms to obtain the current status without really waiting
+			const bool in_flight = m_TaskState_LaunchLoop.valid() && m_TaskState_LaunchLoop.wait_for(0ms) != std::future_status::ready;
+			if (!in_flight)
+				m_TaskState_LaunchLoop = std::async(std::launch::async, &GUIThread2::dispatch_loop, this);
+			//_CP_("in_flight =%d", in_flight);
+			m_IsStreaming = true;
+		}
+	}
+	void StopStreaming()
+	{
+		if (m_IsStreaming)
+		{
+			m_Viewer->StopLoop();
+			//join... wait for thread to complete:
+			size_t TimeOut = 0;
+			using namespace std::chrono_literals;
+			while (m_TaskState_LaunchLoop.wait_for(500ms) != std::future_status::ready)
+			{
+				printf("GUIThread2 [%p] waiting %zd\n", this, TimeOut++);
+				if (TimeOut == 10)
+				{
+					printf("timed out... is it locked up\n");
+					break;  //nothing more we can do at this point
+				}
+			}
+			m_IsStreaming = false;
+		}
+	}
+	~GUIThread2()
+	{
+		StopStreaming();
+	}
+};
+
 #pragma endregion
 #pragma region _robot Actor Text objects_
 #pragma region _Common UI_
@@ -4675,7 +4758,7 @@ class Tester
 {
 private:
 	#pragma region _members_
-	std::shared_ptr<GUIThread> m_UI_thread = nullptr;
+	std::shared_ptr<GUIThread2> m_UI_thread = nullptr;
 	double m_dTest = 0.0;
 	double m_dTest2 = 0.0;
 	#pragma endregion
@@ -5201,48 +5284,48 @@ private:
 		}
 	};
 	#pragma endregion
-	void init(std::shared_ptr<GUIThread> ui_thread)
+	void init(std::shared_ptr<GUIThread2> ui_thread)
 	{
 		if (!m_UI_thread)
 			m_UI_thread = ui_thread;
 	}
 public:
-	void Test(size_t index, std::shared_ptr<GUIThread> ui_thread)
+	void Test(size_t index, std::shared_ptr<GUIThread2> ui_thread)
 	{
+		init(ui_thread);
 		switch (index)
 		{
 		case 0:
 		{
 			using namespace GG_Framework::Base;
-			init(ui_thread);
 			TestCallback test;
-			m_UI_thread->Init(&test);
+			m_UI_thread->SetCallbackInterface(&test);
+			m_UI_thread->StartStreaming();
 			assert(m_UI_thread);
 			size_t TimeOut = 0;
 			while (!test.GetIsSetup() && TimeOut++ < 100)
 				ThreadSleep(200);
-			m_UI_thread->GetUI()->SetCallbackInterface(NULL);
+			m_UI_thread->SetCallbackInterface(NULL);
 		}
 		break;
 		case 1:
 		{
 			using namespace GG_Framework::Base;
-			init(ui_thread);
 			//m_UI_thread->GetUI()->SetUseSyntheticTimeDeltas(true);
 			TestCallback_2 test;
-			m_UI_thread->Init(&test);
+			m_UI_thread->SetCallbackInterface(&test);
+			m_UI_thread->StartStreaming();
 			assert(m_UI_thread);
 			size_t TimeOut = 0;
 			while (!test.GetIsSetup() && TimeOut++ < 100)
 				ThreadSleep(200);
-			m_UI_thread->GetUI()->SetCallbackInterface(NULL);
+			m_UI_thread->SetCallbackInterface(NULL);
 		}
 		break;
 		case 2:
 		{
 			using namespace GG_Framework::Base;
-			init(ui_thread);
-			//m_UI_thread->GetUI()->SetUseSyntheticTimeDeltas(true);
+			//m_UI_thread->SetUseSyntheticTimeDeltas(true);
 			static TestCallback_3 test;  //this needs to remain on after this test finishes
 			//set hooks here
 			static Vec2D Pos_m;
@@ -5277,12 +5360,54 @@ public:
 					Pos_m[1] = sample * 10.0;
 				});
 			test.init(); //call back the UI thread
-			m_UI_thread->Init(&test);
+			m_UI_thread->SetCallbackInterface(&test);
+			m_UI_thread->StartStreaming();
 			assert(m_UI_thread);
 			//since we are static we can leave the callback set, but only for this test
 			//actual app needs to unhook properly
 		}
 		break;
+		case 3:
+		{
+			//Making use of modern c++ as this is just like test 2, 
+			//shows how much cleaner the code is without needing to use without the need of writing an interface
+			//all the code is here in the same place!
+			using namespace GG_Framework::Base;
+			//m_UI_thread->SetUseSyntheticTimeDeltas(true);
+			static Swerve_Robot_UI s_robot;
+			s_robot.Initialize(); //setup the robot's properties here
+			//set hooks here
+			m_UI_thread->SetSceneCallback([&](osg::Group *rootNode, osg::Geode *geode) { s_robot.As_EPI().UpdateScene(geode, true); });
+
+			//So due to legacy, Pos_m and IntendedOrientation are references, that means the caller owns the variables, which I suppose
+			//is fine, but it may be confusing when looking at this example.
+			static Vec2D Pos_m;
+			static double IntendedOrientation;
+			static Swerve_Robot_UI::SwerveRobot_State current_state =
+			{ Pos_m, {}, 0,
+				IntendedOrientation
+			};
+			s_robot.SetSwerveRobot_Callback([&]()	{	return current_state;	});
+			//Now the callback comes directly from the viewer
+			m_UI_thread->SetUpdateCallback(
+				[&](double dTime_s)
+				{
+					static double m_Rho;
+					const double sample = SineInfluence(m_Rho);
+					current_state.Att_r += NormalizeRotation2(sample * 0.02);
+					IntendedOrientation += NormalizeRotation2(sample * 0.25);
+					current_state.SwerveVelocitiesFromIndex[0] += NormalizeRotation2(sample * 0.02);
+					current_state.SwerveVelocitiesFromIndex[5] += NormalizeRotation2(sample * 0.02);
+					Pos_m[1] = sample * 10.0;
+				});
+
+			//Hooks set... now start the stream
+			m_UI_thread->StartStreaming();
+			//since we are static we can leave the callback set, but only for this test
+			//actual app needs to unhook properly
+		}
+		break;
+
 		}
 	}
 };
@@ -5294,20 +5419,23 @@ class OSG_Viewer_Internal
 {
 private:
 	#pragma region _members_
-	std::shared_ptr<GUIThread> m_UI_thread = nullptr;
+	std::shared_ptr<GUIThread2> m_UI_thread = nullptr;
 	#pragma endregion
 	void init()
 	{
 		if (!m_UI_thread)
-			m_UI_thread = std::make_shared<GUIThread>();
+		{
+			m_UI_thread = std::make_shared<GUIThread2>();
+			m_UI_thread->init();
+		}
 	}
 public:
 	OSG_Viewer_Internal()
 	{
+		init();
 	}
 	void Test(size_t index)
 	{
-		init();
 		Tester test;
 		test.Test(index,m_UI_thread);
 	}
