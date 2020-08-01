@@ -170,6 +170,7 @@
   <ItemGroup>
     <ClInclude Include="OSG_Viewer.h" />
     <ClInclude Include="stdafx.h" />
+    <ClInclude Include="SwerveRobot_UI.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

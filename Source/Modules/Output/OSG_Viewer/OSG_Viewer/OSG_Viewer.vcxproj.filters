@@ -32,5 +32,8 @@
     <ClInclude Include="OSG_Viewer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="SwerveRobot_UI.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

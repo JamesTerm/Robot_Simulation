@@ -3,6 +3,7 @@
 #include <list>
 #include <conio.h>
 #include "OSG_Viewer.h"
+#include "SwerveRobot_UI.h"
 
 #include <osgUtil/Optimizer>
 
@@ -2883,11 +2884,19 @@ namespace GG_Framework
 			}
 			bool IsQuitting() { return m_quitting; }
 			void ToggleFullScreen() { SetFullScreen(!IsFullScreen()); }
+			void StartLoop()
+			{
+				m_quitting = false;
+			}
+			void StopLoop()
+			{
+				m_quitting = true;
+			}
 			void TryClose()
 			{
 				if (!m_quitting)
 				{
-					m_quitting = true;
+					StopLoop();
 					Closing.Fire(this, m_quitting);
 					if (m_quitting)
 					{
@@ -4063,6 +4072,7 @@ public:
 			double currTime = 0.0;
 			//Note: This callback already happens in ViewerCallback prior to traverse and need not be in this loop
 			//m_Callback->UpdateScene(m_RootNode, m_Geode);
+			mainWin.StartLoop();
 			do
 			{
 				if (!m_UseSyntheticTimeDeltas)
@@ -4103,7 +4113,7 @@ public:
 	}
 	void StopLoop()
 	{
-		m_MainWin->TryClose();
+		m_MainWin->StopLoop();
 	}
 	void SetUseSyntheticTimeDeltas(bool UseSyntheticTimeDeltas) { m_UseSyntheticTimeDeltas = UseSyntheticTimeDeltas; }
 	~Viewer()
@@ -4111,7 +4121,7 @@ public:
 		using namespace GG_Framework::Base;
 		if (m_MainWin)
 		{
-			StopLoop();
+			m_MainWin->TryClose();
 			// Sleep to make sure everything completes
 			ThreadSleep(500);
 			delete m_MainWin;
@@ -4551,32 +4561,11 @@ class Swerve_Robot_UI : public EntityPropertiesInterface
 {
 public:
 	#pragma region _swerve robot state_
-	struct SwerveRobot_State
-	{
-		//EPIrrksa=EPI references as read-only... keep scope available
-		Vec2D &Pos_m;  //EPIrrksa
-		enum Swerve_Robot_VelocityIndex
-		{
-			eWheel_FL,
-			eWheel_FR,
-			eWheel_RL,
-			eWheel_RR,
-			eSwivel_FL,
-			eSwivel_FR,
-			eSwivel_RL,
-			eSwivel_RR,
-			eNoSwerveRobotSpeedControllerDevices
-		};
-		double SwerveVelocitiesFromIndex[8]; //shows wheels angles and their velocities see Swerve_Robot_VelocityIndex
-		double Att_r; //heading in radians
-		double &IntendedOrientation;  //EPIrrksa: Depicted as the way it wants to go (e.g. a carrot ^ character)
-		//These should remain static:
-	};
+	using SwerveRobot_State = SwerveRobot_UI::SwerveRobot_State;
 	static SwerveRobot_State DefaultRobotState()
 	{
-		static Vec2D Pos_m;
+		static SwerveRobot_State::Vector2D Pos_m;
 		static double IntendedOrientation;
-
 		SwerveRobot_State ret =
 		{ Pos_m, {}, 0,
 			IntendedOrientation
@@ -4616,6 +4605,8 @@ private:
 	Swivel_Wheel_UI *m_Wheel[4];
 	std::function<SwerveRobot_State()> m_SwerveRobot = DefaultRobotState;
 	std::function<SwerveRobot_Properties()> m_SwerveRobot_props = DefaultRobotProps;
+	mutable Vec2D m_Pos_m;  //for backward compatibility
+	mutable double m_IntendedOrientation;
 	#pragma endregion
 	virtual void UpdateVoltage(size_t index, double Voltage) {}
 	virtual void CloseSolenoid(size_t index, bool Close) {}
@@ -4668,7 +4659,10 @@ protected: //from EntityPropertiesInterface
 	//Implement with our callback, not going to force a coupling with entity 2D
 	virtual const Vec2D &GetPos_m() const
 	{
-		return m_SwerveRobot().Pos_m;
+		//Note: this is backward compatible so I am not too worried about the conversion
+		SwerveRobot_State::Vector2D Pos_m= m_SwerveRobot().Pos_m;
+		m_Pos_m = Vec2D(Pos_m.x, Pos_m.y);
+		return m_Pos_m;
 	}
 	virtual double GetAtt_r() const
 	{
@@ -4684,7 +4678,9 @@ protected: //from EntityPropertiesInterface
 	}
 	virtual const double &GetIntendedOrientation() const
 	{
-		return m_SwerveRobot().IntendedOrientation;
+		//Note: this is backward compatible so I am not too worried about the conversion
+		m_IntendedOrientation = m_SwerveRobot().IntendedOrientation;
+		return m_IntendedOrientation;
 	}
 	#pragma endregion
 public:
@@ -5328,11 +5324,10 @@ public:
 			//m_UI_thread->SetUseSyntheticTimeDeltas(true);
 			static TestCallback_3 test;  //this needs to remain on after this test finishes
 			//set hooks here
-			static Vec2D Pos_m;
 			static double IntendedOrientation;
 
 			static Swerve_Robot_UI::SwerveRobot_State current_state =
-			{ Pos_m, {}, 0,
+			{ {}, {}, 0,
 				IntendedOrientation
 			};
 
@@ -5357,7 +5352,7 @@ public:
 					IntendedOrientation += NormalizeRotation2(sample * 0.25);
 					current_state.SwerveVelocitiesFromIndex[0] += NormalizeRotation2(sample * 0.02);
 					current_state.SwerveVelocitiesFromIndex[5] += NormalizeRotation2(sample * 0.02);
-					Pos_m[1] = sample * 10.0;
+					current_state.Pos_m.y = sample * 10.0;
 				});
 			test.init(); //call back the UI thread
 			m_UI_thread->SetCallbackInterface(&test);
@@ -5384,7 +5379,7 @@ public:
 			static Vec2D Pos_m;
 			static double IntendedOrientation;
 			static Swerve_Robot_UI::SwerveRobot_State current_state =
-			{ Pos_m, {}, 0,
+			{ {}, {}, 0,
 				IntendedOrientation
 			};
 			s_robot.SetSwerveRobot_Callback([&]()	{	return current_state;	});
@@ -5398,7 +5393,8 @@ public:
 					IntendedOrientation += NormalizeRotation2(sample * 0.25);
 					current_state.SwerveVelocitiesFromIndex[0] += NormalizeRotation2(sample * 0.02);
 					current_state.SwerveVelocitiesFromIndex[5] += NormalizeRotation2(sample * 0.02);
-					Pos_m[1] = sample * 10.0;
+					current_state.Pos_m.x = sample * 10.0;
+					s_robot.TimeChange(dTime_s);
 				});
 
 			//Hooks set... now start the stream
@@ -5421,18 +5417,35 @@ private:
 	#pragma region _members_
 	std::shared_ptr<GUIThread2> m_UI_thread = nullptr;
 	#pragma endregion
-	void init()
+public:
+	void SetUpdateCallback(std::function<void(double dTime_s)> callback)
+	{
+		m_UI_thread->SetUpdateCallback(callback);
+	}
+	void SetSceneCallback(std::function<void(void *rootNode, void *geode)> callback)
+	{
+		//Gah need to cast... keeps header from being dependent on OSG parameters
+		m_UI_thread->SetSceneCallback((std::function<void(osg::Group *rootNode, osg::Geode *geode)>)callback);
+	}
+	void init(bool useUserPrefs = true)
 	{
 		if (!m_UI_thread)
 		{
 			m_UI_thread = std::make_shared<GUIThread2>();
-			m_UI_thread->init();
+			m_UI_thread->init(useUserPrefs);
 		}
 	}
-public:
-	OSG_Viewer_Internal()
+	void SetUseSyntheticTimeDeltas(bool UseSyntheticTimeDeltas)
 	{
-		init();
+		m_UI_thread->SetUseSyntheticTimeDeltas(UseSyntheticTimeDeltas);
+	}
+	void StartStreaming()
+	{
+		m_UI_thread->StartStreaming();
+	}
+	void StopStreaming()
+	{
+		m_UI_thread->StopStreaming();
 	}
 	void Test(size_t index)
 	{
@@ -5442,17 +5455,67 @@ public:
 };
 
 #pragma region _wrapper methods_
+
+#pragma region _OSG Viewer_
 OSG_Viewer::OSG_Viewer()
 {
 	m_OSG_Viewer = std::make_shared<OSG_Viewer_Internal>();
+}
+void OSG_Viewer::init()
+{
+	m_OSG_Viewer->init();
+}
+void OSG_Viewer::SetUpdateCallback(std::function<void(double dTime_s)> callback)
+{
+	m_OSG_Viewer->SetUpdateCallback(callback);
+}
+void OSG_Viewer::SetSceneCallback(std::function<void(void *rootNode, void *geode)> callback)
+{
+	//Gah need to cast... keeps header from being dependent on OSG parameters
+	m_OSG_Viewer->SetSceneCallback(callback);
+}
+void OSG_Viewer::SetUseSyntheticTimeDeltas(bool UseSyntheticTimeDeltas)
+{
+	m_OSG_Viewer->SetUseSyntheticTimeDeltas(UseSyntheticTimeDeltas);
+}
+void OSG_Viewer::StartStreaming()
+{
+	m_OSG_Viewer->StartStreaming();
+}
+void OSG_Viewer::StopStreaming()
+{
+	m_OSG_Viewer->StopStreaming();
 }
 void OSG_Viewer::Test(size_t index)
 {
 	m_OSG_Viewer->Test(index);
 }
+#pragma endregion
+#pragma region _Swerve Robot UI_
+SwerveRobot_UI::SwerveRobot_UI()
+{
+	//Instantiate now so we can set hooks before initialize
+	m_Robot = std::make_shared<Swerve_Robot_UI>();
+}
+void SwerveRobot_UI::SetSwerveRobot_Callback(std::function<SwerveRobot_State()> callback)
+{
+	m_Robot->SetSwerveRobot_Callback(callback);
+}
+void SwerveRobot_UI::UpdateScene(void *geode, bool AddOrRemove)
+{
+	m_Robot->As_EPI().UpdateScene((osg::Geode *)geode, AddOrRemove);
+}
+void SwerveRobot_UI::Initialize()
+{
+	m_Robot->Initialize();
+}
+void SwerveRobot_UI::TimeChange(double dTime_s)
+{
+	m_Robot->TimeChange(dTime_s);
+}
 
 #pragma endregion
-
+#pragma endregion
 }
 #pragma endregion
 

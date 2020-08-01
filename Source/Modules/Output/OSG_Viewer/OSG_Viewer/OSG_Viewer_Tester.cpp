@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include <Windows.h>
 #include "OSG_Viewer.h"
+#include "SwerveRobot_UI.h"
 
 #pragma region _main_
 
@@ -45,6 +46,60 @@ __inline void prompt()
 	std::cout << ">";
 }
 
+namespace Robot_Tester
+{
+
+class SwerveRobotTest
+{
+private:
+	SwerveRobot_UI m_Robot;
+	SwerveRobot_UI::SwerveRobot_State m_current_state = {};
+	OSG_Viewer *m_viewer = nullptr;
+public:
+	void init(OSG_Viewer &viewer)
+	{
+		m_viewer = &viewer; //cache to remove hook
+		//Tell viewer to look at our scene for our object
+		viewer.SetSceneCallback([&](void *rootNode, void *geode) { m_Robot.UpdateScene(geode, true); });
+		//Anytime robot needs updates link it to our current state
+		m_Robot.SetSwerveRobot_Callback([&]() {	return m_current_state;	});
+		//When viewer updates a frame
+		viewer.SetUpdateCallback(
+			[&](double dTime_s)
+		{
+			//any updates can go here to the current state
+			//--- here  (optional)
+			//give the robot its time slice to process them
+			m_Robot.TimeChange(dTime_s);
+		});
+		//Good to go... now initialize the robot
+		m_Robot.Initialize();
+	}
+	~SwerveRobotTest()
+	{
+		//clear hooks
+		if (m_viewer)
+		{
+			m_Robot.SetSwerveRobot_Callback(nullptr);
+			m_viewer->SetSceneCallback(nullptr);
+			m_viewer->SetUpdateCallback(nullptr);
+			m_viewer = nullptr;  //pedantic... we are done with it
+		}
+	}
+	//Access the current state for testing
+	SwerveRobot_UI::SwerveRobot_State &get_current_state_rw() 
+	{ 
+		return m_current_state; 
+	}
+};
+}
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+#define DEG_2_RAD(x)		((x)*M_PI/180.0)
+#define Feet2Meters(x)		((x)*0.3048)
+
 bool CommandLineInterface()
 {
 	bool ret = false;
@@ -62,9 +117,10 @@ bool CommandLineInterface()
 	cout << endl;
 	cout << "Ready." << endl;
 	#pragma endregion
-
-	Robot_Tester::OSG_Viewer viewer_test;  //setup our viewer now
-
+	using namespace Robot_Tester;
+	OSG_Viewer viewer_test;  //setup our viewer now
+	viewer_test.init();
+	SwerveRobotTest robot;
 	while (prompt(), cin.getline(input_line, 128))
 	{
 		//init args
@@ -79,14 +135,23 @@ bool CommandLineInterface()
 			{
 				viewer_test.Test(atoi(str_1));
 			}
-			//else if (!_strnicmp(input_line, "start", 5))
-			//{
-			//	entity_test.Start();
-			//}
-			//else if (!_strnicmp(input_line, "stop", 5))
-			//{
-			//	entity_test.Stop();
-			//}
+			else if (!_strnicmp(input_line, "init", 4))
+			{
+				robot.init(viewer_test);
+				viewer_test.StartStreaming();
+			}
+			else if (!_strnicmp(input_line, "start", 5))
+			{
+				viewer_test.StartStreaming();
+			}
+			else if (!_strnicmp(input_line, "stop", 5))
+			{
+				viewer_test.StopStreaming();
+			}
+			else if (!_strnicmp(input_line, "turn", 4))
+			{
+				robot.get_current_state_rw().Att_r = DEG_2_RAD(atof(str_1));
+			}
 			else if (!_strnicmp(input_line, "Exit", 4))
 			{
 				break;
