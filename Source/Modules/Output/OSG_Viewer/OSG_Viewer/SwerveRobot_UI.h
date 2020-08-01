@@ -7,31 +7,40 @@ class Swerve_Robot_UI;
 class SwerveRobot_UI
 {
 public:
-	struct SwerveRobot_State
+	union uSwerveRobot_State
 	{
-		//Use a simple struct to keep methods of return
-		struct Vector2D
+		struct SwerveRobot_State
 		{
-			double x, y;
-		};
-		Vector2D Pos_m;
-		enum Swerve_Robot_VelocityIndex
+			//Use a simple struct to keep methods of return
+			struct Vector2D
+			{
+				double x, y;
+			};
+			Vector2D Pos_m;
+			enum Swerve_Robot_VelocityIndex
+			{
+				eWheel_FL,
+				eWheel_FR,
+				eWheel_RL,
+				eWheel_RR,
+				eSwivel_FL,
+				eSwivel_FR,
+				eSwivel_RL,
+				eSwivel_RR,
+				eNoSwerveRobotSpeedControllerDevices
+			};
+			double SwerveVelocitiesFromIndex[8]; //shows wheels angles and their velocities see Swerve_Robot_VelocityIndex
+			double Att_r; //heading in radians
+			double IntendedOrientation;
+			//These should remain static:
+		} bits;
+		//give as an array for ease of updates in a full state loop
+		struct AsRaw
 		{
-			eWheel_FL,
-			eWheel_FR,
-			eWheel_RL,
-			eWheel_RR,
-			eSwivel_FL,
-			eSwivel_FR,
-			eSwivel_RL,
-			eSwivel_RR,
-			eNoSwerveRobotSpeedControllerDevices
-		};
-		double SwerveVelocitiesFromIndex[8]; //shows wheels angles and their velocities see Swerve_Robot_VelocityIndex
-		double Att_r; //heading in radians
-		double IntendedOrientation;
-		//These should remain static:
+			double element[12];
+		} raw;
 	};
+	using SwerveRobot_State = uSwerveRobot_State::SwerveRobot_State;
 	SwerveRobot_UI();
 	//Be sure to set callback before initialize
 	void SetSwerveRobot_Callback(std::function<SwerveRobot_State()> callback);
