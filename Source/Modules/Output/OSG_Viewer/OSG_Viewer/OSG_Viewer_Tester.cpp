@@ -33,9 +33,14 @@ static void DisplayHelp()
 {
 	printf(
 		"cls\n"
+		"Zoom <size usually 100>\n"
 		"test <test name or number>\n"
-		//"start\n"
-		//"stop\n"
+		"start\n"
+		"stop\n"
+		"pos <feet x> <feet y> \n"
+		"vel <index> <degrees>\n"
+		"turn <degrees>\n"
+		"heading <degrees>\n"
 		"Help (displays this)\n"
 		"\nType \"Quit\" at anytime to exit this application\n"
 	);
@@ -131,6 +136,10 @@ bool CommandLineInterface()
 			{
 				cls();
 			}
+			else if (!_strnicmp(input_line, "zoom", 4))
+			{
+				viewer_test.Zoom(atof(str_1));
+			}
 			else if (!_strnicmp(input_line, "test", 4))
 			{
 				viewer_test.Test(atoi(str_1));
@@ -148,9 +157,24 @@ bool CommandLineInterface()
 			{
 				viewer_test.StopStreaming();
 			}
+			else if (!_strnicmp(input_line, "pos", 3))
+			{
+				robot.get_current_state_rw().Pos_m.x = Feet2Meters(atof(str_1));
+				robot.get_current_state_rw().Pos_m.y = Feet2Meters(atof(str_2));
+			}
+			else if (!_strnicmp(input_line, "vel", 3))
+			{
+				size_t index = atoi(str_1);
+				robot.get_current_state_rw().SwerveVelocitiesFromIndex[index] = DEG_2_RAD(atof(str_2));
+			}
+
 			else if (!_strnicmp(input_line, "turn", 4))
 			{
 				robot.get_current_state_rw().Att_r = DEG_2_RAD(atof(str_1));
+			}
+			else if (!_strnicmp(input_line, "heading", 6))
+			{
+				robot.get_current_state_rw().IntendedOrientation = DEG_2_RAD(atof(str_1));
 			}
 			else if (!_strnicmp(input_line, "Exit", 4))
 			{

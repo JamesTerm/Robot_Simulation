@@ -3658,11 +3658,13 @@ namespace Robot_Tester
 const double PI = 3.1415926535897;
 const double Pi2 = M_PI * 2.0;
 const double PI_2 = 1.57079632679489661923;
-#if 1
+
+//TODO evaluate my window size instead of using these constants
+#if 0
 const double c_Scene_XRes_InPixels = 640.0;
 const double c_Scene_YRes_InPixels = 480.0;
 #endif
-#if 0
+#if 1
 const double c_Scene_XRes_InPixels = 1280.0;
 const double c_Scene_YRes_InPixels = 1024.0;
 #endif
@@ -3682,7 +3684,9 @@ const double c_halfyres = c_Scene_YRes_InPixels / 2.0;
 //double g_WorldScaleFactor=0.1; //This will give us about 12,800 x 10,240 meters resolution before wrap around ideal size to see
 //double g_WorldScaleFactor=1.0; //This only give 1280 x 1024 meters but ideal to really see everything
 //double g_WorldScaleFactor = 2.0; //This only give 640 x 512 good for windowed mode
-double g_WorldScaleFactor = 8.0; //TODO this may change once I determine everything is correct on the swerve
+//double g_WorldScaleFactor = 100.0; //This has been the default for the robots... previous sizes were for the bigger ships
+double g_WorldScaleFactor = 140.0;  //for the small window this works well, but may rework this later for full screen
+
 bool g_TestPhysics = false;
 
 class Actor
@@ -4579,20 +4583,23 @@ public:
 		double WheelDiameter;
 		//EPI references these
 		std::string &entity_name;     //EPIrrksa
-		Vec2D &Dimensions;            //EPIrrksa
+		Vec2D &Dimensions;            //EPIrrksa   x-width, y-length in meters
+		Vec2D &Character_Dimensions;  //EPIrrksa
 		std::string text_image;
 	};
 	//Note: this makes it possible to not need a callback, and provides a good template for new client code
 	static SwerveRobot_Properties DefaultRobotProps()
 	{
 		static std::string entity_name = "default";
-		static Vec2D Dimensions = Vec2D(5.0, 5.0);  //length, width (font chars not robot's (27.5, 19.5))
+		static Vec2D Dimensions = Vec2D( Inches2Meters(19.5), Inches2Meters(27.5));  //length, width (font chars not robot's (27.5, 19.5))
+		static Vec2D Character_Dimensions = Vec2D(5.0, 5.0);  //length, width (font chars not robot's (27.5, 19.5))
 
 		SwerveRobot_Properties ret =
 		{ 
 			Inches2Meters(6),
 			entity_name,
 			Dimensions,
+			Character_Dimensions,
 			"     \n,   ,\n(-+-)\n'   '\n     "
 		};
 		return ret;
@@ -4642,7 +4649,7 @@ protected: //from EntityPropertiesInterface
 		{
 			//setup our actor
 			m_Actor = new Actor_Text(m_SwerveRobot_props().text_image.c_str());
-			m_Actor->GetCharacterDimensions() = m_SwerveRobot_props().Dimensions;
+			m_Actor->GetCharacterDimensions() = m_SwerveRobot_props().Character_Dimensions;
 			//This can be removed if we do not want to see this image
 			m_Actor->Init_IntendedOrientation();
 			//Bind the EPI with its actor
@@ -5485,6 +5492,10 @@ void OSG_Viewer::StartStreaming()
 void OSG_Viewer::StopStreaming()
 {
 	m_OSG_Viewer->StopStreaming();
+}
+void OSG_Viewer::Zoom(double size)
+{
+	g_WorldScaleFactor = size;
 }
 void OSG_Viewer::Test(size_t index)
 {

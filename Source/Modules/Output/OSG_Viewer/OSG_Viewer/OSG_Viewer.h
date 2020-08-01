@@ -19,7 +19,7 @@ public:
 	void SetUseSyntheticTimeDeltas(bool UseSyntheticTimeDeltas);
 	void StartStreaming();
 	void StopStreaming();
-
+	void Zoom(double size);  //usually set to 100
 	void Test(size_t index);
 private:
 	std::shared_ptr<OSG_Viewer_Internal> m_OSG_Viewer;
