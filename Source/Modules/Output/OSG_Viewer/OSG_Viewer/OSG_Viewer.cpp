@@ -29,6 +29,8 @@
 #include <osg/NodeCallback>
 #include <OpenThreads/Mutex>
 #include <OpenThreads/Thread>
+#include <osgGA/GUIEventHandler> //for keyboard support
+
 
 //TODO find out why I can't use release OSG for debug builds, then I can make my own macro here
 
@@ -59,6 +61,8 @@
 #pragma region _GG_FrameWork_UI_
 #pragma region _Useful Constants_
 #define __UseSingleThreadMainLoop__
+//To diagnose issues we can disable keyboard integration
+//#define __DisableKeyboardMouse_CB__
 ///////////////////
 // Useful Constants
 const double FRAMES_PER_SEC = 30.0;
@@ -1297,7 +1301,160 @@ namespace GG_Framework
 			public:
 				std::map<int, std::string> keyStringMap;
 				std::map<std::string, int> stringKeyMap;
-				KeyStringMaps();
+				KeyStringMaps()
+				{
+					keyStringMap[osgGA::GUIEventAdapter::LEFT_MOUSE_BUTTON] = "MOUSE_LEFT";
+					keyStringMap[osgGA::GUIEventAdapter::MIDDLE_MOUSE_BUTTON] = "MOUSE_MIDDLE";
+					keyStringMap[osgGA::GUIEventAdapter::RIGHT_MOUSE_BUTTON] = "MOUSE_RIGHT";
+
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Space] = "SPACE";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_BackSpace] = "BACKSPACE";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Tab] = "TAB";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Linefeed] = "LINEFEED";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Clear] = "CLEAR";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Return] = "ENTER";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Pause] = "PAUSE";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Scroll_Lock] = "SCROLL_LOCK";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Sys_Req] = "SYS_REQ";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Escape] = "ESCAPE";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Delete] = "DELETE";
+
+
+					// Cursor control & motion
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Home] = "HOME";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Left] = "LEFT";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Up] = "UP";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Right] = "RIGHT";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Down] = "DOWN";
+					// keyStringMap[osgGA::GUIEventAdapter::KEY_Prior]     = "PRIOR"; duplicate of "PAGE_UP"
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Page_Up] = "PAGE_UP";
+					// keyStringMap[osgGA::GUIEventAdapter::KEY_Next]      = "NEXT"; duplicate of "PAGE_DOWN"
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Page_Down] = "PAGE_DOWN";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_End] = "END";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Begin] = "BEGIN";
+
+					// Misc Functions
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Select] = "SELECT";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Print] = "PRINT";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Execute] = "EXECUTE";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Insert] = "INSERT";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Undo] = "UNDO";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Redo] = "REDO";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Menu] = "MENU";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Find] = "FIND";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Cancel] = "CANCEL";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Help] = "HELP";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Break] = "BREAK";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Mode_switch] = "MODE_SWITCH";
+					// keyStringMap[osgGA::GUIEventAdapter::KEY_Script_switch] = "SCRIPT_SWITCH"; duplicate of "MODE_SWITCH"
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Num_Lock] = "NUM_LOCK";
+
+					// Keypad Functions & keypad numbers
+					keyStringMap[osgGA::GUIEventAdapter::KEY_KP_Space] = "KP_SPACE";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_KP_Tab] = "KP_TAB";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_KP_Enter] = "KP_ENTER";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_KP_F1] = "KP_F1";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_KP_F2] = "KP_F2";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_KP_F3] = "KP_F3";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_KP_F4] = "KP_F4";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_KP_Home] = "KP_HOME";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_KP_Left] = "KP_LEFT";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_KP_Up] = "KP_UP";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_KP_Right] = "KP_RIGHT";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_KP_Down] = "KP_DOWN";
+					// keyStringMap[osgGA::GUIEventAdapter::KEY_KP_Prior]     = "KP_PRIOR"; duplicate of "KP_PAGE_UP"
+					keyStringMap[osgGA::GUIEventAdapter::KEY_KP_Page_Up] = "KP_PAGE_UP";
+					// keyStringMap[osgGA::GUIEventAdapter::KEY_KP_Next]      = "KP_NEXT"; duplicate of "KP_PAGE_DOWN"
+					keyStringMap[osgGA::GUIEventAdapter::KEY_KP_Page_Down] = "KP_PAGE_DOWN";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_KP_End] = "KP_END";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_KP_Begin] = "KP_BEGIN";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_KP_Insert] = "KP_INSERT";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_KP_Delete] = "KP_DELETE";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_KP_Equal] = "KP_EQUAL";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_KP_Multiply] = "KP_MULTIPLY";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_KP_Add] = "KP_ADD";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_KP_Separator] = "KP_SEPERATOR";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_KP_Subtract] = "KP_SUBTRACT";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_KP_Decimal] = "KP_DECIMAL";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_KP_Divide] = "KP_DIVIDE";
+
+					keyStringMap[osgGA::GUIEventAdapter::KEY_KP_0] = "KP_0";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_KP_1] = "KP_1";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_KP_2] = "KP_2";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_KP_3] = "KP_3";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_KP_4] = "KP_4";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_KP_5] = "KP_5";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_KP_6] = "KP_6";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_KP_7] = "KP_7";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_KP_8] = "KP_8";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_KP_9] = "KP_9";
+
+					// Auxiliary Functions
+					keyStringMap[osgGA::GUIEventAdapter::KEY_F1] = "F1";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_F2] = "F2";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_F3] = "F3";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_F4] = "F4";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_F5] = "F5";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_F6] = "F6";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_F7] = "F7";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_F8] = "F8";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_F9] = "F9";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_F10] = "F10";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_F11] = "F11";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_F12] = "F12";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_F13] = "F13";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_F14] = "F14";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_F15] = "F15";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_F16] = "F16";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_F17] = "F17";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_F18] = "F18";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_F19] = "F19";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_F20] = "F20";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_F21] = "F21";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_F22] = "F22";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_F23] = "F23";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_F24] = "F24";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_F25] = "F25";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_F26] = "F26";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_F27] = "F27";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_F28] = "F28";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_F29] = "F29";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_F30] = "F30";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_F31] = "F31";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_F32] = "F32";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_F33] = "F33";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_F34] = "F34";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_F35] = "F35";
+
+					// Modifiers
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Shift_L] = "SHIFT_L";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Shift_R] = "SHIFT_R";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Control_L] = "CTRL_L";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Control_R] = "CTRL_R";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Caps_Lock] = "CAPS_LOCK";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Shift_Lock] = "SHIFT_LOCK";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Meta_L] = "META_L";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Meta_R] = "META_R";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Alt_L] = "ALT_L";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Alt_R] = "ALT_R";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Super_L] = "SUPER_L";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Super_R] = "SUPER_R";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Hyper_L] = "HYPER_L";
+					keyStringMap[osgGA::GUIEventAdapter::KEY_Hyper_R] = "HYPER_R";
+
+					// ascii
+					std::string ascii = "";
+					for (char c = ' '; c <= '~'; c++)
+					{
+						ascii = c;
+						keyStringMap[c] = ascii.c_str();
+					}
+
+					std::map<int, std::string>::iterator keyStrMapItr;
+					for (keyStrMapItr = keyStringMap.begin(); keyStrMapItr != keyStringMap.end(); keyStrMapItr++)
+						stringKeyMap[(*keyStrMapItr).second] = (*keyStrMapItr).first;
+
+				}
 			};
 			static KeyStringMaps KEY_STRING_MAPS;
 
@@ -1309,12 +1466,58 @@ namespace GG_Framework
 					return "";
 			}
 
-			bool isShiftChar(char c); // returns true if the character requires a shift
-			char unShiftChar(char c); // returns the unshifted version of a shift character
-
+			bool isShiftChar(char c)
+			{
+				// returns true if the character requires a shift
+				return
+					(
+					(c >= 'A'  && c <= 'Z') || c == '<' || c == '>' ||
+						c == '?' || c == ':' || c == '\"' || c == '{' ||
+						c == '}' || c == '|' || c == '+' || c == '_' ||
+						c == '(' || c == ')' || c == '*' || c == '&' ||
+						c == '^' || c == '%' || c == '$' || c == '#' ||
+						c == '@' || c == '!' || c == '~'
+						);
+			}
+			char unShiftChar(char c)
+			{
+				// returns the unshifted version of a shift character
+				if (c >= 'A' && c <= 'Z')
+					return (c + 32);
+				else
+				{
+					switch (c)
+					{
+					case '<': return ',';
+					case '>': return '.';
+					case '?': return '/';
+					case ':': return ';';
+					case '\"': return '\'';
+					case '{': return '[';
+					case '}': return ']';
+					case '|': return '\\';
+					case '+': return '=';
+					case '_': return '-';
+					case ')': return '0';
+					case '(': return '9';
+					case '*': return '8';
+					case '&': return '7';
+					case '^': return '6';
+					case '%': return '5';
+					case '$': return '4';
+					case '#': return '3';
+					case '@': return '2';
+					case '!': return '1';
+					case '~': return '`';
+					}
+				}
+				return c;
+			}
 			bool operator >  (const Key& rhs) const { return ((key == rhs.key) ? (flags > rhs.flags) : (key > rhs.key)); }
 			bool operator == (const Key& rhs) const { return (key == rhs.key) && (flags == rhs.flags); }
 		};
+
+		Key::KeyStringMaps Key::KEY_STRING_MAPS;
 
 		struct FRAMEWORK_BASE_API UserInputEvents
 		{
@@ -1339,8 +1542,14 @@ namespace GG_Framework
 
 			Event2<EventMap*, bool> KB_Controlled;
 			bool IsKB_Controlled() { return m_KB_Controlled; }
-			void SetKB_Controlled(bool controlled);
-
+			void SetKB_Controlled(bool controlled)
+			{
+				if (controlled != m_KB_Controlled)
+				{
+					m_KB_Controlled = controlled;
+					KB_Controlled.Fire(this, m_KB_Controlled);
+				}
+			}
 			// These are the events that get fired by the KBMCB when we are connected
 			UserInputEvents KBM_Events;
 
@@ -2240,8 +2449,485 @@ namespace GG_Framework
 }
 #pragma endregion
 //#include "ConfigurationManager.h"
+#pragma region _disabled ConfigurationManager_
+//Disable to avoid needing the XML parser
+#if 0
+namespace GG_Framework
+{
+	namespace UI
+	{
+
+		class ConfigLoadSaveInterface
+		{
+		public:
+			// TODO Rename to load / save something.
+			virtual void BindToPrefs(const XMLNode &userPrefsNode) = 0;
+			virtual void WriteSettings(XMLNode &node, std::vector<XMLNode> &vectorXMLNodes) = 0;
+			//This will associate each interface to a group within XML file 
+			virtual const char *GetConfigGroupName() { return "Miscellaneous"; }
+		};
+
+		class ConfigurationManager
+		{
+		private:
+			std::vector<ConfigLoadSaveInterface *> m_ConfigLoadSaveInterface;
+			XMLNode m_userPrefsNode;
+			bool m_useUserPrefs;
+		public:
+			ConfigurationManager(bool useUserPrefs);
+			void AddConfigLoadSaveInterface(ConfigLoadSaveInterface *node);
+			/// This is called by client once all interface children have been populated. Typically this is only called once at startup.
+			void UpdateSettings_Load();
+			void UpdateSettings_Save();
+
+			/// Called by AddKeyBinding where it may override the key assignment by user preferences
+			/// \return true if a key binding was found implied to not bind the default key for this event
+			bool InterceptDefaultKey(const std::string &eventName, const char KeyType[]);
+
+			//Some helper functions to easily obtain attributes
+			static bool GetAttributeBool(XMLNode &eventNode, const char Name[], bool default_value);
+			static double GetAttributeDouble(XMLNode &eventNode, const char Name[], double default_value);
+			static const char *GetAttributeString(XMLNode &eventNode, const char Name[], const char default_value[]);
+		};
+		#pragma region _disabled AudioVolumeControls_PlusBLS_
+		#if 0
+		class AudioVolumeControls_PlusBLS : public Audio::VolumeControls,
+			public ConfigLoadSaveInterface
+		{
+		public:
+			AudioVolumeControls_PlusBLS(Event0& VolumeSelect, Event0& VolumeUp, Event0& VolumeDown);
+		protected:
+			virtual void BindToPrefs(const XMLNode &userPrefsNode);
+			virtual void WriteSettings(XMLNode &node, std::vector<XMLNode> &vectorXMLNodes);
+			virtual const char *GetConfigGroupName() { return "AudioSettings"; }
+
+		private:
+			const char *GetModeName(VolumeModes mode);
+			VolumeModes GetModeFromName(const char *mode);
+		};
+		#endif
+		#pragma endregion
+	}
+}
+#endif
+#pragma endregion
 //#include "JoystickBinder.h"
 //#include "KeyboardMouse_CB.h"
+#pragma region _KeyboardMouse_CB_
+#ifndef __DisableKeyboardMouse_CB__
+namespace GG_Framework
+{
+	namespace UI
+	{
+		#define DEBUG_MOUSE_MOTION
+		const double DOUBLE_CLICK_TIME = 0.25;
+
+		class FRAMEWORK_UI_API KeyboardMouse_CB : public osgGA::GUIEventHandler
+												  //public ConfigLoadSaveInterface
+		{
+		private:
+			#pragma region _members_
+			// Keep track of the buttons already pressed
+			std::set<int> _pressedKeys;
+			int m_flags;
+			GG_Framework::UI::EventMap* m_controlledEventMap;
+			//GG_Framework::Base::IJoystick &m_Joystick;
+			int m_lastReleasedKey;
+			double m_lastReleaseTime;
+			double m_eventTime;
+			GG_Framework::Base::Key* m_dblPress;
+			//ConfigurationManager * const m_Config;
+			#pragma region _disabled multithread_
+			#ifndef __UseSingleThreadMainLoop__
+			// When using multi-threading, keep the messages in a queue
+			void AddToQueue(const osgGA::GUIEventAdapter& ea);
+			std::queue<osg::ref_ptr<osgGA::GUIEventAdapter> *> m_msgQueue;
+			OpenThreads::Mutex m_queueMutex;
+			#endif
+			#pragma endregion
+
+			std::map<GG_Framework::Base::Key, std::vector<std::string>*, std::greater<GG_Framework::Base::Key> > m_KeyBindings;
+			std::map<std::string, std::vector<GG_Framework::Base::Key>*, std::greater<std::string> > m_AssignedKeys;
+			std::map<GG_Framework::Base::Key, std::vector<std::string>*, std::greater<GG_Framework::Base::Key> > m_KeyBindings_OnOff;
+			std::map<std::string, std::vector<GG_Framework::Base::Key>*, std::greater<std::string> > m_AssignedKeys_OnOff;
+			#pragma endregion
+			bool innerHandle(const osgGA::GUIEventAdapter& ea, bool fromEA)
+			{
+				// Have an inner handle that does the work based on where the message is coming from
+				switch (ea.getEventType())
+				{
+				#ifndef __UseSingleThreadMainLoop__
+				if (fromEA)
+					AddToQueue(ea);
+				else
+				#endif
+
+					// Keys
+				case(osgGA::GUIEventAdapter::KEYUP):
+					KeyPressRelease(ea.getKey(), false);
+					return true;
+				case (osgGA::GUIEventAdapter::KEYDOWN):
+					KeyPressRelease(ea.getKey(), true);
+					return true;
+
+					// Mouse
+				case(osgGA::GUIEventAdapter::PUSH):
+					buttonPress(ea.getXnormalized(), ea.getYnormalized(), ea.getButton());
+					return true;
+				case(osgGA::GUIEventAdapter::MOVE):
+				case(osgGA::GUIEventAdapter::DRAG):
+					mouseMotion(ea.getXnormalized(), ea.getYnormalized());
+					return false; // Keep this on the windows QUEUE so it can be passed along
+				case(osgGA::GUIEventAdapter::RELEASE):
+					buttonRelease(ea.getXnormalized(), ea.getYnormalized(), ea.getButton());
+					return true;
+				case(osgGA::GUIEventAdapter::SCROLL):
+					mouseScroll((int)ea.getScrollingMotion());
+					return true;
+
+				default:
+					return false;
+				}
+			}
+			void KeyPressRelease(int key, bool press)
+			{
+				using namespace GG_Framework::UI;
+				using namespace GG_Framework::Base;
+
+				if (press == !_pressedKeys.count(key))
+				{
+					if ((key == osgGA::GUIEventAdapter::KEY_Alt_L) || (key == osgGA::GUIEventAdapter::KEY_Alt_R))
+						m_flags += press ? osgGA::GUIEventAdapter::MODKEY_ALT : -osgGA::GUIEventAdapter::MODKEY_ALT;
+					if ((key == osgGA::GUIEventAdapter::KEY_Control_L) || (key == osgGA::GUIEventAdapter::KEY_Control_R))
+						m_flags += press ? osgGA::GUIEventAdapter::MODKEY_CTRL : -osgGA::GUIEventAdapter::MODKEY_CTRL;
+					if ((key == osgGA::GUIEventAdapter::KEY_Shift_L) || (key == osgGA::GUIEventAdapter::KEY_Shift_R))
+						m_flags += press ? osgGA::GUIEventAdapter::MODKEY_SHIFT : -osgGA::GUIEventAdapter::MODKEY_SHIFT;
+
+					if (press)
+					{
+						_pressedKeys.insert(key);
+						if ((key == m_lastReleasedKey) && ((m_eventTime - m_lastReleaseTime) < DOUBLE_CLICK_TIME))
+						{
+							if (m_dblPress)
+							{	// This should never happen, but in case something weird happens, we want to make sure we got the release
+								KeyPressRelease(*m_dblPress, false);
+								delete m_dblPress;
+							}
+							m_dblPress = new Key(key, m_flags + Key::DBL);
+
+							//See if there are any event requests using double click for this key... if not use regular click (allows "nudging" on other keys)
+							//  [4/5/2009 JamesK]
+							std::vector<std::string>* DnUpEvents = GetBindingsForKey(*m_dblPress, true);
+							#if 0
+							if (DnUpEvents)
+								DOUT3("%d", DnUpEvents->size());
+							else
+								DOUT3("NULL");
+							#endif
+							if (!DnUpEvents)
+							{
+								delete m_dblPress;
+								m_dblPress = NULL;
+								goto UseRegularClick;
+							}
+
+							KeyPressRelease(*m_dblPress, true);
+							return;
+						}
+					}
+					else
+					{
+						_pressedKeys.erase(key);
+						m_lastReleaseTime = m_eventTime;
+						if ((key == m_lastReleasedKey) && m_dblPress)
+						{
+							KeyPressRelease(*m_dblPress, false);
+							delete m_dblPress;
+							m_dblPress = NULL;
+							return;
+						}
+						else
+							m_lastReleasedKey = key;
+					}
+				UseRegularClick:
+					// Not a double click, just a regular click
+					KeyPressRelease(Key(key, m_flags), press);
+				}
+
+			}
+			void KeyPressRelease(GG_Framework::Base::Key key, bool press)
+			{
+				// Find all of the bound events
+				std::vector<std::string>* DnEvents = press ? GetBindingsForKey(key, false) : NULL;
+				std::vector<std::string>* DnUpEvents = GetBindingsForKey(key, true);
+
+				// Single press checks happen on the PRESS
+				if (press)
+				{
+					GlobalEventMap.KBM_Events.KBCB_KeyDn.Fire(key);
+					if (DnEvents)
+					{
+						std::vector<std::string>::iterator pos;
+						for (pos = DnEvents->begin(); pos != DnEvents->end(); ++pos)
+							GlobalEventMap.Event_Map[*pos].Fire();
+					}
+			}
+
+				GlobalEventMap.KBM_Events.KBCB_KeyDnUp.Fire(key, press);
+				if (DnUpEvents)
+				{
+					std::vector<std::string>::iterator pos;
+					for (pos = DnUpEvents->begin(); pos != DnUpEvents->end(); ++pos)
+						GlobalEventMap.EventOnOff_Map[*pos].Fire(press);
+				}
+
+				if (m_controlledEventMap)
+				{
+					if (press)
+					{
+						m_controlledEventMap->KBM_Events.KBCB_KeyDn.Fire(key);
+						if (DnEvents)
+						{
+							std::vector<std::string>::iterator pos;
+							for (pos = DnEvents->begin(); pos != DnEvents->end(); ++pos)
+								m_controlledEventMap->Event_Map[*pos].Fire();
+						}
+					}
+					m_controlledEventMap->KBM_Events.KBCB_KeyDnUp.Fire(key, press);
+					if (DnUpEvents)
+					{
+						std::vector<std::string>::iterator pos;
+						for (pos = DnUpEvents->begin(); pos != DnUpEvents->end(); ++pos)
+							m_controlledEventMap->EventOnOff_Map[*pos].Fire(press);
+					}
+				}
+			}
+
+		#pragma region _disabled From config load save interface_
+		#if 0
+		protected: // From config load save interface.
+			virtual void BindToPrefs(const XMLNode &userPrefsNode);
+			/// Only called when writing other settings
+			virtual void WriteSettings(XMLNode &node, std::vector<XMLNode> &vectorXMLNodes);
+			virtual const char *GetConfigGroupName() { return "UserInput"; }
+		#endif
+		#pragma endregion
+		public:
+			#pragma region _members_
+			// Used internally to ignore all mouse motions temporarily.  For button presses, sends 0,0 for position
+			bool IgnoreMouseMotion;
+			// These events are ALWAYS fired
+			GG_Framework::UI::EventMap GlobalEventMap;
+			Event3<KeyboardMouse_CB*, GG_Framework::UI::EventMap*, GG_Framework::UI::EventMap*> EventMapChanged; //!< <this, old, new> fired before change
+			#pragma endregion
+
+			KeyboardMouse_CB() :
+				m_controlledEventMap(NULL), m_flags(0),
+				//m_Joystick(Base::GetDirectInputJoystick()), 
+				m_lastReleasedKey(0),
+				m_lastReleaseTime(0.0), m_dblPress(NULL), m_eventTime(0.0),
+				IgnoreMouseMotion(true)
+				//m_Config(config)
+			{
+				//disabled--> KeyboardMouse_CB(ConfigurationManager *config);
+				GlobalEventMap.SetKB_Controlled(true);
+			}
+			~KeyboardMouse_CB()
+			{
+				delete m_dblPress;
+				#ifndef __UseSingleThreadMainLoop__
+				GG_Framework::Base::RefMutexWrapper rmw(m_queueMutex);
+				while (!m_msgQueue.empty())
+				{
+					delete (m_msgQueue.front());
+					m_msgQueue.pop();
+				}
+				#endif
+			}
+
+			virtual void mouseMotion(float mx, float my)
+			{
+				if (IgnoreMouseMotion)
+					return;
+
+				DEBUG_MOUSE_MOTION("KeyboardMouse_CB::mouseMotion( %f, %f )\n", mx, my);
+				GlobalEventMap.KBM_Events.MouseMove.Fire(mx, my);
+				if (m_controlledEventMap)
+					m_controlledEventMap->KBM_Events.MouseMove.Fire(mx, my);
+			}
+			virtual void passiveMouseMotion(float mx, float my) 
+			{ 
+				// For now, any mouse motion will call the same callbacks, up to event map listeners to keep the difference
+				mouseMotion(mx, my);
+			}
+			virtual void buttonPress(float mx, float my, unsigned int button)
+			{
+				if (IgnoreMouseMotion)
+					mx = my = 0.0f;
+
+				GlobalEventMap.KBM_Events.MouseBtnPress.Fire(mx, my, button);
+				if (m_controlledEventMap)
+					m_controlledEventMap->KBM_Events.MouseBtnPress.Fire(mx, my, button);
+				KeyPressRelease(button, true);
+			}
+			virtual void buttonRelease(float mx, float my, unsigned int button)
+			{
+				if (IgnoreMouseMotion)
+					mx = my = 0.0f;
+
+				GlobalEventMap.KBM_Events.MouseBtnRelease.Fire(mx, my, button);
+				if (m_controlledEventMap)
+					m_controlledEventMap->KBM_Events.MouseBtnRelease.Fire(mx, my, button);
+				KeyPressRelease(button, false);
+			}
+			virtual void mouseScroll(int sm)
+			{
+				GlobalEventMap.KBM_Events.MouseScroll.Fire((int)sm);
+				if (m_controlledEventMap)
+					m_controlledEventMap->KBM_Events.MouseScroll.Fire((int)sm);
+			}
+			virtual bool handle(const osgGA::GUIEventAdapter& ea, osgGA::GUIActionAdapter& aa)
+			{
+				return innerHandle(ea, true);
+			}
+
+			#pragma region _disabled ProcessThreadedEvents_
+			#ifndef __UseSingleThreadMainLoop__
+			void ProcessThreadedEvents();
+			#endif
+			#pragma endregion
+
+			// Work with key bindings
+			std::vector<GG_Framework::Base::Key>* GetBindingsForEventName(std::string eventName, bool useOnOff)
+			{
+				return useOnOff ? m_AssignedKeys_OnOff[eventName] : m_AssignedKeys[eventName];
+			}
+			std::vector<std::string>* GetBindingsForKey(GG_Framework::Base::Key key, bool useOnOff)
+			{
+				return useOnOff ? m_KeyBindings_OnOff[key] : m_KeyBindings[key];
+			}
+
+			bool AddKeyBinding(GG_Framework::Base::Key key, const std::string eventName, bool useOnOff, bool ForceBindThisKey = false)
+			{
+				using namespace GG_Framework::UI;
+				using namespace GG_Framework::Base;
+
+				/// \param key which key to use that *may* be overwritten by InterceptKey
+				/// \param ForceBindThisKey overrides the intercept this is used mostly for loading the preferences
+				/// \note I may break this up into 2 methods, but it may be useful for clients to force bind (e.g. test purposes)
+
+				#pragma region _disabled config_
+				#if 0
+				if (!ForceBindThisKey)
+				{
+					//See if there is a key assignment for this already
+					if (m_Config->InterceptDefaultKey(eventName, "keyboard"))
+						return false;		//All intercepted keys will be "force bound" so we can exit once that has happened
+				}
+				#endif
+				#pragma endregion
+				std::map<Key, std::vector<std::string>*, std::greater<Key> >& keyBindings(useOnOff ? m_KeyBindings_OnOff : m_KeyBindings);
+				std::vector<std::string>* eventNames = keyBindings[key];
+				if (!eventNames)
+				{
+					eventNames = new std::vector<std::string>;
+					eventNames->push_back(eventName);
+					keyBindings[key] = eventNames;
+				}
+				else
+				{
+					bool exists = false;
+					std::vector<std::string>::iterator pos;
+					for (pos = eventNames->begin(); pos != eventNames->end() && !exists; ++pos)
+						exists = (eventName == *pos);
+					if (!exists)
+						eventNames->push_back(eventName);
+				}
+
+				std::map<std::string, std::vector<Key>*, std::greater<std::string> >& assignedKeys(useOnOff ? m_AssignedKeys_OnOff : m_AssignedKeys);
+				std::vector<Key>* keys = assignedKeys[eventName];
+				if (!keys)
+				{
+					keys = new std::vector<Key>;
+					keys->push_back(key);
+					assignedKeys[eventName] = keys;
+				}
+				else
+				{
+					bool exists = false;
+					std::vector<Key>::iterator pos;
+					//Check for duplicate entries of the same key (This may be a typical case)
+					for (pos = keys->begin(); pos != keys->end() && !exists; ++pos)
+						exists = (key == *pos);
+					if (!exists)
+						keys->push_back(key);
+				}
+				return true;
+			}
+			void RemoveKeyBinding(GG_Framework::Base::Key key, std::string eventName, bool useOnOff)
+			{
+				using namespace GG_Framework::UI;
+				using namespace GG_Framework::Base;
+
+				std::map<Key, std::vector<std::string>*, std::greater<Key> >& keyBindings(useOnOff ? m_KeyBindings_OnOff : m_KeyBindings);
+				std::vector<std::string>* eventNames = keyBindings[key];
+				if (eventNames)
+				{
+					std::vector<std::string>::iterator pos;
+					for (pos = eventNames->begin(); pos != eventNames->end(); ++pos)
+					{
+						if (eventName == *pos)
+						{
+							eventNames->erase(pos);
+							break;	// There should be only one if any
+						}
+					}
+				}
+
+				std::map<std::string, std::vector<Key>*, std::greater<std::string> >& assignedKeys(useOnOff ? m_AssignedKeys_OnOff : m_AssignedKeys);
+				std::vector<Key>* keys = assignedKeys[eventName];
+				if (keys)
+				{
+					std::vector<Key>::iterator pos;
+					for (pos = keys->begin(); pos != keys->end(); ++pos)
+					{
+						if (key == *pos)
+						{
+							keys->erase(pos);
+							break;	// There should be only one if any
+						}
+					}
+				}
+			}
+
+			void AddKeyBindingR(bool useOnOff, std::string eventName, GG_Framework::Base::Key key)
+			{
+				/// This version of the function is just for easy porting from the old KB technique
+				AddKeyBinding(key, eventName, useOnOff);
+			}
+			GG_Framework::UI::EventMap* GetControlledEventMap() 
+			{ 
+				// There can be only one of these
+				return m_controlledEventMap;
+			}
+			void SetControlledEventMap(GG_Framework::UI::EventMap* em)
+			{
+				if (m_controlledEventMap != em)
+				{
+					EventMapChanged.Fire(this, m_controlledEventMap, em);
+					if (m_controlledEventMap)
+						m_controlledEventMap->SetKB_Controlled(false);
+					m_controlledEventMap = em;
+					if (m_controlledEventMap)
+						m_controlledEventMap->SetKB_Controlled(true);
+				}
+			}
+			void IncrementTime(double dTick_s) { m_eventTime += dTick_s; }
+		};
+	}
+}
+#endif
+#pragma endregion
 //#include "MainWindow.h"
 #pragma region _Main Window_
 
@@ -2275,15 +2961,19 @@ namespace GG_Framework
 			};
 			#pragma endregion
 		private:
-			#pragma region _disabled_
+			#pragma region _members_
 			// Attach to events with this, also change where the callbacks go
-			//osg::ref_ptr<KeyboardMouse_CB> refKBM;
-			//KeyboardMouse_CB *m_Keyboard_Mouse;
+			#ifndef __DisableKeyboardMouse_CB__
+			osg::ref_ptr<KeyboardMouse_CB> refKBM;
+			KeyboardMouse_CB *m_Keyboard_Mouse;
+			#endif
+			#pragma region _disabled_
 			//JoyStick_Binder *m_Joystick;					// Scoped pointer.
 			//AudioVolumeControls_PlusBLS *m_VolumeControls;	// Scoped pointer.
 
 			//TODO see if we need this
 			//ConfigurationManager m_ConfigurationManager;
+			#pragma endregion
 			#pragma endregion
 		protected:
 			#pragma region _members_
@@ -2395,15 +3085,8 @@ namespace GG_Framework
 			{
 				if (m_camGroup->done())
 					return false;
-				//This is how it's done for ViewerBase, but may be redundant (need to check)
-				if (m_camGroup->checkNeedToDoFrame())
-					m_camGroup->frame(currTime_s);
-				//else
-				//{
-				//	static int counter = 0;
-				//	printf("Test %X\n",counter++);
-				//}
-				return true;
+				m_camGroup->frame(currTime_s);
+					return true;
 			}
 			void UpdateSound(double dTick_s)
 			{
@@ -2468,8 +3151,12 @@ namespace GG_Framework
 
 				// Config Manager
 				//m_Joystick = new JoyStick_Binder(&m_ConfigurationManager);
+				#ifndef __DisableKeyboardMouse_CB__
 				//refKBM = new KeyboardMouse_CB(&m_ConfigurationManager);
-				//m_Keyboard_Mouse = refKBM.get();
+				refKBM = new KeyboardMouse_CB;  //no configuration manager
+				m_Keyboard_Mouse = refKBM.get();
+
+				//Leaving these disabled as we do not need sound
 
 				//TODO fix this to whatever keys and operations are intuitive
 				//GetKeyboard_Mouse().AddKeyBindingR(false, "VolumeDown", 'v');
@@ -2480,6 +3167,7 @@ namespace GG_Framework
 				//	GetKeyboard_Mouse().GlobalEventMap.Event_Map["VolumeUp"],
 				//	GetKeyboard_Mouse().GlobalEventMap.Event_Map["VolumeDown"]
 				//);
+				#endif
 
 				// Populate list
 				//m_ConfigurationManager.AddConfigLoadSaveInterface(m_Joystick);
@@ -2497,7 +3185,7 @@ namespace GG_Framework
 				//m_Joystick = NULL;
 				//delete m_VolumeControls;
 				//m_VolumeControls = NULL;
-				//Note refKBM is a osg ref pointer and does not require a delete call it will unreference itself automatically
+				//Note refKBM is a osg ref pointer and does not require a delete call it will dereference itself automatically
 			}
 
 			void SetWindowRectangle(int x, int y, int w, int h, bool resize)
@@ -2530,9 +3218,10 @@ namespace GG_Framework
 				if (!wsi)
 					return;
 
-				//bool ignoringMouse = m_Keyboard_Mouse->IgnoreMouseMotion;
-				//m_Keyboard_Mouse->IgnoreMouseMotion = true;
-
+				#ifndef __DisableKeyboardMouse_CB__
+				bool ignoringMouse = m_Keyboard_Mouse->IgnoreMouseMotion;
+				m_Keyboard_Mouse->IgnoreMouseMotion = true;
+				#endif
 				m_isFullScreen = fs;
 
 				if (m_isFullScreen)
@@ -2586,8 +3275,10 @@ namespace GG_Framework
 				// Draw a frame
 				m_camGroup->frame(0.0);
 
+				#ifndef __DisableKeyboardMouse_CB__
 				// Start listening to the mouse gain if we were before
-				//m_Keyboard_Mouse->IgnoreMouseMotion = ignoringMouse;
+				m_Keyboard_Mouse->IgnoreMouseMotion = ignoringMouse;
+				#endif
 			}
 			bool IsFullScreen()
 			{
@@ -2648,16 +3339,19 @@ namespace GG_Framework
 			}
 			virtual bool Update(double currTime_s, double dTick_s)
 			{
-				//m_Keyboard_Mouse->IncrementTime(dTick_s);
+				#ifndef __DisableKeyboardMouse_CB__
+				m_Keyboard_Mouse->IncrementTime(dTick_s);
+				#endif
 				//m_Joystick->UpdateJoyStick(dTick_s);	//! < Update the Joystick too
 
 				m_mainCam.Update(dTick_s);			//! < Then the Camera Matrix
 				UpdateSound(dTick_s);				//! < Then the sound that uses the camera matrix
 
+				#ifndef __DisableKeyboardMouse_CB__
 				// Turn the mouse back on with the first pass through
-				//if (m_Keyboard_Mouse->IgnoreMouseMotion)
-				//	EnableMouse();	// Enable the mouse the first time, do not mess with framerate
-
+				if (m_Keyboard_Mouse->IgnoreMouseMotion)
+					EnableMouse();	// Enable the mouse the first time, do not mess with framerate
+				#endif
 				#ifndef __UseSingleThreadMainLoop__
 				// The keyboard is now updated in the frame() call, but if running multi-threaded, we need to process all the
 				// events we already got from the OSG thread.
@@ -2679,12 +3373,17 @@ namespace GG_Framework
 			void UseCursor(bool flag)
 			{
 				// Work with the Cursor, we will eventually be able to manipulate the cursor itself
-				//stripped out
+				osgViewer::GraphicsWindow *window = GetGraphicsWindow();
+				if (window)
+					window->useCursor(flag);
 			}
 			void EnableMouse()
 			{
 				// Call this just as we are starting the main loop to enable the camera and get one more frame in
-				// stripped out
+				#ifndef __DisableKeyboardMouse_CB__
+				PositionPointer(0.0f, 0.0f);
+				m_Keyboard_Mouse->IgnoreMouseMotion = false;
+				#endif
 			}
 			void PositionPointer(float x, float y)
 			{
@@ -2722,9 +3421,11 @@ namespace GG_Framework
 				return true;
 			}
 			ThreadSafeViewer* GetViewer() { return m_camGroup.get(); }
+			#ifndef __DisableKeyboardMouse_CB__
+			KeyboardMouse_CB &GetKeyboard_Mouse() const { return *m_Keyboard_Mouse; }
+			#endif
 			#pragma region _disabled_
 			//Note: we strip out input
-			//KeyboardMouse_CB &GetKeyboard_Mouse() const { return *m_Keyboard_Mouse; }
 			//JoyStick_Binder &GetJoystick() const { return *m_Joystick; }
 			#pragma endregion
 		};
@@ -2834,9 +3535,10 @@ namespace GG_Framework
 			{
 				ASSERT(!s_mainWindow);
 				s_mainWindow = this;
-
-				//GetKeyboard_Mouse().AddKeyBinding(osgGA::GUIEventAdapter::KEY_Escape, "ESC", false);
-				//GetKeyboard_Mouse().GlobalEventMap.Event_Map["ESC"].Subscribe(ehl, *this, &MainWindow::OnEscape);
+				#ifndef __DisableKeyboardMouse_CB__
+				GetKeyboard_Mouse().AddKeyBinding(osgGA::GUIEventAdapter::KEY_Escape, "ESC", false);
+				GetKeyboard_Mouse().GlobalEventMap.Event_Map["ESC"].Subscribe(ehl, *this, &MainWindow::OnEscape);
+				#endif
 			}
 			virtual bool Update(double currTime_s, double dTick_s)
 			{
@@ -3997,21 +4699,19 @@ public:
 		DebugOut_PDCB* dpdcb = new DebugOut_PDCB(mainWin);
 		mainWin.GetMainCamera()->addPostDrawCallback(*dpdcb);
 		#pragma region _keyboard controls for viewer_
-		//mainWin.GetKeyboard_Mouse().AddKeyBindingR(false, "ShowFR", osgGA::GUIEventAdapter::KEY_F2);
-		//mainWin.GetKeyboard_Mouse().GlobalEventMap.Event_Map["ShowFR"].Subscribe(
-		//	fpdcb->ehl, (Text_PDCB&)(*fpdcb), &Text_PDCB::ToggleEnabled);
-		//mainWin.GetKeyboard_Mouse().AddKeyBindingR(false, "ShowDebug", osgGA::GUIEventAdapter::KEY_F9);
-		//mainWin.GetKeyboard_Mouse().GlobalEventMap.Event_Map["ShowDebug"].Subscribe(
-		//	dpdcb->ehl, (Text_PDCB&)(*dpdcb), &Text_PDCB::ToggleEnabled);
-
+		#ifndef __DisableKeyboardMouse_CB__
+		mainWin.GetKeyboard_Mouse().AddKeyBindingR(false, "ShowFR", osgGA::GUIEventAdapter::KEY_F2);
+		mainWin.GetKeyboard_Mouse().GlobalEventMap.Event_Map["ShowFR"].Subscribe(fpdcb->ehl, (Text_PDCB&)(*fpdcb), &Text_PDCB::ToggleEnabled);
+		mainWin.GetKeyboard_Mouse().AddKeyBindingR(false, "ShowDebug", osgGA::GUIEventAdapter::KEY_F9);
+		mainWin.GetKeyboard_Mouse().GlobalEventMap.Event_Map["ShowDebug"].Subscribe(dpdcb->ehl, (Text_PDCB&)(*dpdcb), &Text_PDCB::ToggleEnabled);
 		// Make the 'm' key record
 		//mainWin.GetKeyboard_Mouse().AddKeyBindingR(false, "RecordFrames", 'm');
 		//ScreenCaptureTool sct(mainWin, mainWin.GetKeyboard_Mouse().GlobalEventMap.Event_Map["RecordFrames"]);
 
 		// We can tie the events to Toggle fullscreen
-		//mainWin.GetKeyboard_Mouse().AddKeyBindingR(false, "ToggleFullScreen", osgGA::GUIEventAdapter::KEY_F3);
-		//mainWin.GetKeyboard_Mouse().GlobalEventMap.Event_Map["ToggleFullScreen"].Subscribe(mainWin.ehl, mainWin, &MainWindow::ToggleFullScreen);
-
+		mainWin.GetKeyboard_Mouse().AddKeyBindingR(false, "ToggleFullScreen", osgGA::GUIEventAdapter::KEY_F3);
+		mainWin.GetKeyboard_Mouse().GlobalEventMap.Event_Map["ToggleFullScreen"].Subscribe(mainWin.ehl, mainWin, &MainWindow::ToggleFullScreen);
+		#endif
 		// Set the scene and realize the camera at full size
 		//mainWin.GetMainCamera()->SetSceneNode(actorScene.GetScene(), 0.0f);
 		//mainWin.GetMainCamera()->SetSceneNode(createHUDText(), 0.0f);
@@ -4043,8 +4743,10 @@ public:
 		mainWin.SetFullScreen(false);
 		mainWin.SetWindowText("Robot Tester");
 
+		#ifndef __DisableKeyboardMouse_CB__
 		// Let all of the scene know we are starting
-		//mainWin.GetKeyboard_Mouse().GlobalEventMap.Event_Map["START"].Fire();
+		mainWin.GetKeyboard_Mouse().GlobalEventMap.Event_Map["START"].Fire();
+		#endif
 
 		// Have a frame stamp to run the non-Actor parts
 		osg::ref_ptr<osg::FrameStamp> frameStamp = new osg::FrameStamp;
@@ -4065,8 +4767,10 @@ public:
 		{
 			// We are going to use this single timer to fire against
 			OSG::OSG_Timer timer("OSGV Timer Log.csv");
-			//mainWin.GetKeyboard_Mouse().AddKeyBindingR(false, "ToggleFrameLog", osgGA::GUIEventAdapter::KEY_F7);
-			//timer.Logger.ListenForToggleEvent(mainWin.GetKeyboard_Mouse().GlobalEventMap.Event_Map["ToggleFrameLog"]);
+			#ifndef __DisableKeyboardMouse_CB__
+			mainWin.GetKeyboard_Mouse().AddKeyBindingR(false, "ToggleFrameLog", osgGA::GUIEventAdapter::KEY_F7);
+			timer.Logger.ListenForToggleEvent(mainWin.GetKeyboard_Mouse().GlobalEventMap.Event_Map["ToggleFrameLog"]);
+			#endif
 
 			// Connect the argParser to the camera, in case it wants to handle stats (I do not know that I like this here)
 			//argParser.AttatchCamera(&mainWin, &timer);
