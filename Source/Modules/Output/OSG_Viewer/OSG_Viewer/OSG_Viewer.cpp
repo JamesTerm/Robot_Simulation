@@ -2937,6 +2937,11 @@ namespace GG_Framework
 //Life is good with a simple single thread... no miss fired artifacts, and do not need to worry about critical sections
 #define THREADING_MODEL osgViewer::ViewerBase::SingleThreaded
 
+//A Temporary global kludge fix for the size until I get a proper fix
+size_t g_FullScreen_Index = 0;
+const double c_Scene_XRes[2] = { 1280,1920 };
+const double c_Scene_YRes[2] = { 1024,1080 };
+
 namespace GG_Framework
 {
 	namespace UI
@@ -3205,6 +3210,7 @@ namespace GG_Framework
 			}
 			void SetFullScreen(bool fs)
 			{
+				g_FullScreen_Index = (fs) ? 1 : 0; //<--- the only write
 				DEBUG_SCREEN_RESIZE("Window::SetFullScreen(%s) - was %s\n", fs ? "true" : "false", m_isFullScreen ? "true" : "false");
 				// No need to make changes
 				if (m_isFullScreen == fs)
@@ -4364,24 +4370,23 @@ const double Pi2 = M_PI * 2.0;
 const double PI_2 = 1.57079632679489661923;
 
 //TODO evaluate my window size instead of using these constants
-#if 0
-const double c_Scene_XRes_InPixels = 640.0;
-const double c_Scene_YRes_InPixels = 480.0;
-#endif
-#if 1
-const double c_Scene_XRes_InPixels = 1280.0;
-const double c_Scene_YRes_InPixels = 1024.0;
-#endif
-#if 0
-const double c_Scene_XRes_InPixels = 1680.0;
-const double c_Scene_YRes_InPixels = 1050.0;
-#endif
-#if 0
-const double c_Scene_XRes_InPixels = 1600.0;
-const double c_Scene_YRes_InPixels = 1200.0;
-#endif
-const double c_halfxres = c_Scene_XRes_InPixels / 2.0;
-const double c_halfyres = c_Scene_YRes_InPixels / 2.0;
+//const double c_Scene_XRes_InPixels = 640.0;
+//const double c_Scene_YRes_InPixels = 480.0;
+//Notable resolutions: 1280 x 1024 <---great for small window
+//1680x1050, 1920 x 1080, and 1600 x 1200
+//const double c_halfxres = Scene_XRes_InPixels() / 2.0;
+//const double c_halfyres = Scene_YRes_InPixels() / 2.0;
+
+__inline double Scene_XRes_InPixels()
+{
+	return c_Scene_XRes[g_FullScreen_Index];
+}
+__inline double Scene_YRes_InPixels()
+{
+	return c_Scene_YRes[g_FullScreen_Index];
+}
+#define c_halfxres (Scene_XRes_InPixels()*0.5);
+#define c_halfyres (Scene_YRes_InPixels()*0.5);
 
 //This is dynamic so that we can zoom in on the fly
 //double g_WorldScaleFactor=0.01; //This will give us about 128,000 x 102,400 meters resolution before wrap around
@@ -4443,8 +4448,8 @@ protected:
 				Position[0] += c_halfxres;
 				Position[1] += c_halfyres;
 				//Now to wrap around the resolution
-				Position[0] -= floor(Position[0] / c_Scene_XRes_InPixels)*c_Scene_XRes_InPixels;
-				Position[1] -= floor(Position[1] / c_Scene_YRes_InPixels)*c_Scene_YRes_InPixels;
+				Position[0] -= floor(Position[0] / Scene_XRes_InPixels())*Scene_XRes_InPixels();
+				Position[1] -= floor(Position[1] / Scene_YRes_InPixels())*Scene_YRes_InPixels();
 				//DOUT1 ("%f %f",Position[0],Position[1]);
 
 				osg::Vec3 pos(Position[0], Position[1], 0.0f);
@@ -4514,7 +4519,7 @@ public:
 		m_Text->setCharacterSize(m_FontSize);
 		m_Text->setFontResolution(10, 10);
 
-		osg::Vec3 position(0.5*c_Scene_XRes_InPixels, 0.5*c_Scene_YRes_InPixels, 0.0f);
+		osg::Vec3 position(0.5*Scene_XRes_InPixels(), 0.5*Scene_YRes_InPixels(), 0.0f);
 		m_Text->setPosition(position);
 		//text->setDrawMode(osgText::Text::TEXT|osgText::Text::BOUNDINGBOX);
 		m_Text->setAlignment(osgText::Text::CENTER_CENTER);
@@ -4524,7 +4529,7 @@ public:
 	//call this if you want intended orientation graphics (after setting up the character dimensions)
 	void Init_IntendedOrientation()
 	{
-		osg::Vec3 position(0.5*c_Scene_XRes_InPixels, 0.5*c_Scene_YRes_InPixels, 0.0f);
+		osg::Vec3 position(0.5*Scene_XRes_InPixels(), 0.5*Scene_YRes_InPixels(), 0.0f);
 		m_IntendedOrientation = new osgText::Text;
 		m_IntendedOrientation->setColor(osg::Vec4(1.0, 1.0, 0.0, 1.0));
 		m_IntendedOrientation->setCharacterSize(m_FontSize);
@@ -4665,6 +4670,7 @@ private:
 	//This will make all time deltas the same length (ideal for debugging)
 	bool m_UseSyntheticTimeDeltas;
 	bool m_UseUserPrefs;
+	osg::ref_ptr <osg::Camera> m_camera = nullptr;
 	#pragma endregion
 public:
 	Viewer(bool useUserPrefs = true) :m_Callback(NULL), m_UseSyntheticTimeDeltas(false), m_UseUserPrefs(useUserPrefs) {}
@@ -4672,6 +4678,12 @@ public:
 	void SetCallbackInterface(Viewer_Callback_Interface *callback) { m_Callback = callback; }
 	void SetUpdateCallback(std::function<void(double dTime_s)> callback) { m_Callback2 = callback; }
 	void SetSceneCallback(std::function<void(osg::Group *rootNode, osg::Geode *geode)> callback) 	{ m_SceneCallback = callback; }
+	void ToggleFullScreen()
+	{
+		m_MainWin->ToggleFullScreen();
+		//adapt our aspect to the new resolution
+		m_camera->setProjectionMatrixAsOrtho2D(0, Scene_XRes_InPixels(), 0, Scene_YRes_InPixels());
+	}
 	void Init()
 	{
 		using namespace Robot_Tester;
@@ -4712,7 +4724,7 @@ public:
 
 		// We can tie the events to Toggle fullscreen
 		mainWin.GetKeyboard_Mouse().AddKeyBindingR(false, "ToggleFullScreen", osgGA::GUIEventAdapter::KEY_F3);
-		mainWin.GetKeyboard_Mouse().GlobalEventMap.Event_Map["ToggleFullScreen"].Subscribe(mainWin.ehl, mainWin, &MainWindow::ToggleFullScreen);
+		mainWin.GetKeyboard_Mouse().GlobalEventMap.Event_Map["ToggleFullScreen"].Subscribe(mainWin.ehl, *this, &Viewer::ToggleFullScreen);
 		#endif
 		// Set the scene and realize the camera at full size
 		//mainWin.GetMainCamera()->SetSceneNode(actorScene.GetScene(), 0.0f);
@@ -4723,9 +4735,10 @@ public:
 		#pragma region _Set up camera_
 		{
 			// create the hud.
-			osg::Camera* camera = new osg::Camera;
+			m_camera = new osg::Camera;
+			osg::Camera* camera = m_camera;
 			camera->setReferenceFrame(osg::Transform::ABSOLUTE_RF);
-			camera->setProjectionMatrixAsOrtho2D(0, c_Scene_XRes_InPixels, 0, c_Scene_YRes_InPixels);
+			camera->setProjectionMatrixAsOrtho2D(0, Scene_XRes_InPixels(), 0, Scene_YRes_InPixels());
 			camera->setViewMatrix(osg::Matrix::identity());
 			camera->setClearMask(GL_DEPTH_BUFFER_BIT);
 			m_RootNode = new osg::Group;
@@ -5049,7 +5062,7 @@ public:
 	{
 		m_UIParent = parent;
 
-		osg::Vec3 position(0.5*c_Scene_XRes_InPixels, 0.5*c_Scene_YRes_InPixels, 0.0f);
+		osg::Vec3 position(0.5*Scene_XRes_InPixels(), 0.5*Scene_YRes_InPixels(), 0.0f);
 
 		m_Wheel = new osgText::Text;
 		m_Wheel->setColor(m_props.m_Color);
@@ -5133,7 +5146,7 @@ public:
 	{
 		m_UIParent = parent;
 
-		osg::Vec3 position(0.5*c_Scene_XRes_InPixels, 0.5*c_Scene_YRes_InPixels, 0.0f);
+		osg::Vec3 position(0.5*Scene_XRes_InPixels(), 0.5*Scene_YRes_InPixels(), 0.0f);
 		m_Front = new osgText::Text;
 		m_Front->setColor(GetFrontWheelColor());
 		m_Front->setCharacterSize(m_UIParent->GetFontSize());
@@ -5861,7 +5874,7 @@ private:
 			m_Text->setCharacterSize(20.0);
 			m_Text->setFontResolution(10, 10);
 
-			osg::Vec3 position(0.5*c_Scene_XRes_InPixels, 0.5*c_Scene_YRes_InPixels, 0.0f);
+			osg::Vec3 position(0.5*Scene_XRes_InPixels(), 0.5*Scene_YRes_InPixels(), 0.0f);
 			m_Text->setPosition(position);
 			//m_Text->setDrawMode(osgText::Text::TEXT|osgText::Text::BOUNDINGBOX);
 			m_Text->setAlignment(osgText::Text::CENTER_CENTER);
@@ -5876,9 +5889,9 @@ private:
 			double sample = SineInfluence(m_Rho);
 			if (Text)
 			{
-				double halfxres = c_Scene_XRes_InPixels / 2.0;
-				double halfyres = c_Scene_YRes_InPixels / 2.0;
-				osg::Vec3 position(sample*halfxres + halfxres, 0.5*c_Scene_YRes_InPixels, 0.0f);
+				double halfxres = Scene_XRes_InPixels() / 2.0;
+				double halfyres = Scene_YRes_InPixels() / 2.0;
+				osg::Vec3 position(sample*halfxres + halfxres, 0.5*Scene_YRes_InPixels(), 0.0f);
 				Text->setPosition(position);
 				Text->setRotation(FromLW_Rot_Radians(sample*PI, 0.0, 0.0));
 			}
@@ -5901,10 +5914,10 @@ private:
 			double sample = SineInfluence(m_Rho);
 			if (Text)
 			{
-				double halfxres = c_Scene_XRes_InPixels / 2.0;
-				double halfyres = c_Scene_YRes_InPixels / 2.0;
-				osg::Vec3 position(sample*halfxres + halfxres, 0.5*c_Scene_YRes_InPixels, 0.0f);
-				//osg::Vec3 position(0.5*c_Scene_XRes_InPixels,sample*halfyres + halfyres,0.0f);
+				double halfxres = Scene_XRes_InPixels() / 2.0;
+				double halfyres = Scene_YRes_InPixels() / 2.0;
+				osg::Vec3 position(sample*halfxres + halfxres, 0.5*Scene_YRes_InPixels(), 0.0f);
+				//osg::Vec3 position(0.5*Scene_XRes_InPixels(),sample*halfyres + halfyres,0.0f);
 				Text->setPosition(position);
 				//Text->setRotation(FromLW_Rot_Radians(m_dTest,0.0,0.0));
 				Text->setRotation(FromLW_Rot_Radians(sample*PI, 0.0, 0.0));
@@ -5936,7 +5949,7 @@ private:
 				text->setCharacterSize(20.0);
 				text->setFontResolution(10, 10);
 
-				osg::Vec3 position(0.5*c_Scene_XRes_InPixels, 0.5*c_Scene_YRes_InPixels, 0.0f);
+				osg::Vec3 position(0.5*Scene_XRes_InPixels(), 0.5*Scene_YRes_InPixels(), 0.0f);
 				text->setPosition(position);
 				//text->setDrawMode(osgText::Text::TEXT|osgText::Text::BOUNDINGBOX);
 				text->setAlignment(osgText::Text::CENTER_CENTER);
