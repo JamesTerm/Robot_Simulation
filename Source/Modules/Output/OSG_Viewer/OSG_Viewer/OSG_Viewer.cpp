@@ -3301,7 +3301,9 @@ namespace GG_Framework
 				// Make sure this only happens once
 				if (!m_camGroup->isRealized())
 				{
-					//m_camGroup->addEventHandler(m_Keyboard_Mouse);
+					#ifndef __DisableKeyboardMouse_CB__
+					m_camGroup->addEventHandler(m_Keyboard_Mouse);
+					#endif
 					m_camGroup->realize();
 
 					// See if we can get a better FOV
@@ -3433,7 +3435,7 @@ namespace GG_Framework
 		double Window::PERFORMANCE_MIN = 25.0;
 		double Window::PERFORMANCE_MAX = 45.0;
 		int Window::PERFORMANCE_INIT_INDEX = 0;
-		OpenThreads::Mutex Window::UpdateMutex;
+		//OpenThreads::Mutex Window::UpdateMutex;
 		#pragma endregion
 		class FRAMEWORK_UI_API MainWindow : public Window
 		{
@@ -4943,17 +4945,24 @@ class GUIThread2
 private:
 	bool m_UseUserPrefs=true;
 	bool m_IsStreaming = false;
+	bool m_ViewerInit = false; //init valve
 	std::shared_ptr<Viewer> m_Viewer=nullptr;
 	std::future<void> m_TaskState_LaunchLoop;  //Use future to monitor task status
 	void dispatch_loop()
 	{
+		//Unfortunately the viewer has to be setup in the same thread it is going to be used in, but this just means a delay on
+		//when we see the window.  It has to go through the entire loop for the window to become fully active
+		if (!m_ViewerInit)
+		{
+			m_Viewer->Init();
+			m_ViewerInit = true;
+		}
 		m_Viewer->RunLoop();
 	}
 public:
 	void init(bool useUserPrefs = true)
 	{
 		m_Viewer = std::make_shared<Viewer>();
-		m_Viewer->Init();
 	}
 	void SetCallbackInterface(Viewer_Callback_Interface *callback) { m_Viewer->SetCallbackInterface(callback); }
 	void SetUpdateCallback(std::function<void(double dTime_s)> callback) { m_Viewer->SetUpdateCallback(callback); }
