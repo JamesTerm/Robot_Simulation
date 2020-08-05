@@ -1,10 +1,12 @@
 #pragma once
 
+#include "ImportExports.h"
+
 namespace Robot_Tester
 {
 class Swerve_Robot_UI;
 
-class SwerveRobot_UI
+class OSG_View_API SwerveRobot_UI
 {
 public:
 	union uSwerveRobot_State

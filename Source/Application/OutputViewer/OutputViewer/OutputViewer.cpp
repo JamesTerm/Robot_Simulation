@@ -204,7 +204,8 @@ private:
 		}
 		else
 		{
-			m_robot->SetUpdateCallback(nullptr);
+			if (m_robot)
+				m_robot->SetUpdateCallback(nullptr);
 		}
 	}
 public:

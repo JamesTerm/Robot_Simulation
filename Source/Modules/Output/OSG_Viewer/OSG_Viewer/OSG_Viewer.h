@@ -1,11 +1,13 @@
 #pragma once
 
+#include "ImportExports.h"
+
 namespace Robot_Tester
 {
 
 class OSG_Viewer_Internal;
 
-class OSG_Viewer
+class OSG_View_API OSG_Viewer
 {
 public:
 	OSG_Viewer();

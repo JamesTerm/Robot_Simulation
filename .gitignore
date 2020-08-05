@@ -169,4 +169,7 @@ bin/
 *.opendb
 *.db-*
 *.res
+*.iobj
+*.ipdb
+*.exp
 

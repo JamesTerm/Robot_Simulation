@@ -4641,7 +4641,7 @@ class Viewer
 {
 private:
 	#pragma region _members_
-	GG_Framework::UI::MainWindow *m_MainWin;
+	GG_Framework::UI::MainWindow *m_MainWin=nullptr;
 	//Exposing our node to render text
 	osg::ref_ptr<osg::Group> m_RootNode;
 	osg::ref_ptr<osg::Geode> m_Geode;
