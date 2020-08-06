@@ -16,6 +16,7 @@ public:
 	void SetUpdateCallback(std::function<void(double dTime_s)> callback);
 	//This simply links to robot's update scene call, anything more will need to be built within OSG building environment
 	void SetSceneCallback(std::function<void(void *rootNode, void *geode)> callback);
+	void SetKeyboardCallback(std::function<void(int key, bool press)> callback);
 	void init();
 	//This is optional, usually true to debug, false to get real-time timings
 	void SetUseSyntheticTimeDeltas(bool UseSyntheticTimeDeltas);

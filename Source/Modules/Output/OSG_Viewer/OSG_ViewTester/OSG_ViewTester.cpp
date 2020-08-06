@@ -77,6 +77,11 @@ public:
 			//give the robot its time slice to process them
 			m_Robot.TimeChange(dTime_s);
 		});
+		viewer.SetKeyboardCallback(
+			[&](int key, bool press)
+		{
+			printf("key=%d press=%d\n",key,press);
+		});
 		//Good to go... now initialize the robot
 		m_Robot.Initialize();
 	}
@@ -88,6 +93,7 @@ public:
 			m_Robot.SetSwerveRobot_Callback(nullptr);
 			m_viewer->SetSceneCallback(nullptr);
 			m_viewer->SetUpdateCallback(nullptr);
+			m_viewer->SetKeyboardCallback(nullptr);
 			m_viewer = nullptr;  //pedantic... we are done with it
 		}
 	}

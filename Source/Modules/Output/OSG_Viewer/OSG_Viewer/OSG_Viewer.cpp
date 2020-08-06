@@ -2550,6 +2550,8 @@ namespace GG_Framework
 			std::map<std::string, std::vector<GG_Framework::Base::Key>*, std::greater<std::string> > m_AssignedKeys;
 			std::map<GG_Framework::Base::Key, std::vector<std::string>*, std::greater<GG_Framework::Base::Key> > m_KeyBindings_OnOff;
 			std::map<std::string, std::vector<GG_Framework::Base::Key>*, std::greater<std::string> > m_AssignedKeys_OnOff;
+
+			std::function<void(int key, bool press)> m_Keyboard_callback=nullptr;
 			#pragma endregion
 			bool innerHandle(const osgGA::GUIEventAdapter& ea, bool fromEA)
 			{
@@ -2591,6 +2593,8 @@ namespace GG_Framework
 			}
 			void KeyPressRelease(int key, bool press)
 			{
+				if (m_Keyboard_callback)
+					m_Keyboard_callback(key, press);
 				using namespace GG_Framework::UI;
 				using namespace GG_Framework::Base;
 
@@ -2923,6 +2927,10 @@ namespace GG_Framework
 				}
 			}
 			void IncrementTime(double dTick_s) { m_eventTime += dTick_s; }
+			void SetKeyboardCallback(std::function<void(int key, bool press)> callback)
+			{
+				m_Keyboard_callback = callback;
+			}
 		};
 	}
 }
@@ -3431,6 +3439,10 @@ namespace GG_Framework
 			ThreadSafeViewer* GetViewer() { return m_camGroup.get(); }
 			#ifndef __DisableKeyboardMouse_CB__
 			KeyboardMouse_CB &GetKeyboard_Mouse() const { return *m_Keyboard_Mouse; }
+			void SetKeyboardCallback(std::function<void(int key, bool press)> callback)
+			{
+				m_Keyboard_Mouse->SetKeyboardCallback(callback);
+			}
 			#endif
 			#pragma region _disabled_
 			//Note: we strip out input
@@ -4671,6 +4683,7 @@ private:
 	bool m_UseSyntheticTimeDeltas;
 	bool m_UseUserPrefs;
 	osg::ref_ptr <osg::Camera> m_camera = nullptr;
+	std::function<void(int key, bool press)> m_KeyboardCache_callback = nullptr;
 	#pragma endregion
 public:
 	Viewer(bool useUserPrefs = true) :m_Callback(NULL), m_UseSyntheticTimeDeltas(false), m_UseUserPrefs(useUserPrefs) {}
@@ -4702,6 +4715,9 @@ public:
 		// Create the singletons, These must be instantiated before the scene manager too - Rick
 		m_MainWin = new MainWindow(true, 0.0, 0, 0, m_UseUserPrefs);
 		MainWindow &mainWin = *m_MainWin;
+		//check for our deferred callback setting
+		if (m_KeyboardCache_callback)
+			m_MainWin->SetKeyboardCallback(m_KeyboardCache_callback);
 
 		// Create the scene manager with each of the files
 		osg::Group* mainGroup = NULL;
@@ -4839,6 +4855,13 @@ public:
 		m_MainWin->StopLoop();
 	}
 	void SetUseSyntheticTimeDeltas(bool UseSyntheticTimeDeltas) { m_UseSyntheticTimeDeltas = UseSyntheticTimeDeltas; }
+	void SetKeyboardCallback(std::function<void(int key, bool press)> callback)
+	{
+		if (m_MainWin)
+			m_MainWin->SetKeyboardCallback(callback);
+		else
+			m_KeyboardCache_callback = callback;  //deferred until its instantiated
+	}
 	~Viewer()
 	{
 		using namespace GG_Framework::Base;
@@ -4980,6 +5003,10 @@ public:
 	void SetCallbackInterface(Viewer_Callback_Interface *callback) { m_Viewer->SetCallbackInterface(callback); }
 	void SetUpdateCallback(std::function<void(double dTime_s)> callback) { m_Viewer->SetUpdateCallback(callback); }
 	void SetSceneCallback(std::function<void(osg::Group *rootNode, osg::Geode *geode)> callback) { m_Viewer->SetSceneCallback(callback); }
+	void SetKeyboardCallback(std::function<void(int key, bool press)> callback)
+	{
+		m_Viewer->SetKeyboardCallback(callback);
+	}
 	void SetUseSyntheticTimeDeltas(bool UseSyntheticTimeDeltas) { m_Viewer->SetUseSyntheticTimeDeltas(UseSyntheticTimeDeltas); }
 	void StartStreaming()
 	{
@@ -6160,6 +6187,10 @@ public:
 		//Gah need to cast... keeps header from being dependent on OSG parameters
 		m_UI_thread->SetSceneCallback((std::function<void(osg::Group *rootNode, osg::Geode *geode)>)callback);
 	}
+	void SetKeyboardCallback(std::function<void(int key, bool press)> callback)
+	{
+		m_UI_thread->SetKeyboardCallback(callback);
+	}
 	void init(bool useUserPrefs = true)
 	{
 		if (!m_UI_thread)
@@ -6206,6 +6237,10 @@ void OSG_Viewer::SetSceneCallback(std::function<void(void *rootNode, void *geode
 {
 	//Gah need to cast... keeps header from being dependent on OSG parameters
 	m_OSG_Viewer->SetSceneCallback(callback);
+}
+void OSG_Viewer::SetKeyboardCallback(std::function<void(int key, bool press)> callback)
+{
+	m_OSG_Viewer->SetKeyboardCallback(callback);
 }
 void OSG_Viewer::SetUseSyntheticTimeDeltas(bool UseSyntheticTimeDeltas)
 {
