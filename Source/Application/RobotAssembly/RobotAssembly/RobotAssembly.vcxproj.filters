@@ -33,6 +33,9 @@
     <ClCompile Include="..\..\..\Modules\Robot\MotionControl2D_simple\MotionControl2D\MotionControl2D.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="TeleOpV2.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="stdafx.h">
@@ -51,6 +54,15 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\Modules\Robot\MotionControl2D_simple\MotionControl2D\MotionControl2D.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="TeleOpV2.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\Modules\Output\OSG_Viewer\OSG_Viewer\OSG_Viewer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\Modules\Output\OSG_Viewer\OSG_Viewer\SwerveRobot_UI.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

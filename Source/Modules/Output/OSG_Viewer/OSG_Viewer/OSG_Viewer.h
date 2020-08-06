@@ -2,8 +2,9 @@
 
 #include "ImportExports.h"
 
-namespace Robot_Tester
+namespace Module
 {
+	namespace Output {
 
 class OSG_Viewer_Internal;
 
@@ -28,4 +29,5 @@ private:
 	std::shared_ptr<OSG_Viewer_Internal> m_OSG_Viewer;
 };
 
+	}
 }

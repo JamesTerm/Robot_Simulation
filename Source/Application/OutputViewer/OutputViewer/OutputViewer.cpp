@@ -58,8 +58,9 @@ __inline void prompt()
 	std::cout << ">";
 }
 
-namespace Robot_Tester
+namespace Module
 {
+	namespace Output {
 
 
 class SwerveRobotTest
@@ -244,7 +245,7 @@ public:
 	}
 };
 
-}
+}}
 
 
 bool CommandLineInterface()
@@ -264,7 +265,7 @@ bool CommandLineInterface()
 	cout << endl;
 	cout << "Ready." << endl;
 	#pragma endregion
-	using namespace Robot_Tester;
+	using namespace Module::Output;
 	OSG_Viewer viewer;  //setup our viewer now
 	viewer.init();
 	SwerveRobotTest robot;

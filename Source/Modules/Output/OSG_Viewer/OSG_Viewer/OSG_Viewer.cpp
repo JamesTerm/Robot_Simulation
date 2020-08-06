@@ -4375,12 +4375,12 @@ namespace Robot_Tester
 #pragma endregion
 #pragma endregion
 #pragma region _FrameWork_UI_
-namespace Robot_Tester
-{
 const double PI = 3.1415926535897;
 const double Pi2 = M_PI * 2.0;
 const double PI_2 = 1.57079632679489661923;
 
+namespace Robot_Tester
+{
 //TODO evaluate my window size instead of using these constants
 //const double c_Scene_XRes_InPixels = 640.0;
 //const double c_Scene_YRes_InPixels = 480.0;
@@ -4908,20 +4908,21 @@ namespace GG_Framework
 #pragma endregion
 
 #pragma region _Robot Tester (interface)_
-namespace Robot_Tester
+namespace Module
 {
+	namespace Output {
 #pragma region _GUI Thread_
 class GUIThread : public GG_Framework::Base::ThreadedClass
 {
 private:
-	Viewer *m_Viewer;
+	Robot_Tester::Viewer *m_Viewer;
 	bool m_IsBeingDestroyed;
 	bool m_UseUserPrefs;
 protected:
 	void tryRun()
 	{
 		assert(!m_Viewer);
-		m_Viewer = new Viewer(m_UseUserPrefs);
+		m_Viewer = new Robot_Tester::Viewer(m_UseUserPrefs);
 		m_Viewer->Init();
 		m_Viewer->RunLoop();
 		//printf("Exiting GUI Thread\n");
@@ -4937,9 +4938,9 @@ public:
 	{
 		Run();
 	}
-	Viewer *GetUI() { return m_Viewer; }
+	Robot_Tester::Viewer *GetUI() { return m_Viewer; }
 	bool GetUseUserPrefs() const { return m_UseUserPrefs; }
-	void Init(Viewer_Callback_Interface *ViewerCallback)
+	void Init(Robot_Tester::Viewer_Callback_Interface *ViewerCallback)
 	{
 		using namespace GG_Framework::Base;
 		//Ensure the thread is running... it will not be in the case where user closed UI window from a previous session
@@ -4982,7 +4983,7 @@ private:
 	bool m_UseUserPrefs=true;
 	bool m_IsStreaming = false;
 	bool m_ViewerInit = false; //init valve
-	std::shared_ptr<Viewer> m_Viewer=nullptr;
+	std::shared_ptr<Robot_Tester::Viewer> m_Viewer=nullptr;
 	std::future<void> m_TaskState_LaunchLoop;  //Use future to monitor task status
 	void dispatch_loop()
 	{
@@ -4996,11 +4997,15 @@ private:
 		m_Viewer->RunLoop();
 	}
 public:
+	GUIThread2()
+	{
+		m_Viewer = std::make_shared<Robot_Tester::Viewer>();
+	}
 	void init(bool useUserPrefs = true)
 	{
-		m_Viewer = std::make_shared<Viewer>();
+		//reserved if we support user preferences
 	}
-	void SetCallbackInterface(Viewer_Callback_Interface *callback) { m_Viewer->SetCallbackInterface(callback); }
+	void SetCallbackInterface(Robot_Tester::Viewer_Callback_Interface *callback) { m_Viewer->SetCallbackInterface(callback); }
 	void SetUpdateCallback(std::function<void(double dTime_s)> callback) { m_Viewer->SetUpdateCallback(callback); }
 	void SetSceneCallback(std::function<void(osg::Group *rootNode, osg::Geode *geode)> callback) { m_Viewer->SetSceneCallback(callback); }
 	void SetKeyboardCallback(std::function<void(int key, bool press)> callback)
@@ -5076,7 +5081,7 @@ public:
 		const wchar_t *m_TextDisplay;
 	};
 private:
-	Actor_Text *m_UIParent;
+	Robot_Tester::Actor_Text *m_UIParent;
 	Wheel_Properties m_props;
 	osg::ref_ptr<osgText::Text> m_Wheel;
 	double m_Rotation;
@@ -5085,8 +5090,9 @@ private:
 	const wchar_t *m_TextDisplay;
 public:
 	Side_Wheel_UI() : m_UIParent(NULL), m_Rotation(0.0) {}
-	void UI_Init(Actor_Text *parent)
+	void UI_Init(Robot_Tester::Actor_Text *parent)
 	{
+		using namespace Robot_Tester;
 		m_UIParent = parent;
 
 		osg::Vec3 position(0.5*Scene_XRes_InPixels(), 0.5*Scene_YRes_InPixels(), 0.0f);
@@ -5161,7 +5167,7 @@ public:
 		double m_Wheel_Diameter; //in meters default 0.1524  (6 inches)
 	};
 private:
-	Actor_Text *m_UIParent;
+	Robot_Tester::Actor_Text *m_UIParent;
 	Wheel_Properties m_props;
 	osg::ref_ptr<osgText::Text> m_Front, m_Back, m_Tread; //Tread is really a line that helps show speed
 	double m_Rotation, m_Swivel;
@@ -5169,8 +5175,9 @@ public:
 	Swivel_Wheel_UI() : m_UIParent(NULL) {}
 	virtual ~Swivel_Wheel_UI() {}
 
-	void UI_Init(Actor_Text *parent)
+	void UI_Init(Robot_Tester::Actor_Text *parent)
 	{
+		using namespace Robot_Tester;
 		m_UIParent = parent;
 
 		osg::Vec3 position(0.5*Scene_XRes_InPixels(), 0.5*Scene_YRes_InPixels(), 0.0f);
@@ -5314,7 +5321,7 @@ public:
 
 #pragma endregion
 #pragma region _Swerve Robot UI_
-class Swerve_Robot_UI : public EntityPropertiesInterface
+class Swerve_Robot_UI : public Robot_Tester::EntityPropertiesInterface
 {
 public:
 	#pragma region _swerve robot state_
@@ -5360,7 +5367,7 @@ public:
 	#pragma endregion
 private:
 	#pragma region _members_
-	osg::ref_ptr<Actor_Text> m_Actor;
+	osg::ref_ptr<Robot_Tester::Actor_Text> m_Actor;
 	//Allow subclasses to change wheels look
 	Swivel_Wheel_UI *m_Wheel[4];
 	std::function<SwerveRobot_State()> m_SwerveRobot = DefaultRobotState;
@@ -5374,7 +5381,7 @@ private:
 	virtual void Destroy_WheelUI(Swivel_Wheel_UI *wheel_ui) { delete wheel_ui; }
 	#pragma region _EntityPropertiesInterface_
 protected: //from EntityPropertiesInterface
-	virtual void UI_Init(Actor_Text *parent)
+	virtual void UI_Init(Robot_Tester::Actor_Text *parent)
 	{
 		for (size_t i = 0; i < 4; i++)
 		{
@@ -5394,6 +5401,7 @@ protected: //from EntityPropertiesInterface
 	}
 	virtual void UpdateScene(osg::Geode *geode, bool AddOrRemove)
 	{
+		using namespace Robot_Tester;
 		//Note: update scene get called repeatedly, so we only reconfigure this for new actors
 		//in our case at this level we'll never change, so in essence this will be called once
 		//in the past the Game client would add or remove actors, so this could be delegated to
@@ -5850,7 +5858,7 @@ private:
 		}
 
 	}
-	class TestCallback : public Viewer_Callback_Interface
+	class TestCallback : public Robot_Tester::Viewer_Callback_Interface
 	{
 	public:
 		TestCallback() : m_IsSetup(false) {}
@@ -5894,6 +5902,7 @@ private:
 	public:
 		Test_Actor2() : m_Rho(0.0)
 		{
+			using namespace Robot_Tester;
 			osg::Vec4 layoutColor(0.0f, 1.0f, 1.0f, 1.0f);
 			m_Text = new osgText::Text;
 			////m_Text->setFont(font);
@@ -5912,6 +5921,7 @@ private:
 	protected:
 		virtual void update(osg::NodeVisitor *nv, osg::Drawable *draw)
 		{
+			using namespace Robot_Tester;
 			osgText::Text *Text = dynamic_cast<osgText::Text *>(draw);
 			double sample = SineInfluence(m_Rho);
 			if (Text)
@@ -5937,6 +5947,7 @@ private:
 	protected:
 		virtual void update(osg::NodeVisitor *nv, osg::Drawable *draw)
 		{
+			using namespace Robot_Tester;
 			osgText::Text *Text = dynamic_cast<osgText::Text *>(draw);
 			double sample = SineInfluence(m_Rho);
 			if (Text)
@@ -5956,7 +5967,7 @@ private:
 		double m_Rho;
 	};
 
-	class TestCallback_2 : public Viewer_Callback_Interface
+	class TestCallback_2 : public Robot_Tester::Viewer_Callback_Interface
 	{
 	private:
 		//osg::ref_ptr<Test_Actor> m_Actor;
@@ -6012,7 +6023,7 @@ private:
 			Rotation += Pi2;
 		return Rotation;
 	}
-	class TestCallback_3 : public Viewer_Callback_Interface
+	class TestCallback_3 : public Robot_Tester::Viewer_Callback_Interface
 	{
 	private:
 		Swerve_Robot_UI m_robot;
@@ -6178,6 +6189,11 @@ private:
 	std::shared_ptr<GUIThread2> m_UI_thread = nullptr;
 	#pragma endregion
 public:
+	OSG_Viewer_Internal()
+	{
+		//instantiate now, to allow client to setup hooks before init
+		m_UI_thread = std::make_shared<GUIThread2>();
+	}
 	void SetUpdateCallback(std::function<void(double dTime_s)> callback)
 	{
 		m_UI_thread->SetUpdateCallback(callback);
@@ -6193,11 +6209,7 @@ public:
 	}
 	void init(bool useUserPrefs = true)
 	{
-		if (!m_UI_thread)
-		{
-			m_UI_thread = std::make_shared<GUIThread2>();
-			m_UI_thread->init(useUserPrefs);
-		}
+		m_UI_thread->init(useUserPrefs);
 	}
 	void SetUseSyntheticTimeDeltas(bool UseSyntheticTimeDeltas)
 	{
@@ -6256,7 +6268,7 @@ void OSG_Viewer::StopStreaming()
 }
 void OSG_Viewer::Zoom(double size)
 {
-	g_WorldScaleFactor = size;
+	Robot_Tester::g_WorldScaleFactor = size;
 }
 void OSG_Viewer::Test(size_t index)
 {
@@ -6288,6 +6300,6 @@ void SwerveRobot_UI::TimeChange(double dTime_s)
 
 #pragma endregion
 #pragma endregion
-}
+}}
 #pragma endregion
 

@@ -2,8 +2,9 @@
 
 #include "ImportExports.h"
 
-namespace Robot_Tester
+namespace Module
 {
+	namespace Output {
 class Swerve_Robot_UI;
 
 class OSG_View_API SwerveRobot_UI
@@ -54,4 +55,4 @@ public:
 private:
 	std::shared_ptr<Swerve_Robot_UI> m_Robot;
 };
-}
+}}

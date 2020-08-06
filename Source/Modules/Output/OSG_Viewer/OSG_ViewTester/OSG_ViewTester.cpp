@@ -51,8 +51,9 @@ __inline void prompt()
 	std::cout << ">";
 }
 
-namespace Robot_Tester
+namespace Module
 {
+	namespace Output {
 
 class SwerveRobotTest
 {
@@ -103,7 +104,7 @@ public:
 		return m_current_state; 
 	}
 };
-}
+}}
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -128,7 +129,7 @@ bool CommandLineInterface()
 	cout << endl;
 	cout << "Ready." << endl;
 	#pragma endregion
-	using namespace Robot_Tester;
+	using namespace Module::Output;
 	OSG_Viewer viewer_test;  //setup our viewer now
 	viewer_test.init();
 	SwerveRobotTest robot;

@@ -96,6 +96,9 @@
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
+    <PostBuildEvent>
+      <Command>xcopy "$(SolutionDir)..\..\Modules\Output\OSG_Viewer\$(Platform)\$(Configuration)\*.dll" "$(OutDir)" /D /S /Y</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
@@ -104,13 +107,16 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_Win32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_Win32;_DEBUG;_WIN64;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
+    <PostBuildEvent>
+      <Command>xcopy "$(SolutionDir)..\..\Modules\Output\OSG_Viewer\$(Platform)\$(Configuration)\*.dll" "$(OutDir)" /D /S /Y</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
@@ -130,6 +136,9 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
+    <PostBuildEvent>
+      <Command>xcopy "$(SolutionDir)..\..\Modules\Output\OSG_Viewer\$(Platform)\$(Configuration)\*.dll" "$(OutDir)" /D /S /Y</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -140,7 +149,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_Win32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_Win32;NDEBUG;_WIN64;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
     <Link>
@@ -149,6 +158,9 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
+    <PostBuildEvent>
+      <Command>xcopy "$(SolutionDir)..\..\Modules\Output\OSG_Viewer\$(Platform)\$(Configuration)\*.dll" "$(OutDir)" /D /S /Y</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\..\..\Modules\Input\dx_Joystick_Controller\dx_Joystick_Controller\dx_Joystick.cpp" />
@@ -157,14 +169,18 @@
     <ClCompile Include="..\..\..\Modules\Robot\MotionControl2D_simple\MotionControl2D\MotionControl2D.cpp" />
     <ClCompile Include="RobotAssembly.cpp" />
     <ClCompile Include="TeleOpV1.cpp" />
+    <ClCompile Include="TeleOpV2.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\Modules\Input\dx_Joystick_Controller\dx_Joystick_Controller\dx_Joystick.h" />
+    <ClInclude Include="..\..\..\Modules\Output\OSG_Viewer\OSG_Viewer\OSG_Viewer.h" />
+    <ClInclude Include="..\..\..\Modules\Output\OSG_Viewer\OSG_Viewer\SwerveRobot_UI.h" />
     <ClInclude Include="..\..\..\Modules\Robot\DriveKinematics\DriveKinematics\Vehicle_Drive.h" />
     <ClInclude Include="..\..\..\Modules\Robot\Entity2D\Entity2D\Entity2D.h" />
     <ClInclude Include="..\..\..\Modules\Robot\MotionControl2D_simple\MotionControl2D\MotionControl2D.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="TeleOpV1.h" />
+    <ClInclude Include="TeleOpV2.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\..\Libraries\SmartDashboard\SmartDashboard.vcxproj">

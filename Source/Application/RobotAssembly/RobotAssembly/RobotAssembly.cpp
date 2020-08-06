@@ -19,6 +19,7 @@
 #include "../../../Modules/Robot/DriveKinematics/DriveKinematics/Vehicle_Drive.h"
 #include "../../../Modules/Robot/Entity2D/Entity2D/Entity2D.h"
 #include "TeleOpV1.h"
+#include "TeleOpV2.h"
 #pragma endregion
 #pragma region _Test01_Tank_Kinematics_with_Joystick_
 
@@ -543,7 +544,8 @@ bool CommandLineInterface()
 	cout << "Ready." << endl;
 	#pragma endregion
 
-	Application::TeleOp_V1 m_RobotTester;
+	//Application::TeleOp_V1 m_RobotTester;
+	Application::TeleOp_V2 m_RobotTester;
 	m_RobotTester.init();
 
 	while (prompt(), cin.getline(input_line, 128))
