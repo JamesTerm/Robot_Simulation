@@ -44,12 +44,6 @@
     <ClCompile Include="DriverStation.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Keyboard.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\Base\EventMap.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="Robot_Tester.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

@@ -9,15 +9,15 @@
 #include <timeapi.h>
 #include <shlwapi.h>
 //#include "../Robot_Tester.h"
-#include "../../../Base/Base_Includes.h"
-#include "../../../Base/Vec2d.h"
-#include "../../../Base/Misc.h"
-#include "../../../Base/Event.h"
-#include "../../../Base/EventMap.h"
-#include "../../../Base/Script.h"
+//#include "../../../Base/Base_Includes.h"
+//#include "../../../Base/Vec2d.h"
+//#include "../../../Base/Misc.h"
+//#include "../../../Base/Event.h"
+//#include "../../../Base/EventMap.h"
+//#include "../../../Base/Script.h"
 //#include "../../../Base/Joystick.h"
 //#include "../../../Base/JoystickBinder.h"
-#include "Keyboard.h"
+//#include "Keyboard.h"
 #include "Robot_Tester.h"
 #pragma endregion
 
@@ -32,7 +32,7 @@ WCHAR szWindowClass[MAX_LOADSTRING];            // the main window class name
 RobotTester *s_pRobotTester = nullptr;  
 //void BindRobot(RobotTester &_robot_tester);  //forward declare
 void SetupPreferences();
-Keyboard *s_Keyboard = nullptr;
+//Keyboard *s_Keyboard = nullptr;
 
 __inline void GetParentDirectory(std::wstring &path)
 {
@@ -150,16 +150,19 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 		//	DestroyWindow(hWnd);
 		//	break;
 		//Gah it never makes it this far... but keeping here for testing why
-		case WM_KEYUP:
-			OutputDebugStringW(L"KeyPressedUp\n");
-			if (s_Keyboard)
-				s_Keyboard->KeyPressRelease((int)wParam, false);
-			break;
-		case WM_KEYDOWN:
-			OutputDebugStringW(L"KeyPressedDN\n");
-			if (s_Keyboard)
-				s_Keyboard->KeyPressRelease((int)wParam, true);
-			break;
+
+		//Note: for whatever reason I cannot macro out these lines, probably because I'm in a switch statement
+		//case WM_KEYUP:
+		//	OutputDebugStringW(L"KeyPressedUp\n");
+		//	if (s_Keyboard)
+		//		s_Keyboard->KeyPressRelease((int)wParam, false);
+		//	break;
+		//case WM_KEYDOWN:
+		//	OutputDebugStringW(L"KeyPressedDN\n");
+		//	if (s_Keyboard)
+		//		s_Keyboard->KeyPressRelease((int)wParam, true);
+		//	break;
+
 		case WM_PAINT:
 		{
 			PAINTSTRUCT ps;
@@ -220,9 +223,11 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 				const int len = ToAscii(virtualKey, keyboardScanCode, keyboardState, &ascii, 0);
 				ProcessKey = (len == 1);  //only simple keys
 			}
+			#if 0
 			//OutputDebugStringW(L"KeyPressed\n");
 			if ((ProcessKey)&&(s_Keyboard))
 				s_Keyboard->KeyPressRelease((int)ascii, msg.message == WM_KEYDOWN);
+			#endif
 		}
 		else if (bRet == -1)
 		{	// Finished
