@@ -2,11 +2,18 @@
 #include "../../../Libraries/SmartDashboard/SmartDashboard_Import.h"
 #include "Robot_Tester.h"
 #include "../../RobotAssembly/RobotAssembly/TeleOpV1.h"
+#include "../../RobotAssembly/RobotAssembly/TeleOpV2.h"
 
+
+//I'm leaving it able to test older versions.
+//version 1 is completely detached from the viewer and keyboard support, but is still useful to review and learn because it simpler
+//Then you can compare how the viewer is integrated (which isn't much, except that it controls the threading internally)
+//We'll keep this convention going so you can see how it builds as more features get integrated
 class RobotTester_Internal
 {
 private:
-	Application::TeleOp_V1 m_tele_v1;
+	//Application::TeleOp_V1 m_tele;
+	Application::TeleOp_V2 m_tele;
 public:
 	RobotTester_Internal()
 	{
@@ -20,15 +27,15 @@ public:
 	}
 	void init()
 	{
-		m_tele_v1.init();
+		m_tele.init();
 	}
 	void StartStreaming()
 	{
-		m_tele_v1.Start();
+		m_tele.Start();
 	}
 	void StopStreaming()
 	{
-		m_tele_v1.Stop();
+		m_tele.Stop();
 	}
 };
 
