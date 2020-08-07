@@ -6,6 +6,7 @@
 #include <iostream>
 #include <math.h>
 #include <assert.h>
+#include <algorithm>
 #include "../../../Base/Base_Includes.h"
 #include "../../../Base/Vec2d.h"
 #include "../../../Base/Misc.h"
@@ -20,7 +21,11 @@
 #include "TeleOpV2.h"
 
 //We can specify the linking in code
-//TODO provide link and dll binaries, so other's needn't build the viewer
+//https://www.dropbox.com/s/bn7ffxb7yqinzme/OSG_Viewer_x64.zip?dl=0
+//unzip this to here: .\Robot_Simulation\Source\Modules\Output\OSG_Viewer
+//if done correctly an x64 folder will be in the OSG_Viewer folder, then you can link and the 
+//custom build step will auto copy the dll's needed to run
+
 #ifdef _WIN64
 #ifdef _DEBUG
 #pragma comment(lib,"../../../Modules/Output/OSG_Viewer/x64/Debug/OSG_Viewer.lib")
@@ -53,6 +58,98 @@ private:
 	//These typically are constants, but if we have gear shifting they can change
 	double m_maxspeed; //max velocity forward in feet per second
 	double m_max_heading_rad;  //max angular velocity in radians
+	double m_dTime_s=0.016;  //cached so other callbacks can access
+	class Keyboard_State
+	{
+	private:
+		union uKeyState
+		{
+			struct defined
+			{
+				double m_X;
+				double m_Y;
+				double m_Z;
+			} bits;
+			struct AsRaw
+			{
+				double element[3];
+			} raw;
+		} m_state,m_rate;
+	public:
+		Keyboard_State()
+		{
+			m_state = { 0 };
+			m_rate.raw = { 0.0 };
+		}
+		void UpdateKeys(double dTime_s,int key, bool press)
+		{
+			const double max_rate = 8.0;  //have some max acceleration
+			const bool StickForwardReverse = true;
+			if ((key == 'w')||(key == 0xff52))  //ff52 = up
+			{
+				m_rate.bits.m_Y = press ? -max_rate : 0.0;
+				if ((!StickForwardReverse)||(key==0xff52))
+				{
+					//Stop moving forward if key is released
+					if (!press)
+						m_state.bits.m_Y = 0.0;
+				}
+			}
+			else if ((key == 's')||(key==0xFF54)) //ff54 = down
+			{
+				m_rate.bits.m_Y = press ? max_rate : 0.0;
+				if ((!StickForwardReverse)||(key == 0xFF54))
+				{
+					//Stop moving forward if key is released
+					if (!press)
+						m_state.bits.m_Y = 0.0;
+				}
+			}
+			if (key == 0xFF53) //right arrow
+			{
+				m_rate.bits.m_X = press ? max_rate : 0.0;
+				if (!press)
+					m_state.bits.m_X = 0.0;
+			}
+			else if (key == 0xFF51) //left arrow
+			{
+				m_rate.bits.m_X = press ? -max_rate : 0.0;
+				if (!press)
+					m_state.bits.m_X = 0.0;
+			}
+
+			if (key == 'd')
+			{
+				m_rate.bits.m_Z = press ? max_rate : 0.0;
+				if (!press)
+					m_state.bits.m_Z = 0.0;
+			}
+			else if (key == 'a')
+			{
+				m_rate.bits.m_Z = press ? -max_rate : 0.0;
+				if (!press)
+					m_state.bits.m_Z = 0.0;
+			}
+
+			//just do a full state update here
+			for (size_t i = 0; i < 3; i++)
+			{
+				if (key == 'x')
+				{
+					m_state.raw.element[i] = m_rate.raw.element[i] = 0.0;
+				}
+
+				m_state.raw.element[i] += m_rate.raw.element[i] * dTime_s;
+				//clip range
+				m_state.raw.element[i] = min(1.0, max(-1.0, m_state.raw.element[i]));
+			}
+		}
+		uKeyState GetState() const { return m_state; }
+		void Reset()
+		{
+			m_state = m_rate = { 0 };
+		}
+	} m_Keyboard;
 	#pragma endregion
 
 	void UpdateVariables()
@@ -97,41 +194,47 @@ private:
 		using JoystickInfo = dx_Joystick::JoystickInfo;
 		size_t JoyNum = 0;
 
+		dx_Joystick::JoyState joyinfo = {0}; //setup joy zero'd out
+
 		size_t NoJoySticks = m_joystick.GetNoJoysticksFound();
 		if (NoJoySticks)
 		{
 			//printf("Button: 2=exit, x axis=strafe, y axis=forward/reverse, z axis turn \n");
-			dx_Joystick::JoyState joyinfo;
-			memset(&joyinfo, 0, sizeof(dx_Joystick::JoyState));
-			if (m_joystick.read_joystick(JoyNum, joyinfo))
-			{
-				//Get an input from the controllers to feed in... we'll hard code the x and y axis
-				m_robot.UpdateVelocities(Feet2Meters(m_maxspeed*joyinfo.lY*-1.0), Feet2Meters(m_maxspeed*joyinfo.lX), joyinfo.lZ * m_max_heading_rad);
-				//because of properties to factor we need to interpret the actual velocities resolved from the kinematics by inverse kinematics
-				m_Entity_Input.InterpolateVelocities(m_robot.GetIntendedVelocities());
-
-				//Here is how is we can use or not use motion control, some interface... the motion control is already linked to entity
-				//so this makes it easy to use
-
-				#if 0
-				//Now we can update the entity with this inverse kinematic input
-				m_Entity.SetAngularVelocity(m_Entity_Input.GetAngularVelocity());
-				m_Entity.SetLinearVelocity_local(m_Entity_Input.GetLocalVelocityY(), m_Entity_Input.GetLocalVelocityX());
-				#else
-				//Now we can update the entity with this inverse kinematic input
-				m_MotionControl2D.SetAngularVelocity(m_Entity_Input.GetAngularVelocity());
-				m_MotionControl2D.SetLinearVelocity_local(m_Entity_Input.GetLocalVelocityY(), m_Entity_Input.GetLocalVelocityX());
-				#endif
-
-				//This comes in handy for testing
-				if (joyinfo.ButtonBank[0] == 1)
-					Reset();
-			}
+			m_joystick.read_joystick(JoyNum, joyinfo);
 		}
+		{
+			//Get an input from the controllers to feed in... we'll hard code the x and y axis from both joy and keyboard
+			//we simply combine them so they can work inter-changeably (e.g. keyboard for strafing, joy for turning)
+			m_robot.UpdateVelocities(
+				Feet2Meters(m_maxspeed*(joyinfo.lY+m_Keyboard.GetState().bits.m_Y)*-1.0), 
+				Feet2Meters(m_maxspeed*(joyinfo.lX+m_Keyboard.GetState().bits.m_X)), 
+				(joyinfo.lZ+m_Keyboard.GetState().bits.m_Z) * m_max_heading_rad);
+			//because of properties to factor we need to interpret the actual velocities resolved from the kinematics by inverse kinematics
+			m_Entity_Input.InterpolateVelocities(m_robot.GetIntendedVelocities());
+
+			//Here is how is we can use or not use motion control, some interface... the motion control is already linked to entity
+			//so this makes it easy to use
+
+			#if 0
+			//Now we can update the entity with this inverse kinematic input
+			m_Entity.SetAngularVelocity(m_Entity_Input.GetAngularVelocity());
+			m_Entity.SetLinearVelocity_local(m_Entity_Input.GetLocalVelocityY(), m_Entity_Input.GetLocalVelocityX());
+			#else
+			//Now we can update the entity with this inverse kinematic input
+			m_MotionControl2D.SetAngularVelocity(m_Entity_Input.GetAngularVelocity());
+			m_MotionControl2D.SetLinearVelocity_local(m_Entity_Input.GetLocalVelocityY(), m_Entity_Input.GetLocalVelocityX());
+			#endif
+
+			//This comes in handy for testing
+			if (joyinfo.ButtonBank[0] == 1)
+				Reset();
+		}
+		
 	}
 
 	void TimeSliceLoop(double dTime_s)
 	{
+		m_dTime_s = dTime_s;
 		//Grab kinematic velocities from controller
 		GetInputSlice();
 		//Update the predicted motion for this time slice
@@ -158,13 +261,14 @@ private:
 				//give the robot its time slice to process them
 				m_RobotUI.TimeChange(dTime_s);
 			});
-			#if 0
 			viewer.SetKeyboardCallback(
 				[&](int key, bool press)
 			{
-				printf("key=%d press=%d\n", key, press);
+				//printf("key=%d press=%d\n", key, press);
+				m_Keyboard.UpdateKeys(m_dTime_s, key, press);
+				if (key == ' ' && press == false)
+					Reset();
 			});
-			#endif
 		}
 		else
 		{
@@ -182,6 +286,8 @@ public:
 	void Reset()
 	{
 		m_Entity.Reset();
+		m_MotionControl2D.Reset();
+		m_Keyboard.Reset();
 	}
 
 	void init()

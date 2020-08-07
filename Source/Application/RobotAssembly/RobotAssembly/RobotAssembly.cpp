@@ -560,7 +560,11 @@ bool CommandLineInterface()
 			}
 			else if (!_strnicmp(input_line, "test", 4))
 			{
-				tester(str_1);
+				//Run tests if we explicitly ask for them; otherwise start up the main test
+				if (str_1[0] != 0)
+					tester(str_1);
+				else
+					m_RobotTester.Start();
 			}
 			else if (!_strnicmp(input_line, "reset", 5))
 			{
