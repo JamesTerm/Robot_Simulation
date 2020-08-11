@@ -13,7 +13,7 @@ To help avoid confusion I should address a couple of things to be aware of:
 
 ### Multiple projects
 
-Usually we only have one project to build, and it has everything in it.  This is partially true, as the "Launcher" currently is the Driver Station.  So if you just want to build and run the main program, this is all you need, and may be a good starting point to see what this code has to offer.  The Robot Assembly project is essentially a command driven version of the driver station, but also has various tests within it to test multiple objects to interact.  This is a good project to work with when trying to understand and test linking objects.
+Usually we only have one project to build, and it has everything in it.  This is partially true, as the "Launcher" currently is the *Driver Station*.  So if you just want to build and run the main program, this is all you need, and may be a good starting point to see what this code has to offer.  The *Robot Assembly* project is essentially a command driven version of the driver station, but also has various tests within it to test multiple objects to interact.  This is a good project to work with when trying to understand and test linking objects.
 
 The other projects are in each module so that each module can be tested by itself and those can have special unit test cases to ensure the module can handle strategic stresses as deemed fit.  They also show how to use them (without the clutter of other objects as it is in the assembly project).  The physical file organization itself is just how visual studio works by default.
 
@@ -21,7 +21,7 @@ You may ask, couldn't all of these modules be projects in one solution where eac
 
 ### Optional way to avoid needing to build OpenSceneGraph
 
-To start, the most important thing I wished to avoid is any committed dependency for OpenSceneGraph (a.k.a. osg).  The main reason is that we may decide to swap out osg for a different viewer like unreal, and we may even want to experiment with 3D view as well like they do for the WPI simulation. Given this I've made it as such where you can completely avoid building osg by pulling the drop box binaries and placing them in the OSG_Viewer folder I have detailed instruction in TeleOpV2.cpp that has the link and where to put it.  If you want to build OpenSceneGraph I may put some instruction on this, but for now I'm discouraging this because it will take focus away from the robot code.  That said, I am happy to add instructions for this as needed.
+To start, the most important thing I wished to avoid is any committed dependency for OpenSceneGraph (a.k.a. osg).  The main reason is that we may decide to swap out osg for a different viewer like unreal, and we may even want to experiment with 3D view as well like they do for the WPI simulation. Given this I've made it as such where you can completely avoid building osg by pulling the drop box binaries and placing them in the OSG_Viewer folder.  I have detailed instruction in TeleOpV2.cpp that has the link and where to put it.  If you want to build OpenSceneGraph I may put some instruction on this, but for now I'm discouraging this because it will take focus away from the robot code.  That said, I am happy to add instructions for this as needed.
 
 ---
 
