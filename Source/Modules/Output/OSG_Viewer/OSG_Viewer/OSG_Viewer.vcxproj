@@ -167,6 +167,7 @@
     <ClCompile Include="TextFontData.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Entity_UI.h" />
     <ClInclude Include="ImportExports.h" />
     <ClInclude Include="OSG_Viewer.h" />
     <ClInclude Include="stdafx.h" />

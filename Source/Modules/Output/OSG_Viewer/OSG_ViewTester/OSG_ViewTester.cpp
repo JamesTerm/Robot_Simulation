@@ -2,6 +2,9 @@
 #include <Windows.h>
 #include "../OSG_Viewer/OSG_Viewer.h"
 #include "../OSG_Viewer/SwerveRobot_UI.h"
+#include "../OSG_Viewer/Entity_UI.h"
+
+//#define __TestEntityUI__
 
 #pragma region _main_
 
@@ -54,6 +57,56 @@ __inline void prompt()
 namespace Module
 {
 	namespace Output {
+
+class EntityTest
+{
+private:
+	Entity_UI m_Robot;
+	Entity_UI::Entity_State m_current_state = {};
+	OSG_Viewer *m_viewer = nullptr;
+public:
+	void init(OSG_Viewer &viewer)
+	{
+		m_viewer = &viewer; //cache to remove hook
+		//Tell viewer to look at our scene for our object
+		viewer.SetSceneCallback([&](void *rootNode, void *geode) { m_Robot.UpdateScene(geode, true); });
+		//Anytime robot needs updates link it to our current state
+		m_Robot.SetEntity_Callback([&]() {	return m_current_state;	});
+		//When viewer updates a frame
+		viewer.SetUpdateCallback(
+			[&](double dTime_s)
+		{
+			//any updates can go here to the current state
+			//--- here  (optional)
+			//give the robot its time slice to process them
+			m_Robot.TimeChange(dTime_s);
+		});
+		viewer.SetKeyboardCallback(
+			[&](int key, bool press)
+		{
+			printf("key=%d press=%d\n",key,press);
+		});
+		//Good to go... now initialize the robot
+		m_Robot.Initialize();
+	}
+	~EntityTest()
+	{
+		//clear hooks
+		if (m_viewer)
+		{
+			m_Robot.SetEntity_Callback(nullptr);
+			m_viewer->SetSceneCallback(nullptr);
+			m_viewer->SetUpdateCallback(nullptr);
+			m_viewer->SetKeyboardCallback(nullptr);
+			m_viewer = nullptr;  //pedantic... we are done with it
+		}
+	}
+	//Access the current state for testing
+	Entity_UI::Entity_State &get_current_state_rw() 
+	{ 
+		return m_current_state; 
+	}
+};
 
 class SwerveRobotTest
 {
@@ -132,7 +185,11 @@ bool CommandLineInterface()
 	using namespace Module::Output;
 	OSG_Viewer viewer_test;  //setup our viewer now
 	viewer_test.init();
+	#ifdef __TestEntityUI__
+	EntityTest robot;
+	#else
 	SwerveRobotTest robot;
+	#endif
 	while (prompt(), cin.getline(input_line, 128))
 	{
 		//init args
@@ -169,12 +226,13 @@ bool CommandLineInterface()
 				robot.get_current_state_rw().Pos_m.x = Feet2Meters(atof(str_1));
 				robot.get_current_state_rw().Pos_m.y = Feet2Meters(atof(str_2));
 			}
+			#ifndef __TestEntityUI__
 			else if (!_strnicmp(input_line, "vel", 3))
 			{
 				size_t index = atoi(str_1);
 				robot.get_current_state_rw().SwerveVelocitiesFromIndex[index] = DEG_2_RAD(atof(str_2));
 			}
-
+			#endif
 			else if (!_strnicmp(input_line, "turn", 4))
 			{
 				robot.get_current_state_rw().Att_r = DEG_2_RAD(atof(str_1));

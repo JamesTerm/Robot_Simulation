@@ -4,6 +4,7 @@
 #include <conio.h>
 #include "OSG_Viewer.h"
 #include "SwerveRobot_UI.h"
+#include "Entity_UI.h"
 
 #include <osgUtil/Optimizer>
 
@@ -5055,8 +5056,8 @@ public:
 
 #pragma endregion
 #pragma region _robot Actor Text objects_
-#pragma region _Common UI_
 
+#pragma region _Common UI_
 #pragma region _local global 2D converters_
 inline Vec2D LocalToGlobal(double Heading, const Vec2D &LocalVector)
 {
@@ -5070,6 +5071,139 @@ inline Vec2D GlobalToLocal(double Heading, const Vec2D &GlobalVector)
 		cos(-Heading)*GlobalVector[1] + sin(Heading)*GlobalVector[0]);
 }
 #pragma endregion
+
+class EntityUI_Internal : public Robot_Tester::EntityPropertiesInterface
+{
+public:
+	#pragma region _entity state_
+	using Entity_State = Entity_UI::Entity_State;
+	static Entity_State DefaultRobotState()
+	{
+		static Entity_State::Vector2D Pos_m;
+		static double IntendedOrientation;
+		Entity_State ret =
+		{ Pos_m,  0,
+			IntendedOrientation
+		};
+		return ret;
+	}
+	#pragma endregion
+	#pragma region _entity properties_
+	struct Entity_Properties
+	{
+		//EPI references these
+		std::string &entity_name;     //EPIrrksa
+		Vec2D &Dimensions;            //EPIrrksa   x-width, y-length in meters
+		Vec2D &Character_Dimensions;  //EPIrrksa
+		std::string text_image;
+	};
+	//Note: this makes it possible to not need a callback, and provides a good template for new client code
+	static Entity_Properties DefaultRobotProps()
+	{
+		static std::string entity_name = "default";
+		static Vec2D Dimensions = Vec2D(0.5,0.5);  //width, length (this is how it is in TestShip.lua)
+		static Vec2D Character_Dimensions = Vec2D(7.0, 2.0);  //width, length (font chars not robot's (27.5, 19.5))
+
+		Entity_Properties ret =
+		{
+			entity_name,
+			Dimensions,
+			Character_Dimensions,
+			"/^\\\n-||X||-"
+		};
+		return ret;
+	}
+	#pragma endregion
+private:
+	#pragma region _members_
+	osg::ref_ptr<Robot_Tester::Actor_Text> m_Actor;
+	std::function<Entity_State()> m_Entity = DefaultRobotState;
+	std::function<Entity_Properties()> m_Entity_props = DefaultRobotProps;
+	mutable Vec2D m_Pos_m;  //for backward compatibility
+	mutable double m_IntendedOrientation;
+	#pragma endregion
+	#pragma region _EntityPropertiesInterface_
+protected: //from EntityPropertiesInterface
+	virtual void UI_Init(Robot_Tester::Actor_Text *parent)
+	{
+	}
+	virtual void custom_update(osg::NodeVisitor *nv, osg::Drawable *draw, const osg::Vec3 &parent_pos)
+	{
+	}
+	virtual void Text_SizeToUse(double SizeToUse)
+	{
+	}
+	virtual void UpdateScene(osg::Geode *geode, bool AddOrRemove)
+	{
+		using namespace Robot_Tester;
+		//Note: update scene get called repeatedly, so we only reconfigure this for new actors
+		//in our case at this level we'll never change, so in essence this will be called once
+		//in the past the Game client would add or remove actors, so this could be delegated to
+		//work that way if we are drawing multiple actors
+		if (!m_Actor)
+		{
+			//setup our actor
+			m_Actor = new Actor_Text(m_Entity_props().text_image.c_str());
+			m_Actor->GetCharacterDimensions() = m_Entity_props().Character_Dimensions;
+			//This can be removed if we do not want to see this image
+			m_Actor->Init_IntendedOrientation();
+			//Bind the EPI with its actor
+			m_Actor->SetEntityProperties_Interface(this);
+			geode->addDrawable(m_Actor->GetText());
+			if (m_Actor->GetIntendedOrientation().valid())
+				geode->addDrawable(m_Actor->GetIntendedOrientation());
+			//since we are calling directly here... do not need to call this
+			//m_Actor->UpdateScene_Additional(geode, true); //Add any additional nodes
+		}
+	}
+	//Implement with our callback, not going to force a coupling with entity 2D
+	virtual const Vec2D &GetPos_m() const
+	{
+		//Note: this is backward compatible so I am not too worried about the conversion
+		Entity_State::Vector2D Pos_m = m_Entity().Pos_m;
+		m_Pos_m = Vec2D(Pos_m.x, Pos_m.y);
+		return m_Pos_m;
+	}
+	virtual double GetAtt_r() const
+	{
+		return m_Entity().Att_r;
+	}
+	virtual const std::string &GetName() const
+	{
+		return m_Entity_props().entity_name;
+	}
+	virtual const Vec2D &GetDimensions() const
+	{
+		return m_Entity_props().Dimensions;
+	}
+	virtual const double &GetIntendedOrientation() const
+	{
+		//Note: this is backward compatible so I am not too worried about the conversion
+		m_IntendedOrientation = m_Entity().IntendedOrientation;
+		return m_IntendedOrientation;
+	}
+	#pragma endregion
+public:
+	void SetEntity_Callback(std::function<Entity_State()> callback)
+	{
+		m_Entity = callback;
+	}
+	//TODO expose Entity_Properties
+	void SetEntity_props_Callback(std::function<Entity_Properties()> callback)
+	{
+		m_Entity_props = callback;
+	}
+	//Be sure to set callback before initialize
+	virtual void Initialize()
+	{
+		//Note: actor gets set up in the update scene
+	}
+	virtual void TimeChange(double dTime_s)
+	{
+		Entity_State _ = m_Entity();
+	}
+	EntityPropertiesInterface &As_EPI() { return *this; }
+};
 
 class Side_Wheel_UI
 {
@@ -5351,8 +5485,8 @@ public:
 	static SwerveRobot_Properties DefaultRobotProps()
 	{
 		static std::string entity_name = "default";
-		static Vec2D Dimensions = Vec2D( Inches2Meters(19.5), Inches2Meters(27.5));  //length, width (font chars not robot's (27.5, 19.5))
-		static Vec2D Character_Dimensions = Vec2D(5.0, 5.0);  //length, width (font chars not robot's (27.5, 19.5))
+		static Vec2D Dimensions = Vec2D( Inches2Meters(19.5), Inches2Meters(27.5));  //width length
+		static Vec2D Character_Dimensions = Vec2D(5.0, 5.0);  //width, length (font chars not robot's dimensions)
 
 		SwerveRobot_Properties ret =
 		{ 
@@ -6275,6 +6409,29 @@ void OSG_Viewer::Test(size_t index)
 	m_OSG_Viewer->Test(index);
 }
 #pragma endregion
+#pragma region _Entity UI_
+Entity_UI::Entity_UI()
+{
+	//Instantiate now so we can set hooks before initialize
+	m_Robot = std::make_shared<EntityUI_Internal>();
+}
+void Entity_UI::SetEntity_Callback(std::function<Entity_State()> callback)
+{
+	m_Robot->SetEntity_Callback(callback);
+}
+void Entity_UI::UpdateScene(void *geode, bool AddOrRemove)
+{
+	m_Robot->As_EPI().UpdateScene((osg::Geode *)geode, AddOrRemove);
+}
+void Entity_UI::Initialize()
+{
+	m_Robot->Initialize();
+}
+void Entity_UI::TimeChange(double dTime_s)
+{
+	m_Robot->TimeChange(dTime_s);
+}
+#pragma endregion
 #pragma region _Swerve Robot UI_
 SwerveRobot_UI::SwerveRobot_UI()
 {
@@ -6297,8 +6454,8 @@ void SwerveRobot_UI::TimeChange(double dTime_s)
 {
 	m_Robot->TimeChange(dTime_s);
 }
-
 #pragma endregion
+
 #pragma endregion
 }}
 #pragma endregion

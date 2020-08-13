@@ -35,5 +35,8 @@
     <ClInclude Include="ImportExports.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Entity_UI.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
