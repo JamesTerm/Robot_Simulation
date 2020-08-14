@@ -19,7 +19,7 @@ void TankTest()
 	//with the drop center only 4 wheels are touching at any given time (most of the time)
 	Vec2D wheel_dimensions(Inches2Meters(12), Inches2Meters(24));
 	//Note: In inch units the length of 12 and 24 is roughly 26.83 where it's the
-	//hypotonuse of a 12 24 triangle
+	//hypotenuse of a 12 24 triangle
 	properties props=
 	{
 	wheel_dimensions.length(),	//distance from diagonal for 4WD or one set of 4 wheels for 6WD
@@ -53,9 +53,43 @@ void TankTest()
 	printf("Tank test, end----------------\n");
 }
 
+void BypassTest()
+{
+	//This test is meant to be compared against the tank using the same inputs
+	//to show how the methods are being used
+	//No properties needed... moving along
+	printf("Bypass test, begin----------------\n");
+	//Instantiate our bypass object
+	Bypass_Drive ship;
+	//Set the properties... nothing to set for this one
+	//ship.SetProperties(props);
+
+	//Get an input from the controllers to feed in... we'll hard code something interesting
+	//Assume our robot's top speed is 12 fps
+	//Let's try half speed forward as an easy test
+	ship.UpdateVelocities(Feet2Meters(6.0),0.0, 0.0);
+	//Send to output
+	printf("half speed forward VolY=%.2f turn=%.2f\n ",
+		Meters2Feet(ship.GetLocalVelocityY()), RAD_2_DEG(ship.GetAngularVelocity()));
+
+	//Try a full turn in one second
+	ship.UpdateVelocities(0.0, 0.0 , Pi2);
+
+	printf("360 in a second VelY=%.2f turn=%.2f\n ",
+		Meters2Feet(ship.GetLocalVelocityY()), RAD_2_DEG(ship.GetAngularVelocity()));
+
+	//Try a half speed and half turn
+	ship.UpdateVelocities(Feet2Meters(3.0),0.0, PI_2);
+	printf("90 in a second and quarter speed forward VelY=%.2f turn=%.2f\n ",
+		Meters2Feet(ship.GetLocalVelocityY()), RAD_2_DEG(ship.GetAngularVelocity()));
+
+	printf("ship test, end----------------\n");
+}
+
 int main()
 {
 	TankTest();
+	BypassTest();
 	//TODO swerve
 	return 0;
 }

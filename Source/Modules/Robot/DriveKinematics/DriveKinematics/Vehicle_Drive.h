@@ -3,6 +3,40 @@
 namespace Module {
 	namespace Robot {
 
+class Bypass_Drive
+{
+public:
+	//This helps get an overview of how the methods work among all drives, also useful to plugin in
+	//to test physics without needing to translate to a different system
+	void ResetPos()
+	{
+		m_LocalVelocity_x = m_LocalVelocity_y = m_AngularVelocity = 0;
+	}
+	//This method is always the same for all drives, as it comes from user input, to be translated
+	//to the drives system... (no translation here needed)
+	void UpdateVelocities(double FWD, double STR, double RCW)
+	{
+		m_LocalVelocity_y = FWD;
+		m_LocalVelocity_x = STR;
+		m_AngularVelocity = RCW;
+	}
+	//The parameters of this method are the input of the drive's system of velocities, which so happen
+	//to match UpdateVelocities() for this class.
+	void InterpolateVelocities(double forward, double right, double clockwise)
+	{
+		UpdateVelocities(forward, right, clockwise);
+	}
+	//The accessors and variables between bypass_drive and inv_bypass_drive are identical, so we can
+	//just use the same set for both cases
+	double GetLocalVelocityX() const { return m_LocalVelocity_x; }
+	double GetLocalVelocityY() const { return m_LocalVelocity_y; }
+	double GetAngularVelocity() const { return m_AngularVelocity; }
+private:
+	double m_LocalVelocity_y = 0.0;
+	double m_LocalVelocity_x = 0.0;
+	double m_AngularVelocity = 0.0;
+};
+
 class  Tank_Drive
 {
 public:
