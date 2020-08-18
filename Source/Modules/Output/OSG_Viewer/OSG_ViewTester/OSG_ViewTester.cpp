@@ -3,8 +3,13 @@
 #include "../OSG_Viewer/OSG_Viewer.h"
 #include "../OSG_Viewer/SwerveRobot_UI.h"
 #include "../OSG_Viewer/Entity_UI.h"
+#include "../OSG_Viewer/Keyboard_State.h"
 
-//#define __TestEntityUI__
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+#define DEG_2_RAD(x)		((x)*M_PI/180.0)
+#define Feet2Meters(x)		((x)*0.3048)
 
 #pragma region _main_
 
@@ -63,48 +68,27 @@ class EntityTest
 private:
 	Entity_UI m_Robot;
 	Entity_UI::Entity_State m_current_state = {};
-	OSG_Viewer *m_viewer = nullptr;
 public:
-	void init(OSG_Viewer &viewer)
+	void init()
 	{
-		m_viewer = &viewer; //cache to remove hook
-		//Tell viewer to look at our scene for our object
-		viewer.SetSceneCallback([&](void *rootNode, void *geode) { m_Robot.UpdateScene(geode, true); });
 		//Anytime robot needs updates link it to our current state
 		m_Robot.SetEntity_Callback([&]() {	return m_current_state;	});
-		//When viewer updates a frame
-		viewer.SetUpdateCallback(
-			[&](double dTime_s)
-		{
-			//any updates can go here to the current state
-			//--- here  (optional)
-			//give the robot its time slice to process them
-			m_Robot.TimeChange(dTime_s);
-		});
-		viewer.SetKeyboardCallback(
-			[&](int key, bool press)
-		{
-			printf("key=%d press=%d\n",key,press);
-		});
 		//Good to go... now initialize the robot
 		m_Robot.Initialize();
 	}
 	~EntityTest()
 	{
 		//clear hooks
-		if (m_viewer)
-		{
-			m_Robot.SetEntity_Callback(nullptr);
-			m_viewer->SetSceneCallback(nullptr);
-			m_viewer->SetUpdateCallback(nullptr);
-			m_viewer->SetKeyboardCallback(nullptr);
-			m_viewer = nullptr;  //pedantic... we are done with it
-		}
+		m_Robot.SetEntity_Callback(nullptr);
 	}
 	//Access the current state for testing
 	Entity_UI::Entity_State &get_current_state_rw() 
 	{ 
 		return m_current_state; 
+	}
+	Entity_UI &As_EntityUI()
+	{
+		return m_Robot;
 	}
 };
 
@@ -115,55 +99,116 @@ private:
 	SwerveRobot_UI::SwerveRobot_State m_current_state = {};
 	OSG_Viewer *m_viewer = nullptr;
 public:
-	void init(OSG_Viewer &viewer)
+	void init()
 	{
-		m_viewer = &viewer; //cache to remove hook
-		//Tell viewer to look at our scene for our object
-		viewer.SetSceneCallback([&](void *rootNode, void *geode) { m_Robot.UpdateScene(geode, true); });
 		//Anytime robot needs updates link it to our current state
 		m_Robot.SetSwerveRobot_Callback([&]() {	return m_current_state;	});
-		//When viewer updates a frame
-		viewer.SetUpdateCallback(
-			[&](double dTime_s)
-		{
-			//any updates can go here to the current state
-			//--- here  (optional)
-			//give the robot its time slice to process them
-			m_Robot.TimeChange(dTime_s);
-		});
-		viewer.SetKeyboardCallback(
-			[&](int key, bool press)
-		{
-			printf("key=%d press=%d\n",key,press);
-		});
 		//Good to go... now initialize the robot
 		m_Robot.Initialize();
 	}
 	~SwerveRobotTest()
 	{
 		//clear hooks
-		if (m_viewer)
-		{
-			m_Robot.SetSwerveRobot_Callback(nullptr);
-			m_viewer->SetSceneCallback(nullptr);
-			m_viewer->SetUpdateCallback(nullptr);
-			m_viewer->SetKeyboardCallback(nullptr);
-			m_viewer = nullptr;  //pedantic... we are done with it
-		}
+		m_Robot.SetSwerveRobot_Callback(nullptr);
 	}
 	//Access the current state for testing
 	SwerveRobot_UI::SwerveRobot_State &get_current_state_rw() 
 	{ 
 		return m_current_state; 
 	}
+	SwerveRobot_UI &As_SwerveRobot_UI()
+	{
+		return m_Robot;
+	}
 };
-}}
 
-#ifndef M_PI
-#define M_PI 3.14159265358979323846
-#endif
-#define DEG_2_RAD(x)		((x)*M_PI/180.0)
-#define Feet2Meters(x)		((x)*0.3048)
+class EntityManager
+{
+private:
+	EntityTest m_Entity;
+	SwerveRobotTest m_Robot;
+	OSG_Viewer *m_viewer = nullptr;
+	Input::Keyboard_State m_Keyboard;
+	double m_dTime_s=0.016;
+
+	void SetHooks(bool enable)
+	{
+		if (enable)
+		{
+			//Tell viewer to look at our scene for our object
+			m_viewer->SetSceneCallback([&](void *rootNode, void *geode) 
+			{ 
+				m_Robot.As_SwerveRobot_UI().UpdateScene(geode, true); 
+				m_Entity.As_EntityUI().UpdateScene(geode, true);
+			});
+			//When viewer updates a frame
+			m_viewer->SetUpdateCallback(
+				[&](double dTime_s)
+			{
+				m_dTime_s = dTime_s; //for other callbacks to access
+				{
+					//any updates can go here to the current state
+					//--- here  (optional)
+					//we can get an idea of how the keyboard state works by adding the state multipliers to the position
+					//and attitude
+					m_Entity.get_current_state_rw().Att_r = m_Keyboard.GetState().bits.m_Z * M_PI;
+					m_Entity.get_current_state_rw().Pos_m.x = (m_Keyboard.GetState().bits.m_X * Feet2Meters(3.0)) + Feet2Meters(5);
+					m_Entity.get_current_state_rw().Pos_m.y = m_Keyboard.GetState().bits.m_Y * Feet2Meters(3.0);
+				}
+				//give the robot its time slice to process them
+				m_Robot.As_SwerveRobot_UI().TimeChange(dTime_s);
+				m_Entity.As_EntityUI().TimeChange(dTime_s);
+			});
+			m_viewer->SetKeyboardCallback(
+				[&](int key, bool press)
+			{
+				//printf("key=%d press=%d\n", key, press);
+				m_Keyboard.UpdateKeys(m_dTime_s, key, press);
+			});
+		}
+		else
+		{
+			m_viewer->SetSceneCallback(nullptr);
+			m_viewer->SetUpdateCallback(nullptr);
+			m_viewer->SetKeyboardCallback(nullptr);
+		}
+	}
+public:
+	EntityManager(OSG_Viewer &viewer)
+	{
+		m_viewer = &viewer; //cache to remove hook
+		SetHooks(true);
+	}
+	void init()
+	{
+		m_Robot.init();
+		m_Entity.init();
+		m_Entity.get_current_state_rw().Pos_m.x = Feet2Meters(5);
+	}
+	//Allow to unwind early
+	void ShutDown()
+	{
+		if (m_viewer)
+		{
+			SetHooks(false);
+			m_viewer = nullptr;
+		}
+	}
+	~EntityManager()
+	{
+		ShutDown();
+	}
+	EntityTest &As_EntityTest()
+	{
+		return m_Entity;
+	}
+	SwerveRobotTest &As_SwerveRobotTest()
+	{
+		return m_Robot;
+	}
+};
+
+}}
 
 bool CommandLineInterface()
 {
@@ -185,11 +230,7 @@ bool CommandLineInterface()
 	using namespace Module::Output;
 	OSG_Viewer viewer_test;  //setup our viewer now
 	viewer_test.init();
-	#ifdef __TestEntityUI__
-	EntityTest robot;
-	#else
-	SwerveRobotTest robot;
-	#endif
+	EntityManager em(viewer_test);
 	while (prompt(), cin.getline(input_line, 128))
 	{
 		//init args
@@ -210,7 +251,7 @@ bool CommandLineInterface()
 			}
 			else if (!_strnicmp(input_line, "init", 4))
 			{
-				robot.init(viewer_test);
+				em.init();
 				viewer_test.StartStreaming();
 			}
 			else if (!_strnicmp(input_line, "start", 5))
@@ -223,23 +264,21 @@ bool CommandLineInterface()
 			}
 			else if (!_strnicmp(input_line, "pos", 3))
 			{
-				robot.get_current_state_rw().Pos_m.x = Feet2Meters(atof(str_1));
-				robot.get_current_state_rw().Pos_m.y = Feet2Meters(atof(str_2));
+				em.As_SwerveRobotTest().get_current_state_rw().Pos_m.x = Feet2Meters(atof(str_1));
+				em.As_SwerveRobotTest().get_current_state_rw().Pos_m.y = Feet2Meters(atof(str_2));
 			}
-			#ifndef __TestEntityUI__
 			else if (!_strnicmp(input_line, "vel", 3))
 			{
 				size_t index = atoi(str_1);
-				robot.get_current_state_rw().SwerveVelocitiesFromIndex[index] = DEG_2_RAD(atof(str_2));
+				em.As_SwerveRobotTest().get_current_state_rw().SwerveVelocitiesFromIndex[index] = DEG_2_RAD(atof(str_2));
 			}
-			#endif
 			else if (!_strnicmp(input_line, "turn", 4))
 			{
-				robot.get_current_state_rw().Att_r = DEG_2_RAD(atof(str_1));
+				em.As_SwerveRobotTest().get_current_state_rw().Att_r = DEG_2_RAD(atof(str_1));
 			}
 			else if (!_strnicmp(input_line, "heading", 6))
 			{
-				robot.get_current_state_rw().IntendedOrientation = DEG_2_RAD(atof(str_1));
+				em.As_SwerveRobotTest().get_current_state_rw().IntendedOrientation = DEG_2_RAD(atof(str_1));
 			}
 			else if (!_strnicmp(input_line, "Exit", 4))
 			{

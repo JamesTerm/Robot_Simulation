@@ -173,6 +173,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\Modules\Input\dx_Joystick_Controller\dx_Joystick_Controller\dx_Joystick.h" />
+    <ClInclude Include="..\..\..\Modules\Output\OSG_Viewer\OSG_Viewer\Keyboard_State.h" />
     <ClInclude Include="..\..\..\Modules\Output\OSG_Viewer\OSG_Viewer\OSG_Viewer.h" />
     <ClInclude Include="..\..\..\Modules\Output\OSG_Viewer\OSG_Viewer\SwerveRobot_UI.h" />
     <ClInclude Include="..\..\..\Modules\Robot\DriveKinematics\DriveKinematics\Vehicle_Drive.h" />

@@ -513,7 +513,7 @@ static void DisplayHelp()
 {
 	printf(
 		"cls\n"
-		"test <test name or number>"
+		"test <test name or number> \n"
 		"start\n"
 		"stop\n"
 		"Help (displays this)\n"
