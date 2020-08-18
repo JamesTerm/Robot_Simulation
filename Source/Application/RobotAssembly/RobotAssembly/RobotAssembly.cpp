@@ -18,8 +18,15 @@
 #include "../../../Modules/Input/dx_Joystick_Controller/dx_Joystick_Controller/dx_Joystick.h"
 #include "../../../Modules/Robot/DriveKinematics/DriveKinematics/Vehicle_Drive.h"
 #include "../../../Modules/Robot/Entity2D/Entity2D/Entity2D.h"
-#include "TeleOpV1.h"
+#include "TeleOpV1.h"  //still a great test which doesn't require OSG (but can be ran separately)
 #include "TeleOpV2.h"
+//Note these are not needed for tests 1-4
+#include "../../../Modules/Robot/MotionControl2D_simple/MotionControl2D/MotionControl2D.h"
+#include "../../../Modules/Output/OSG_Viewer/OSG_Viewer/OSG_Viewer.h"
+#include "../../../Modules/Output/OSG_Viewer/OSG_Viewer/SwerveRobot_UI.h"
+#include "../../../Modules/Output/OSG_Viewer/OSG_Viewer/Entity_UI.h"
+#include "../../../Modules/Output/OSG_Viewer/OSG_Viewer/Keyboard_State.h"
+
 #pragma endregion
 #pragma region _Test01_Tank_Kinematics_with_Joystick_
 
@@ -400,27 +407,337 @@ public:
 	}
 };
 #pragma endregion
+#pragma region _Test05_Test_Bypass_with_OSG_
+class Test05_Test_Bypass_with_OSG
+{
+	//This is essentially a stripped down version of TeleOp V2,
+	//This uses a simpler EntityUI, and a bypass for the kinematics to show exactly what goes on from input to when it gets
+	//the velocities interpreted, this is an ideal minimal setup for testing various kinds of motion control (or lack thereof)
+	//ideal for the start of motion control that deals with physics of a heavy mass
+private:
+	#pragma region _member variables_
+	Module::Localization::Entity2D m_Entity;
+	Module::Robot::Simple::MotionControl2D m_MotionControl2D;
+	Module::Input::dx_Joystick m_joystick;  //Note: always late binding, so we can aggregate direct easy here
+	Module::Robot::Bypass_Drive m_robot;
+	Module::Robot::Bypass_Drive m_Entity_Input;
+	
+	Module::Output::OSG_Viewer m_viewer;
+	Module::Output::Entity_UI m_RobotUI;
+	Module::Output::Entity_UI::uEntity_State m_current_state = {};
+
+	//These typically are constants, but if we have gear shifting they can change
+	double m_maxspeed; //max velocity forward in feet per second
+	double m_max_heading_rad;  //max angular velocity in radians
+	double m_dTime_s=0.016;  //cached so other callbacks can access
+    Module::Input::Keyboard_State m_Keyboard;
+	#pragma endregion
+
+	void UpdateVariables()
+	{
+		Module::Localization::Entity2D &entity = m_Entity;
+		using namespace Module::Localization;
+		Entity2D::Vector2D linear_velocity = entity.GetCurrentVelocity();
+		Vec2D velocity_normalized(linear_velocity.x, linear_velocity.y);
+		double magnitude = velocity_normalized.normalize();
+		//Entity variables-------------------------------------------
+		Entity2D::Vector2D position = entity.GetCurrentPosition();
+		m_current_state.bits.Pos_m.x = position.x;
+		m_current_state.bits.Pos_m.y = position.y;
+		//for swerve the direction of travel is not necessarily the heading, so we show this as well as heading
+		//This is temporary and handy for now, will change once we get AI started
+		m_current_state.bits.IntendedOrientation = atan2(velocity_normalized[0], velocity_normalized[1]);
+		m_current_state.bits.Att_r = entity.GetCurrentHeading();
+		//kinematic variables-------------------------------------------
+	}
+
+	void GetInputSlice()
+	{
+		using namespace Module::Input;
+		using JoystickInfo = dx_Joystick::JoystickInfo;
+		size_t JoyNum = 0;
+
+		dx_Joystick::JoyState joyinfo = {0}; //setup joy zero'd out
+
+		size_t NoJoySticks = m_joystick.GetNoJoysticksFound();
+		if (NoJoySticks)
+		{
+			//printf("Button: 2=exit, x axis=strafe, y axis=forward/reverse, z axis turn \n");
+			m_joystick.read_joystick(JoyNum, joyinfo);
+		}
+		{
+			//Get an input from the controllers to feed in... we'll hard code the x and y axis from both joy and keyboard
+			//we simply combine them so they can work inter-changeably (e.g. keyboard for strafing, joy for turning)
+			m_robot.UpdateVelocities(
+				Feet2Meters(m_maxspeed*(joyinfo.lY+m_Keyboard.GetState().bits.m_Y)*-1.0), 
+				Feet2Meters(m_maxspeed*(joyinfo.lX+m_Keyboard.GetState().bits.m_X)), 
+				(joyinfo.lZ+m_Keyboard.GetState().bits.m_Z) * m_max_heading_rad);
+			//because of properties to factor we need to interpret the actual velocities resolved from the kinematics by inverse kinematics
+			m_Entity_Input.InterpolateVelocities(m_robot.GetLocalVelocityY(),m_robot.GetLocalVelocityX(),m_robot.GetAngularVelocity());
+
+			//Here is how is we can use or not use motion control, some interface... the motion control is already linked to entity
+			//so this makes it easy to use
+
+			#if 0
+			//Now we can update the entity with this inverse kinematic input
+			m_Entity.SetAngularVelocity(m_Entity_Input.GetAngularVelocity());
+			m_Entity.SetLinearVelocity_local(m_Entity_Input.GetLocalVelocityY(), m_Entity_Input.GetLocalVelocityX());
+			#else
+			//Now we can update the entity with this inverse kinematic input
+			m_MotionControl2D.SetAngularVelocity(m_Entity_Input.GetAngularVelocity());
+			m_MotionControl2D.SetLinearVelocity_local(m_Entity_Input.GetLocalVelocityY(), m_Entity_Input.GetLocalVelocityX());
+			#endif
+
+			//This comes in handy for testing
+			if (joyinfo.ButtonBank[0] == 1)
+				Reset();
+		}
+		
+	}
+
+	void TimeSliceLoop(double dTime_s)
+	{
+		m_dTime_s = dTime_s;
+		//Grab kinematic velocities from controller
+		GetInputSlice();
+		//Update the predicted motion for this time slice
+		m_MotionControl2D.TimeSlice(dTime_s);
+		m_Entity.TimeSlice(dTime_s);
+		UpdateVariables();
+	}
+
+	void SetUpHooks(bool enable)
+	{
+		using namespace Module::Output;
+		if (enable)
+		{
+			OSG_Viewer &viewer = m_viewer;
+			viewer.SetSceneCallback([&](void *rootNode, void *geode) { m_RobotUI.UpdateScene(geode, true); });
+			//Anytime robot needs updates link it to our current state
+			m_RobotUI.SetEntity_Callback([&]() {	return m_current_state.bits; });
+			//When viewer updates a frame
+			viewer.SetUpdateCallback(
+				[&](double dTime_s)
+			{
+				//any updates can go here to the current state
+				TimeSliceLoop(dTime_s);
+				//give the robot its time slice to process them
+				m_RobotUI.TimeChange(dTime_s);
+			});
+			viewer.SetKeyboardCallback(
+				[&](int key, bool press)
+			{
+				//printf("key=%d press=%d\n", key, press);
+				m_Keyboard.UpdateKeys(m_dTime_s, key, press);
+				if (key == ' ' && press == false)
+					Reset();
+			});
+		}
+		else
+		{
+			m_RobotUI.SetEntity_Callback(nullptr);
+			m_viewer.SetSceneCallback(nullptr);
+			m_viewer.SetUpdateCallback(nullptr);
+			m_viewer.SetKeyboardCallback(nullptr);
+		}
+	}
+public:
+	Test05_Test_Bypass_with_OSG()
+	{
+		SetUpHooks(true);
+	}
+	void Reset()
+	{
+		m_Entity.Reset();
+		m_MotionControl2D.Reset();
+		m_Keyboard.Reset();
+	}
+	void init()
+	{
+		m_joystick.Init();
+
+		using namespace Module::Robot;
+		//setup some robot properties
+		using properties = Swerve_Drive::properties;
+		//We'll make a square robot for ease to interpret angles
+		Vec2D wheel_dimensions(Inches2Meters(24), Inches2Meters(24));
+		//Assume our robot's top speed is 12 fps
+		m_maxspeed = 12.0;
+		//I could omit, but I want to show no skid; however, we can reserve this if in practice the 2-3 degrees
+		//of precision loss actually does (I don't believe this would ever be significant)
+		const double skid = 1.0;
+		//We'll compute the max angular velocity to use in equation
+		//like with tank spinning in place needs to be half of spinning with full forward
+		//this time... no skid
+		m_max_heading_rad = (2 * Feet2Meters(m_maxspeed) / wheel_dimensions.length()) * skid;
+		//Note: We'll skip properties for motion control since we have good defaults
+		#pragma region _optional linking of entity to motion control_
+		//Now to link up the callbacks for motion control:  Note we can link them up even if we are not using it
+		using Vector2D = Module::Robot::Simple::MotionControl2D::Vector2D;
+		m_MotionControl2D.Set_UpdateGlobalVelocity([&](const Vector2D &new_velocity)
+			{	m_Entity.SetLinearVelocity_global(new_velocity.y, new_velocity.x);
+			});
+		m_MotionControl2D.Set_UpdateHeadingVelocity([&](double new_velocity)
+		{	m_Entity.SetAngularVelocity(new_velocity);
+			});
+		m_MotionControl2D.Set_GetCurrentPosition([&]() -> Vector2D
+		{	
+			//This is a bit annoying, but for the sake of keeping modules independent (not dependent on vector objects)
+			//its worth the hassle
+			Vector2D ret = { m_Entity.GetCurrentPosition().x, m_Entity.GetCurrentPosition().y };
+			return ret;
+		});
+		m_MotionControl2D.Set_GetCurrentHeading([&]() -> double
+		{
+			return m_Entity.GetCurrentHeading();
+		});
+		#pragma endregion
+		Reset();  //for entity variables
+		m_viewer.init();
+		m_RobotUI.Initialize();
+	}
+	void Start()
+	{
+		m_viewer.StartStreaming();
+	}
+	void Stop()
+	{
+		m_viewer.StopStreaming();
+	}
+	~Test05_Test_Bypass_with_OSG()
+	{
+		//Make sure we are stopped
+		Stop();
+		SetUpHooks(false);
+	}
+};
+#pragma endregion
 
 #pragma region _main_
 
-void tester(const char *csz_test)
+#pragma region _DriverStation Tester_
+//We'll be able to pick a driver station tester to use
+class DriverStation_Tester
 {
-	enum tests
+public:
+	enum Testers
 	{
-		eCurrent,
-		eTankTest_Joy,
-		eTankTest_tank_steering,
-		eSwerveTest_Joy,
-		eSwerveTest_tank_steering
+		eTeleOpV1,
+		eTeleOpV2,
+		eBypassKinematics
 	};
+private:
+	#pragma region _Test objects_
+	Application::TeleOp_V1 m_RobotTester_V1;
+	Application::TeleOp_V2 m_RobotTester_V2;
+	Test05_Test_Bypass_with_OSG m_Entity_Bypass;
+	#pragma endregion
+	Testers m_Tester_Selection=eTeleOpV2;
+	bool m_IsInit = false; //provide a valve at this level
+public:
+	//Call this before init
+	void SelectTester(Testers test)
+	{
+		m_Tester_Selection = test;
+	}
+	void Reset()
+	{
+		switch (m_Tester_Selection)
+		{
+		case eTeleOpV1:
+			m_RobotTester_V1.Reset();
+			break;
+		case eTeleOpV2:
+			m_RobotTester_V2.Reset();
+			break;
+		case eBypassKinematics:
+			m_Entity_Bypass.Reset();
+			break;
+		}
+	}
+	void init()
+	{
+		if (!m_IsInit)
+		{
+			switch (m_Tester_Selection)
+			{
+			case eTeleOpV1:
+			case eTeleOpV2:
+				SmartDashboard::init();
+				break;
+			}
+			switch (m_Tester_Selection)
+			{
+			case eTeleOpV1:
+				m_RobotTester_V1.init();
+				break;
+			case eTeleOpV2:
+				m_RobotTester_V2.init();
+				break;
+			case eBypassKinematics:
+				m_Entity_Bypass.init();
+				break;
+			}
+			m_IsInit = true;
+		}
+	}
+	void Start()
+	{
+		if (!m_IsInit)
+			init();
+		switch (m_Tester_Selection)
+		{
+		case eTeleOpV1:
+			m_RobotTester_V1.Start();
+			break;
+		case eTeleOpV2:
+			m_RobotTester_V2.Start();
+			break;
+		case eBypassKinematics:
+			m_Entity_Bypass.Start();
+			break;
+		}
+	}
+	void Stop()
+	{
+		switch (m_Tester_Selection)
+		{
+		case eTeleOpV1:
+			m_RobotTester_V1.Stop();
+			break;
+		case eTeleOpV2:
+			m_RobotTester_V2.Stop();
+			break;
+		case eBypassKinematics:
+			m_Entity_Bypass.Stop();
+			break;
+		}
+	}
+};
+#pragma endregion
 
+enum tests
+{
+	eCurrent,
+	eTankTest_Joy,
+	eTankTest_tank_steering,
+	eSwerveTest_Joy,
+	eSwerveTest_tank_steering,
+	eTeleV1,
+	eBypass
+};
+
+void tester(const char *csz_test, DriverStation_Tester &RobotTester)
+{
 	const char * const csz_tests[] =
 	{
 		"current",
 		"tank1",
 		"tank2",
 		"swerve1",
-		"swerve2"
+		"swerve2",
+		"tele01",
+		"bypass"
 	};
 
 	int Test = atoi(csz_test);
@@ -446,7 +763,15 @@ void tester(const char *csz_test)
 			return;
 		}
 	}
-
+	switch (Test)
+	{
+	case eTankTest_Joy:
+	case eTankTest_tank_steering:
+	case eSwerveTest_Joy:
+	case eSwerveTest_tank_steering:
+	case eTeleV1:
+		SmartDashboard::init();
+	}
 	switch (Test)
 	{
 	case eTankTest_Joy:
@@ -466,14 +791,13 @@ void tester(const char *csz_test)
 	}
 		break;
 	case eSwerveTest_Joy:
-	case eCurrent:
 	{
 		Test03_Swerve_Kinematics_with_Joystick test;
 		test.init();  //good habit to late bind your classes (if possible), makes them easier to work with
 		test();
 		printf("complete\n");
 	}
-	break;
+		break;
 	case eSwerveTest_tank_steering:
 	{
 		Test04_Swerve_Kinematics_with_TankSteering test;
@@ -481,7 +805,17 @@ void tester(const char *csz_test)
 		test();
 		printf("complete\n");
 	}
-	break;
+		break;
+	case eTeleV1:
+		//just change the driver selector and away we go
+		RobotTester.SelectTester(DriverStation_Tester::eTeleOpV1);
+		RobotTester.Start();
+		break;
+	case eBypass:
+	case eCurrent:
+		RobotTester.SelectTester(DriverStation_Tester::eBypassKinematics);
+		RobotTester.Start();
+		break;
 	}
 }
 
@@ -544,9 +878,7 @@ bool CommandLineInterface()
 	cout << "Ready." << endl;
 	#pragma endregion
 
-	//Application::TeleOp_V1 m_RobotTester;
-	Application::TeleOp_V2 m_RobotTester;
-	m_RobotTester.init();
+	DriverStation_Tester m_RobotTester;
 
 	while (prompt(), cin.getline(input_line, 128))
 	{
@@ -562,7 +894,7 @@ bool CommandLineInterface()
 			{
 				//Run tests if we explicitly ask for them; otherwise start up the main test
 				if (str_1[0] != 0)
-					tester(str_1);
+					tester(str_1,m_RobotTester);
 				else
 					m_RobotTester.Start();
 			}
@@ -599,7 +931,6 @@ bool CommandLineInterface()
 
 int main()
 {
-	SmartDashboard::init();
 	CommandLineInterface();
 	SmartDashboard::shutdown();
 	return 0;
