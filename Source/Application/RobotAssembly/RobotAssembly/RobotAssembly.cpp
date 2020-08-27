@@ -16,6 +16,7 @@
 //a few select
 
 #include "../../../Modules/Input/dx_Joystick_Controller/dx_Joystick_Controller/dx_Joystick.h"
+#include "../../../Modules/Input/JoystickConverter.h"
 #include "../../../Modules/Robot/DriveKinematics/DriveKinematics/Vehicle_Drive.h"
 #include "../../../Modules/Robot/Entity2D/Entity2D/Entity2D.h"
 #include "TeleOpV1.h"  //still a great test which doesn't require OSG (but can be ran separately)
@@ -419,6 +420,7 @@ private:
 	Module::Localization::Entity2D m_Entity;
 	Module::Robot::Simple::MotionControl2D m_MotionControl2D;
 	Module::Input::dx_Joystick m_joystick;  //Note: always late binding, so we can aggregate direct easy here
+	Module::Input::Analog_EventEntry m_joystick_options;  //for now a simple one-stop option for all
 	Module::Robot::Bypass_Drive m_robot;
 	Module::Robot::Bypass_Drive m_Entity_Input;
 	
@@ -469,9 +471,9 @@ private:
 			//Get an input from the controllers to feed in... we'll hard code the x and y axis from both joy and keyboard
 			//we simply combine them so they can work inter-changeably (e.g. keyboard for strafing, joy for turning)
 			m_robot.UpdateVelocities(
-				Feet2Meters(m_maxspeed*(joyinfo.lY+m_Keyboard.GetState().bits.m_Y)*-1.0), 
-				Feet2Meters(m_maxspeed*(joyinfo.lX+m_Keyboard.GetState().bits.m_X)), 
-				(joyinfo.lZ+m_Keyboard.GetState().bits.m_Z) * m_max_heading_rad);
+				Feet2Meters(m_maxspeed*(AnalogConversion(joyinfo.lY,m_joystick_options)+m_Keyboard.GetState().bits.m_Y)*-1.0),
+				Feet2Meters(m_maxspeed*(AnalogConversion(joyinfo.lX, m_joystick_options)+m_Keyboard.GetState().bits.m_X)),
+				(AnalogConversion(joyinfo.lZ, m_joystick_options) +m_Keyboard.GetState().bits.m_Z) * m_max_heading_rad);
 			//because of properties to factor we need to interpret the actual velocities resolved from the kinematics by inverse kinematics
 			m_Entity_Input.InterpolateVelocities(m_robot.GetLocalVelocityY(),m_robot.GetLocalVelocityX(),m_robot.GetAngularVelocity());
 
@@ -555,7 +557,12 @@ public:
 	void init()
 	{
 		m_joystick.Init();
-
+		m_joystick_options = { 
+			0.3,   //filter dead zone
+			1.0,   //additional scale
+			1.0,   // curve intensity
+			false  //is flipped
+			};
 		using namespace Module::Robot;
 		//setup some robot properties
 		using properties = Swerve_Drive::properties;

@@ -71,5 +71,8 @@
     <ClInclude Include="..\..\..\Modules\Output\OSG_Viewer\OSG_Viewer\Entity_UI.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\..\Modules\Input\JoystickConverter.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
