@@ -22,7 +22,7 @@
 #include "TeleOpV1.h"  //still a great test which doesn't require OSG (but can be ran separately)
 #include "TeleOpV2.h"
 //Note these are not needed for tests 1-4
-#include "../../../Modules/Robot/MotionControl2D_simple/MotionControl2D/MotionControl2D.h"
+#include "../../../Modules/Robot/MotionControl2D_physics/MotionControl2D_physics/MotionControl2D.h"
 #include "../../../Modules/Output/OSG_Viewer/OSG_Viewer/OSG_Viewer.h"
 #include "../../../Modules/Output/OSG_Viewer/OSG_Viewer/SwerveRobot_UI.h"
 #include "../../../Modules/Output/OSG_Viewer/OSG_Viewer/Entity_UI.h"
@@ -418,7 +418,7 @@ class Test05_Test_Bypass_with_OSG
 private:
 	#pragma region _member variables_
 	Module::Localization::Entity2D m_Entity;
-	Module::Robot::Simple::MotionControl2D m_MotionControl2D;
+	Module::Robot::Physics::MotionControl2D m_MotionControl2D;
 	Module::Input::dx_Joystick m_joystick;  //Note: always late binding, so we can aggregate direct easy here
 	Module::Input::Analog_EventEntry m_joystick_options;  //for now a simple one-stop option for all
 	Module::Robot::Bypass_Drive m_robot;
@@ -580,7 +580,7 @@ public:
 		//Note: We'll skip properties for motion control since we have good defaults
 		#pragma region _optional linking of entity to motion control_
 		//Now to link up the callbacks for motion control:  Note we can link them up even if we are not using it
-		using Vector2D = Module::Robot::Simple::MotionControl2D::Vector2D;
+		using Vector2D = Module::Robot::Physics::MotionControl2D::Vector2D;
 		m_MotionControl2D.Set_UpdateGlobalVelocity([&](const Vector2D &new_velocity)
 			{	m_Entity.SetLinearVelocity_global(new_velocity.y, new_velocity.x);
 			});

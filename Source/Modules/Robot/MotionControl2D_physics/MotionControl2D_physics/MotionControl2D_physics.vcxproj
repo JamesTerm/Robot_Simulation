@@ -20,9 +20,9 @@
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>
-    <ProjectGuid>{4E08E603-1225-4EB9-8EAF-3AC0621D29A3}</ProjectGuid>
+    <ProjectGuid>{71497A23-6B6B-4436-AD12-36C28102296C}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
-    <RootNamespace>RobotAssembly</RootNamespace>
+    <RootNamespace>MotionControl2Dphysics</RootNamespace>
     <WindowsTargetPlatformVersion>10.0.17763.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -96,9 +96,6 @@
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
-    <PostBuildEvent>
-      <Command>xcopy "$(SolutionDir)..\..\Modules\Output\OSG_Viewer\$(Platform)\$(Configuration)\*.dll" "$(OutDir)" /D /S /Y</Command>
-    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
@@ -107,16 +104,13 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_Win32;_DEBUG;_WIN64;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_Win32;_WIN64;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
-    <PostBuildEvent>
-      <Command>xcopy "$(SolutionDir)..\..\Modules\Output\OSG_Viewer\$(Platform)\$(Configuration)\*.dll" "$(OutDir)" /D /S /Y</Command>
-    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
@@ -136,9 +130,6 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
-    <PostBuildEvent>
-      <Command>xcopy "$(SolutionDir)..\..\Modules\Output\OSG_Viewer\$(Platform)\$(Configuration)\*.dll" "$(OutDir)" /D /S /Y</Command>
-    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -149,7 +140,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_Win32;NDEBUG;_WIN64;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_Win32;_WIN64;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
     <Link>
@@ -158,36 +149,16 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
-    <PostBuildEvent>
-      <Command>xcopy "$(SolutionDir)..\..\Modules\Output\OSG_Viewer\$(Platform)\$(Configuration)\*.dll" "$(OutDir)" /D /S /Y</Command>
-    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\..\Modules\Input\dx_Joystick_Controller\dx_Joystick_Controller\dx_Joystick.cpp" />
-    <ClCompile Include="..\..\..\Modules\Robot\DriveKinematics\DriveKinematics\Vehicle_Drive.cpp" />
-    <ClCompile Include="..\..\..\Modules\Robot\Entity2D\Entity2D\Entity2D.cpp" />
-    <ClCompile Include="..\..\..\Modules\Robot\MotionControl2D_physics\MotionControl2D_physics\MotionControl2D_physics.cpp" />
-    <ClCompile Include="..\..\..\Modules\Robot\MotionControl2D_simple\MotionControl2D\MotionControl2D.cpp" />
-    <ClCompile Include="RobotAssembly.cpp" />
-    <ClCompile Include="TeleOpV1.cpp" />
-    <ClCompile Include="TeleOpV2.cpp" />
+    <ClCompile Include="MotionControl2D_physics.cpp" />
+    <ClCompile Include="MotionControl2D_Tester.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\..\Modules\Input\dx_Joystick_Controller\dx_Joystick_Controller\dx_Joystick.h" />
-    <ClInclude Include="..\..\..\Modules\Input\JoystickConverter.h" />
-    <ClInclude Include="..\..\..\Modules\Output\OSG_Viewer\OSG_Viewer\Entity_UI.h" />
-    <ClInclude Include="..\..\..\Modules\Output\OSG_Viewer\OSG_Viewer\Keyboard_State.h" />
-    <ClInclude Include="..\..\..\Modules\Output\OSG_Viewer\OSG_Viewer\OSG_Viewer.h" />
-    <ClInclude Include="..\..\..\Modules\Output\OSG_Viewer\OSG_Viewer\SwerveRobot_UI.h" />
-    <ClInclude Include="..\..\..\Modules\Robot\DriveKinematics\DriveKinematics\Vehicle_Drive.h" />
-    <ClInclude Include="..\..\..\Modules\Robot\Entity2D\Entity2D\Entity2D.h" />
-    <ClInclude Include="..\..\..\Modules\Robot\MotionControl2D_simple\MotionControl2D\MotionControl2D.h" />
-    <ClInclude Include="stdafx.h" />
-    <ClInclude Include="TeleOpV1.h" />
-    <ClInclude Include="TeleOpV2.h" />
+    <ClInclude Include="MotionControl2D.h" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\..\Libraries\SmartDashboard\SmartDashboard.vcxproj">
+    <ProjectReference Include="..\..\..\..\Libraries\SmartDashboard\SmartDashboard.vcxproj">
       <Project>{556fc434-d0c3-4b96-bf29-e9cf5cd24f02}</Project>
     </ProjectReference>
   </ItemGroup>

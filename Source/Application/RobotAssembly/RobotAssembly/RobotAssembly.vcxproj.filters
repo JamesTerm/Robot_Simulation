@@ -30,10 +30,13 @@
     <ClCompile Include="TeleOpV1.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="TeleOpV2.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\..\Modules\Robot\MotionControl2D_simple\MotionControl2D\MotionControl2D.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="TeleOpV2.cpp">
+    <ClCompile Include="..\..\..\Modules\Robot\MotionControl2D_physics\MotionControl2D_physics\MotionControl2D_physics.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
