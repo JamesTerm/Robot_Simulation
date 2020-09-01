@@ -1583,13 +1583,15 @@ public:
 		const double WheelBase_Width_In = 26.5;	  //The wheel base will determine the turn rate, must be as accurate as possible!
 		const double WheelBase_Length_In = 10.0;  //was 9.625
 		const double WheelTurningDiameter_In = sqrt((WheelBase_Width_In * WheelBase_Width_In) + (WheelBase_Length_In * WheelBase_Length_In));
-		const double skid = cos(atan2(WheelBase_Length_In, WheelBase_Width_In));
+		//const double skid = cos(atan2(WheelBase_Length_In, WheelBase_Width_In));
+		const double skid = 1.0;  //no skid for swerve
 		const double Drive_MaxAccel = 5.0;
 		const double gMaxTorqueYaw = (2 * Drive_MaxAccel * Meters2Inches / WheelTurningDiameter_In) * skid;
+		const double MaxAngularVelocity = (2 * HighGearSpeed * Meters2Inches / WheelTurningDiameter_In) * skid;
 		Ship_Props props =
 		{
-		//double dHeading;
-			(2 * HighGearSpeed * Meters2Inches / WheelTurningDiameter_In) * skid,
+		//double dHeading;  I don't have to max out the speed here, swerve doesn't need to rotate to strafe so turns can feel right
+		MaxAngularVelocity * 0.5,
 		//double EngineRampForward, EngineRampReverse, EngineRampAfterBurner;
 		10.0,10.0,10.0,
 		//double EngineDeceleration, EngineRampStrafe;
@@ -1599,7 +1601,7 @@ public:
 		//double ACCEL, BRAKE, STRAFE, AFTERBURNER_ACCEL, AFTERBURNER_BRAKE;
 		10.0,10.0,10.0,10.0,10.0,
 		//double MaxAccelLeft, MaxAccelRight, MaxAccelForward, MaxAccelReverse;
-		20.0,20.0,Drive_MaxAccel,Drive_MaxAccel,
+		Drive_MaxAccel,Drive_MaxAccel,Drive_MaxAccel,Drive_MaxAccel,
 		//double MaxAccelForward_High, MaxAccelReverse_High;
 		Drive_MaxAccel*2,Drive_MaxAccel*2,
 		//double MaxTorqueYaw, MaxTorqueYaw_High;
