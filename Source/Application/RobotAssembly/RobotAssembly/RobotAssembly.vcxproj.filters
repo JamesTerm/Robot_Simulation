@@ -77,5 +77,8 @@
     <ClInclude Include="..\..\..\Modules\Input\JoystickConverter.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\..\Modules\Robot\MotionControl2D_physics\MotionControl2D_physics\MotionControl2D.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

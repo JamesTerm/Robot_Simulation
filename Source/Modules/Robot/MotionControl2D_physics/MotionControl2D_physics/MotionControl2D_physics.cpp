@@ -19,12 +19,12 @@
 #include <iostream>
 
 #include "MotionControl2D.h"
+
+#define __UseSimpleFallback__
 #pragma endregion
 namespace Module {
 	namespace Robot	{
 		namespace Physics {
-
-#pragma region _Physics 2D_
 
 #pragma region _helper functions_
 //The actual force between two objects are f=(G m1 m2)/ r^2
@@ -94,6 +94,8 @@ __inline double shortest_angle(double Distance)
 }
 
 #pragma endregion
+#pragma region _Physics 2D_
+
 
 class PhysicsEntity_2D
 {
@@ -1006,12 +1008,21 @@ public:
 };
 #pragma endregion
 
-#pragma region _Ship_
 #pragma region _helper functions_
 //This is really Local to Global for just the Y Component
 inline Vec2D GetDirection(double Heading, double Intensity)
 {
 	return Vec2D(sin(Heading)*Intensity, cos(Heading)*Intensity);
+}
+
+inline void NormalizeRotation(double &Rotation)
+{
+	const double Pi2 = M_PI * 2.0;
+	//Normalize the rotation
+	if (Rotation > M_PI)
+		Rotation -= Pi2;
+	else if (Rotation < -M_PI)
+		Rotation += Pi2;
 }
 
 inline double NormalizeRotation2(double Rotation)
@@ -1024,7 +1035,29 @@ inline double NormalizeRotation2(double Rotation)
 		Rotation += Pi2;
 	return Rotation;
 }
+
+inline double NormalizeRotation_HalfPi(double Orientation)
+{
+	if (Orientation > PI_2)
+		Orientation -= M_PI;
+	else if (Orientation < -PI_2)
+		Orientation += M_PI;
+	return Orientation;
+}
+
+inline double SaturateRotation(double Rotation)
+{
+	//Normalize the rotation
+	if (Rotation > M_PI)
+		Rotation = M_PI;
+	else if (Rotation < -M_PI)
+		Rotation = -M_PI;
+	return Rotation;
+}
+
+
 #pragma endregion
+#pragma region _Ship_
 class Ship_2D
 {
 public:
@@ -1208,15 +1241,23 @@ private:
 		//friend class UI_Controller;
 		//UI_Controller *m_UI_Controller;
 	public:
-		AI_Base_Controller(Ship_2D &ship);
+		AI_Base_Controller(Ship_2D &ship) : m_ship(ship)
+		{
+		}
 		virtual ~AI_Base_Controller() {}
 
 		///This is the single update point to all controlling of the ship.  The base class contains no goal arbitration, but does implement
 		///Whatever goal is passed into it if the UI controller is off line
-		virtual void UpdateController(double dTime_s);
+		virtual void UpdateController(double dTime_s)
+		{
+
+		}
 
 		//This is mostly for pass-thru since the timing of this is in alignment during a ship att-pos update
-		void UpdateUI(double dTime_s);
+		void UpdateUI(double dTime_s)
+		{
+
+		}
 
 		/// I put the word try, as there may be some extra logic to determine if it has permission
 		/// This is a bit different than viewing an AI with no controls, where it simply does not
@@ -1237,7 +1278,9 @@ private:
 		/// Use NULL when flying through way-points
 		/// Use (0,0) if you want to come to a stop, like at the end of a way-point series
 		/// Otherwise, use the velocity of the ship you are targeting or following to keep up with it
-		void DriveToLocation(Vec2D TrajectoryPoint, Vec2D PositionPoint, double power, double dTime_s, Vec2D* matchVel, bool LockOrientation = false);
+		void DriveToLocation(Vec2D TrajectoryPoint, Vec2D PositionPoint, double power, double dTime_s, Vec2D* matchVel, bool LockOrientation = false)
+		{
+		}
 		void SetIntendedOrientation(double IntendedOrientation) { m_ship.SetIntendedOrientation(IntendedOrientation); }
 
 		Ship_2D &GetShip() { return m_ship; }
@@ -1295,13 +1338,14 @@ private:
 	//double m_Last_AccDel;  ///< This monitors a previous AccDec session to determine when to reset the speed
 	Vec2D m_Last_RequestedVelocity;  ///< This monitors the last caught requested velocity from a speed delta change
 	FlightDynamics_2D m_Physics;
-private:
+protected:
 	//A counter to count how many times the predicted position and intended position are withing tolerance consecutively
 	size_t m_RotationToleranceCounter;
 	bool m_LockShipHeadingToOrientation; ///< Locks the ship and intended orientation (Joystick and Keyboard controls use this)
 
 	Vec2D m_current_position;
 	double m_current_heading = 0.0;
+
 	std::function<void(const Vec2D &new_velocity)> m_ExternSetPosition = nullptr;
 	std::function<void(double new_velocity)> m_ExternSetHeadingVelocity = nullptr;
 	std::function <Vec2D()> m_ExternGetCurrentPosition = nullptr;
@@ -1310,22 +1354,6 @@ private:
 	#pragma endregion
 protected:
 	#pragma region _protected members_
-	virtual const Vec2D &GetPos_m() const
-	{
-		if (m_ExternGetCurrentPosition)
-			return m_ExternGetCurrentPosition();
-		else
-			return m_current_position;
-	}
-	virtual double GetAtt_r() const
-	{
-		{
-			if (m_ExternGetCurrentHeading)
-				return m_ExternGetCurrentHeading();
-			else
-				return m_current_heading;
-		}
-	}
 	const PhysicsEntity_2D &GetPhysics() const 
 	{ 
 		return m_Physics; 
@@ -1372,7 +1400,7 @@ protected:
 			m_IntendedOrientation += RotationDisplacement * YawResistance;
 		}
 	}
-	virtual void ApplyTorqueThrusters(PhysicsEntity_2D &PhysicsToUse, double Torque, double TorqueRestraint, double dTime_s)
+	void ApplyTorqueThrusters(PhysicsEntity_2D &PhysicsToUse, double Torque, double TorqueRestraint, double dTime_s)
 	{
 		//assert(IsLocallyControlled());
 		//ApplyTorqueThrusters
@@ -1390,7 +1418,7 @@ protected:
 		PhysicsToUse.ApplyFractionalTorque(TorqueToApply, dTime_s, m_RadialArmDefault);
 		#endif
 	}
-	virtual void ApplyThrusters(PhysicsEntity_2D &PhysicsToUse, const Vec2D &LocalForce, double LocalTorque, double TorqueRestraint, double dTime_s)
+	void ApplyThrusters(PhysicsEntity_2D &PhysicsToUse, const Vec2D &LocalForce, double LocalTorque, double TorqueRestraint, double dTime_s)
 	{
 		///Putting force and torque together will make it possible to translate this into actual force with position
 		//assert(IsLocallyControlled());
@@ -1400,14 +1428,243 @@ protected:
 		// Apply Torque
 		ApplyTorqueThrusters(PhysicsToUse, LocalTorque, TorqueRestraint, dTime_s);
 	}
-	virtual void TestPosAtt_Delta(const Vec2D pos_m, double att, double dTime_s)
+	void TestPosAtt_Delta(const Vec2D pos_m, double att, double dTime_s)
 	{
 		#if 0
 		if (m_controller->IsUIControlled())
 			DOUT1("%f %f %f %f", dTime_s, pos_m[0], pos_m[1], pos_m[2]);
 		#endif
 	}
-	virtual void TimeChange(double dTime_s)
+	bool IsPlayerControllable() 
+	{ 
+		// Watch for being made the controlled ship
+		return true;
+	}
+	AI_Base_Controller *Create_Controller()
+	{
+		//TODO this is no longer necessary (but still works)
+		//Override with the controller to be used with ship.  Specific ships have specific type of controllers.
+		return new AI_Base_Controller(*this);
+	}
+	void RequestedVelocityCallback(double VelocityToUse, double DeltaTime_s) 
+	{
+		///This allows subclass to evaluate the requested velocity when it is in use
+		//TODO no implementation, should remove
+	}
+	Vec2D Get_DriveTo_ForceDegradeScalar() const 
+	{ 
+		//override to manipulate a distance force degrade, which is used to compensate for deceleration inertia
+		return Vec2D(1.0, 1.0); 
+	}
+	static void InitNetworkProperties(const Ship_Props &ship_props)  
+	{
+		//TODO We shouldn't be using smart dashboard in here, plan to remove
+		#if 0
+		//This will GetVariables of all properties needed to tweak PID and gain assists
+		SmartDashboard::PutNumber("Rotation Tolerance", RAD_2_DEG(props.Rotation_Tolerance));
+		SmartDashboard::PutNumber("Rotation Tolerance Count", props.Rotation_ToleranceConsecutiveCount);
+		SmartDashboard::PutNumber("rotation_distance_scalar", props.Rotation_TargetDistanceScalar);
+		#endif
+	}
+	static void NetworkEditProperties(Ship_Props &ship_props)
+	{
+		//TODO We shouldn't be using smart dashboard in here, plan to remove
+		#if 0
+		//This will GetVariables of all properties needed to tweak PID and gain assists
+		ship_props.Rotation_Tolerance = DEG_2_RAD(SmartDashboard::GetNumber("Rotation Tolerance"));
+		ship_props.Rotation_ToleranceConsecutiveCount = SmartDashboard::GetNumber("Rotation Tolerance Count");
+		ship_props.Rotation_TargetDistanceScalar = SmartDashboard::GetNumber("rotation_distance_scalar");
+		#endif
+	}
+	#pragma region _Moved from public_
+	void UpdateController(double &AuxVelocity, Vec2D &LinearAcceleration, double &AngularAcceleration, bool &LockShipHeadingToOrientation, double dTime_s)
+	{
+		//TODO empty... omit
+		//callback from UI_Controller for custom controls override if ship has specific controls... all outputs to be written are optional
+		//so derived classes can only write to things of interest
+	}
+	void BindAdditionalEventControls(bool Bind)
+	{
+		//TODO this was empty can omit
+		//The UI controller will call this when attaching or detaching control.  The Bind parameter will either bind or unbind.  Since these are 
+		//specific controls to a specific ship there is currently no method to transfer these specifics from one ship to the next.  Ideally there
+		//should be no member variables needed to implement the bindings
+	}
+	void BindAdditionalUIControls(bool Bind, void *joy, void *key)
+	{
+		//TODO omit.. no controls 
+		//Its possible that each ship may have its own specific controls
+		//m_ShipProps.Get_ShipControls().BindAdditionalUIControls(Bind, joy, key);
+	}
+	void CancelAllControls()
+	{
+		//TODO this was already all disabled we can omit
+		// Turn off all thruster controls
+		//__super::CancelAllControls();
+		//if (m_controller )
+		//	m_controller->CancelAllControls();
+	}
+
+	AI_Base_Controller *GetController() const
+	{
+		return m_controller;
+	}
+	bool GetStabilizeRotation() const
+	{
+		return m_StabilizeRotation;
+	}
+	bool GetAlterTrajectory() const
+	{
+		return m_SimFlightMode;
+	}
+	bool GetCoordinateTurns() const
+	{
+		return m_CoordinateTurns;
+	}
+	void SetHeadingSpeedScale(double scale)
+	{
+		m_HeadingSpeedScale = scale;
+	}
+	bool GetIsAfterBurnerOn() const
+	{
+		/// We use a toggling mechanism to use afterburners since there is some internal functionality that behave differently
+		return (m_thrustState == TS_AfterBurner);
+	}
+	bool GetIsAfterBurnerBrakeOn() const
+	{
+		return (m_thrustState == TS_AfterBurner_Brake);
+	}
+	bool CanStrafe() const
+	{
+		//Override if the ship is not able to strafe... used for DriveToLocation()
+		return true;
+	}
+	double GetMaxSpeed() const
+	{
+		return MAX_SPEED;
+	}
+	double GetEngaged_Max_Speed() const
+	{
+		return ENGAGED_MAX_SPEED;
+	}
+	double GetStrafeSpeed() const
+	{
+		return STRAFE;
+	}
+	double GetAccelSpeed() const
+	{
+		return ACCEL;
+	}
+	double GetBrakeSpeed() const
+	{
+		return BRAKE;
+	}
+	double GetCameraRestraintScaler() const
+	{
+		return Camera_Restraint;
+	}
+	double GetHeadingSpeed() const
+	{
+		return dHeading;
+	}
+	#pragma endregion
+	#pragma endregion
+public:
+	#pragma region _public members_
+	Ship_2D() : m_IntendedOrientationPhysics(m_IntendedOrientation)
+	{
+		m_HeadingSpeedScale = 1.0;
+		m_LockShipHeadingToOrientation = false;  //usually this is false (especially for AI and Remote controllers)
+		m_thrustState = TS_NotVisible;
+		ResetPos();
+		m_RotationToleranceCounter = 0;
+		//TODO take out initialize
+		Initialize();
+	}
+	void UpdateShipProperties(const Ship_Props &props)
+	{
+		//Give ability to change ship properties 
+		m_ShipProps.UpdateShipProperties(props);
+		dHeading = props.dHeading;
+		MAX_SPEED = props.MAX_SPEED;
+		ENGAGED_MAX_SPEED = props.ENGAGED_MAX_SPEED;
+		ACCEL = props.ACCEL;
+		BRAKE = props.BRAKE;
+		STRAFE = props.STRAFE;
+		AFTERBURNER_ACCEL = props.AFTERBURNER_ACCEL;
+		AFTERBURNER_BRAKE = props.AFTERBURNER_BRAKE;
+
+		EngineRampAfterBurner = props.EngineRampAfterBurner;
+		EngineRampForward = props.EngineRampForward;
+		EngineRampReverse = props.EngineRampReverse;
+		EngineRampStrafe = props.EngineRampStrafe;
+		EngineDeceleration = props.EngineDeceleration;
+
+		MaxAccelLeft = props.MaxAccelLeft;
+		MaxAccelRight = props.MaxAccelRight;
+		MaxTorqueYaw_SetPoint = props.MaxTorqueYaw_SetPoint * m_Physics.GetMass();
+	}
+	void Initialize(const Ship_Properties *ship_props=nullptr)
+	{
+		//TODO see if we really need to initialize
+		//virtual void Initialize(Entity2D_Kind::EventMap& em, const Entity_Properties *props = NULL);
+		if (!m_controller)
+			m_controller = Create_Controller();
+		if (ship_props)
+		{
+			UpdateShipProperties(ship_props->GetShipProps());
+			m_ShipProps = *ship_props;
+		}
+		else
+		{
+			m_Physics.SetMass(120.0/2.205); //the typical weight of the robot
+			double Scale = 0.2;  //we must scale everything down to see on the view
+			MAX_SPEED = 2000.0 * Scale;
+			ENGAGED_MAX_SPEED = 400.0 * Scale;
+			ACCEL = 60.0 * Scale;
+			BRAKE = 50.0 * Scale;
+			STRAFE = BRAKE; //could not find this one
+			AFTERBURNER_ACCEL = 107.0 * Scale;
+			AFTERBURNER_BRAKE = BRAKE;
+
+			double RAMP_UP_DUR = 1.0;
+			double RAMP_DOWN_DUR = 1.0;
+			EngineRampAfterBurner = AFTERBURNER_ACCEL / RAMP_UP_DUR;
+			EngineRampForward = ACCEL / RAMP_UP_DUR;
+			EngineRampReverse = BRAKE / RAMP_UP_DUR;
+			EngineRampStrafe = STRAFE / RAMP_UP_DUR;
+			EngineDeceleration = ACCEL / RAMP_DOWN_DUR;
+
+			MaxAccelLeft = 40.0 * Scale;
+			MaxAccelRight = 40.0 * Scale;
+			//MaxAccelForward=87.0 * Scale;
+			//MaxAccelReverse=70.0 * Scale;
+			MaxTorqueYaw_SetPoint = 2.5;
+			dHeading = DEG_2_RAD(270.0);
+		}
+
+		Camera_Restraint = G_Dampener = 1.0;
+		Mass = m_Physics.GetMass();
+
+		//For now I don't really care about these numbers yet, so I'm pulling from the q33
+		//m_Physics.StructuralDmgGLimit = 10.0;
+		double RadiusOfConcentratedMass = m_Physics.GetRadiusOfConcentratedMass();
+		m_IntendedOrientationPhysics.SetRadiusOfConcentratedMass(RadiusOfConcentratedMass);
+		m_RadialArmDefault = RadiusOfConcentratedMass * RadiusOfConcentratedMass;
+
+		//Pass these acceleration derivatives on to the Physics/Flight-Dynamics
+		{
+			FlightDynamics_2D::LinearAccelerationRates &_ = m_Physics.GetLinearAccelerationRates();
+			_.AccDeltaPos = Vec2D(EngineRampStrafe, EngineRampForward);
+			_.AccDeltaNeg = Vec2D(EngineRampStrafe, EngineRampReverse);
+			Vec2D Deceleration(EngineDeceleration, EngineDeceleration);
+			_.DecDeltaPos = _.DecDeltaNeg = Deceleration;
+		}
+
+		m_IntendedOrientation = GetAtt_r();
+		m_IntendedOrientationPhysics.SetMass(Mass);
+	}
+	void TimeChange(double dTime_s)
 	{
 		// Update my controller
 		m_controller->UpdateController(dTime_s);
@@ -1774,141 +2031,7 @@ protected:
 		m_currAccel = Vec2D(0, 0);
 
 	}
-	virtual bool IsPlayerControllable() 
-	{ 
-		// Watch for being made the controlled ship
-		return true;
-	}
-	virtual AI_Base_Controller *Create_Controller()
-	{
-		//TODO this is no longer necessary (but still works)
-		//Override with the controller to be used with ship.  Specific ships have specific type of controllers.
-		return new AI_Base_Controller(*this);
-	}
-	virtual void RequestedVelocityCallback(double VelocityToUse, double DeltaTime_s) 
-	{
-		///This allows subclass to evaluate the requested velocity when it is in use
-		//TODO no implementation, should remove
-	}
-	virtual Vec2D Get_DriveTo_ForceDegradeScalar() const 
-	{ 
-		//override to manipulate a distance force degrade, which is used to compensate for deceleration inertia
-		return Vec2D(1.0, 1.0); 
-	}
-	static void InitNetworkProperties(const Ship_Props &ship_props)  
-	{
-		//TODO We shouldn't be using smart dashboard in here, plan to remove
-		#if 0
-		//This will GetVariables of all properties needed to tweak PID and gain assists
-		SmartDashboard::PutNumber("Rotation Tolerance", RAD_2_DEG(props.Rotation_Tolerance));
-		SmartDashboard::PutNumber("Rotation Tolerance Count", props.Rotation_ToleranceConsecutiveCount);
-		SmartDashboard::PutNumber("rotation_distance_scalar", props.Rotation_TargetDistanceScalar);
-		#endif
-	}
-	static void NetworkEditProperties(Ship_Props &ship_props)
-	{
-		//TODO We shouldn't be using smart dashboard in here, plan to remove
-		#if 0
-		//This will GetVariables of all properties needed to tweak PID and gain assists
-		ship_props.Rotation_Tolerance = DEG_2_RAD(SmartDashboard::GetNumber("Rotation Tolerance"));
-		ship_props.Rotation_ToleranceConsecutiveCount = SmartDashboard::GetNumber("Rotation Tolerance Count");
-		ship_props.Rotation_TargetDistanceScalar = SmartDashboard::GetNumber("rotation_distance_scalar");
-		#endif
-	}
-	#pragma endregion
-public:
-	#pragma region _public members_
-	Ship_2D() : m_IntendedOrientationPhysics(m_IntendedOrientation)
-	{
-		m_HeadingSpeedScale = 1.0;
-		m_LockShipHeadingToOrientation = false;  //usually this is false (especially for AI and Remote controllers)
-		m_thrustState = TS_NotVisible;
-		ResetPos();
-		m_RotationToleranceCounter = 0;
-	}
-	void UpdateShipProperties(const Ship_Props &props)
-	{
-		//Give ability to change ship properties 
-		m_ShipProps.UpdateShipProperties(props);
-		dHeading = props.dHeading;
-		MAX_SPEED = props.MAX_SPEED;
-		ENGAGED_MAX_SPEED = props.ENGAGED_MAX_SPEED;
-		ACCEL = props.ACCEL;
-		BRAKE = props.BRAKE;
-		STRAFE = props.STRAFE;
-		AFTERBURNER_ACCEL = props.AFTERBURNER_ACCEL;
-		AFTERBURNER_BRAKE = props.AFTERBURNER_BRAKE;
-
-		EngineRampAfterBurner = props.EngineRampAfterBurner;
-		EngineRampForward = props.EngineRampForward;
-		EngineRampReverse = props.EngineRampReverse;
-		EngineRampStrafe = props.EngineRampStrafe;
-		EngineDeceleration = props.EngineDeceleration;
-
-		MaxAccelLeft = props.MaxAccelLeft;
-		MaxAccelRight = props.MaxAccelRight;
-		MaxTorqueYaw_SetPoint = props.MaxTorqueYaw_SetPoint * m_Physics.GetMass();
-	}
-	virtual void Initialize(const Ship_Properties *ship_props=nullptr)
-	{
-		//TODO see if we really need to initialize
-		//virtual void Initialize(Entity2D_Kind::EventMap& em, const Entity_Properties *props = NULL);
-		if (!m_controller)
-			m_controller = Create_Controller();
-		if (ship_props)
-		{
-			UpdateShipProperties(ship_props->GetShipProps());
-			m_ShipProps = *ship_props;
-		}
-		else
-		{
-			double Scale = 0.2;  //we must scale everything down to see on the view
-			MAX_SPEED = 2000.0 * Scale;
-			ENGAGED_MAX_SPEED = 400.0 * Scale;
-			ACCEL = 60.0 * Scale;
-			BRAKE = 50.0 * Scale;
-			STRAFE = BRAKE; //could not find this one
-			AFTERBURNER_ACCEL = 107.0 * Scale;
-			AFTERBURNER_BRAKE = BRAKE;
-
-			double RAMP_UP_DUR = 1.0;
-			double RAMP_DOWN_DUR = 1.0;
-			EngineRampAfterBurner = AFTERBURNER_ACCEL / RAMP_UP_DUR;
-			EngineRampForward = ACCEL / RAMP_UP_DUR;
-			EngineRampReverse = BRAKE / RAMP_UP_DUR;
-			EngineRampStrafe = STRAFE / RAMP_UP_DUR;
-			EngineDeceleration = ACCEL / RAMP_DOWN_DUR;
-
-			MaxAccelLeft = 40.0 * Scale;
-			MaxAccelRight = 40.0 * Scale;
-			//MaxAccelForward=87.0 * Scale;
-			//MaxAccelReverse=70.0 * Scale;
-			MaxTorqueYaw_SetPoint = 2.5;
-			dHeading = DEG_2_RAD(270.0);
-		}
-
-		Camera_Restraint = G_Dampener = 1.0;
-		Mass = m_Physics.GetMass();
-
-		//For now I don't really care about these numbers yet, so I'm pulling from the q33
-		//m_Physics.StructuralDmgGLimit = 10.0;
-		double RadiusOfConcentratedMass = m_Physics.GetRadiusOfConcentratedMass();
-		m_IntendedOrientationPhysics.SetRadiusOfConcentratedMass(RadiusOfConcentratedMass);
-		m_RadialArmDefault = RadiusOfConcentratedMass * RadiusOfConcentratedMass;
-
-		//Pass these acceleration derivatives on to the Physics/Flight-Dynamics
-		{
-			FlightDynamics_2D::LinearAccelerationRates &_ = m_Physics.GetLinearAccelerationRates();
-			_.AccDeltaPos = Vec2D(EngineRampStrafe, EngineRampForward);
-			_.AccDeltaNeg = Vec2D(EngineRampStrafe, EngineRampReverse);
-			Vec2D Deceleration(EngineDeceleration, EngineDeceleration);
-			_.DecDeltaPos = _.DecDeltaNeg = Deceleration;
-		}
-
-		m_IntendedOrientation = GetAtt_r();
-		m_IntendedOrientationPhysics.SetMass(Mass);
-	}
-	virtual ~Ship_2D()
+	~Ship_2D()
 	{
 		delete m_controller;
 		m_controller = NULL;
@@ -1918,124 +2041,11 @@ public:
 		///This implicitly will place back in auto mode with a speed of zero
 		SetRequestedVelocity(0.0); 
 	}
-	void SetRequestedVelocity(double Velocity)
-	{
-		//assert(IsLocallyControlled());
-		SetSimFlightMode(true);
-		if (Velocity > 0.0)
-			m_RequestedVelocity[1] = MIN(Velocity, GetMaxSpeed());
-		else
-			m_RequestedVelocity[1] = MAX(Velocity, -GetMaxSpeed());
-		m_RequestedVelocity[0] = 0;
-	}
-	void SetRequestedVelocity(Vec2D Velocity)
-	{
-		//Note: with 2D submissions we do not need to manually set sim mode 
-		//assert(IsLocallyControlled());
-		m_RequestedVelocity = Velocity;  //I'm not doing speed checking for this one (this will be checked later anyhow)
-		//DOUT5("%f %f",m_RequestedVelocity[0],m_RequestedVelocity[1]);
-	}
-	double GetRequestedVelocity() 
-	{ 
-		return m_RequestedVelocity[1]; 
-	}
 	void FireAfterburner() 
 	{ 
 		SetRequestedVelocity(GetMaxSpeed()); 
 	}
-	void SetCurrentLinearAcceleration(const Vec2D &Acceleration) 
-	{ 
-		m_currAccel = Acceleration; 
-	}
-	void SetCurrentAngularAcceleration(double Acceleration, bool LockShipHeadingToOrientation)
-	{
-		/// \param LockShipHeadingToOrientation for this given time slice if this is true the intended orientation is restrained
-		/// to the ships restraints and the ship is locked to the orientation (Joy/Key mode).  If false (Mouse/AI) the intended orientation
-		/// is not restrained and the ship applies its restraints to catch up to the orientation
-		m_LockShipHeadingToOrientation = LockShipHeadingToOrientation;
-		m_rotAccel_rad_s = Acceleration;
-	}
-	virtual void SetIntendedOrientation(double IntendedOrientation, bool Absolute = true)
-	{
-		///This is used by AI controller (this will have LockShipHeadingToOrientation set to false)
-		///This allows setting the desired heading directly either relative to the current heading or absolute
-		m_LockShipHeadingToOrientation = false; //this must be false for this to work (if not already)
-		m_IntendedOrientation = Absolute ? IntendedOrientation : NormalizeRotation2(m_IntendedOrientation + IntendedOrientation);
-	}
-	virtual const double &GetIntendedOrientation() const 
-	{ 
-		/// This is where both the vehicle entity and camera need to align to
-		return m_IntendedOrientation;
-	}
-	void SetSimFlightMode(bool SimFlightMode)
-	{
-		//It seems that some people want/need to call this function repeatedly so I have included a valve branch here to prevent the debug flooding
-		//And to not do extra work on the m_RequestedVelocity.
-		if (m_SimFlightMode != SimFlightMode)
-		{
-			//Vec2D LocalVelocity=GlobalToLocal(GetAtt_r(),m_Physics.GetLinearVelocity());
-			//m_RequestedVelocity=LocalVelocity;
-			//unfortunately a slide turn maneuver requires this, but fortunately it is for UI.  This is not perfect if the user intended to go backwards
-			//but that would not be something desirable
-			m_RequestedVelocity = GlobalToLocal(GetAtt_r(), m_Physics.GetLinearVelocity());
-			m_SimFlightMode = SimFlightMode;
-			//DebugOutput("SimFlightMode=%d\n",SimFlightMode);
-		}
-	}
-	virtual bool GetStabilizeRotation() const 
-	{
-		return m_StabilizeRotation; 
-	}
-	bool GetAlterTrajectory() const 
-	{ 
-		return m_SimFlightMode; 
-	}
-	bool GetCoordinateTurns() const 
-	{ 
-		return m_CoordinateTurns; 
-	}
-	void SetHeadingSpeedScale(double scale) 
-	{ 
-		m_HeadingSpeedScale = scale; 
-	}
-	bool GetIsAfterBurnerOn() const 
-	{
-		/// We use a toggling mechanism to use afterburners since there is some internal functionality that behave differently
-		return (m_thrustState == TS_AfterBurner); 
-	}
-	bool GetIsAfterBurnerBrakeOn() const 
-	{ 
-		return (m_thrustState == TS_AfterBurner_Brake); 
-	}
-	double GetMaxSpeed() const 
-	{ 
-		return MAX_SPEED; 
-	}
-	double GetEngaged_Max_Speed() const 
-	{ 
-		return ENGAGED_MAX_SPEED; 
-	}
-	double GetStrafeSpeed() const 
-	{ 
-		return STRAFE; 
-	}
-	double GetAccelSpeed() const 
-	{ 
-		return ACCEL; 
-	}
-	double GetBrakeSpeed() const 
-	{ 
-		return BRAKE; 
-	}
-	double GetCameraRestraintScaler() const 
-	{ 
-		return Camera_Restraint;
-	}
-	double GetHeadingSpeed() const 
-	{ 
-		return dHeading; 
-	}
-	virtual void ResetPos()
+	void ResetPos()
 	{
 		// Places the ship back at its initial position and resets all vectors
 		//Setting this to true allows starting from an arbitrary position and it not auto adjust to the intended orientation
@@ -2053,73 +2063,126 @@ public:
 		SetSimFlightMode(true);  //This one is a tough call... probably should do it on reset
 		m_RotationToleranceCounter = 0;
 	}
-	virtual void CancelAllControls()
+	#pragma region _mutators_
+	void SetRequestedVelocity(double Velocity)
 	{
-		//TODO this was already all disabled we can omit
-		// Turn off all thruster controls
-		//__super::CancelAllControls();
-		//if (m_controller )
-		//	m_controller->CancelAllControls();
+		//assert(IsLocallyControlled());
+		SetSimFlightMode(true);
+		if (Velocity > 0.0)
+			m_RequestedVelocity[1] = MIN(Velocity, GetMaxSpeed());
+		else
+			m_RequestedVelocity[1] = MAX(Velocity, -GetMaxSpeed());
+		m_RequestedVelocity[0] = 0;
 	}
-	AI_Base_Controller *GetController() const 
-	{ 
-		return m_controller; 
-	}
-	virtual void BindAdditionalEventControls(bool Bind) 
+	void SetRequestedVelocity(Vec2D Velocity)
 	{
-		//TODO this was empty can omit
-		//The UI controller will call this when attaching or detaching control.  The Bind parameter will either bind or unbind.  Since these are 
-		//specific controls to a specific ship there is currently no method to transfer these specifics from one ship to the next.  Ideally there
-		//should be no member variables needed to implement the bindings
+		//Note: with 2D submissions we do not need to manually set sim mode 
+		//assert(IsLocallyControlled());
+		m_RequestedVelocity = Velocity;  //I'm not doing speed checking for this one (this will be checked later anyhow)
+		//DOUT5("%f %f",m_RequestedVelocity[0],m_RequestedVelocity[1]);
 	}
-	virtual void BindAdditionalUIControls(bool Bind, void *joy, void *key)
+	void SetCurrentLinearAcceleration(const Vec2D &Acceleration)
 	{
-		//TODO omit.. no controls 
-		//Its possible that each ship may have its own specific controls
-		//m_ShipProps.Get_ShipControls().BindAdditionalUIControls(Bind, joy, key);
+		m_currAccel = Acceleration;
 	}
-	virtual void UpdateController(double &AuxVelocity, Vec2D &LinearAcceleration, double &AngularAcceleration, bool &LockShipHeadingToOrientation, double dTime_s) 
+	void SetCurrentAngularAcceleration(double Acceleration, bool LockShipHeadingToOrientation)
 	{
-		//TODO empty... omit
-		//callback from UI_Controller for custom controls override if ship has specific controls... all outputs to be written are optional
-		//so derived classes can only write to things of interest
+		/// \param LockShipHeadingToOrientation for this given time slice if this is true the intended orientation is restrained
+		/// to the ships restraints and the ship is locked to the orientation (Joy/Key mode).  If false (Mouse/AI) the intended orientation
+		/// is not restrained and the ship applies its restraints to catch up to the orientation
+		m_LockShipHeadingToOrientation = LockShipHeadingToOrientation;
+		m_rotAccel_rad_s = Acceleration;
 	}
-	virtual Vec2D GetLinearVelocity_ToDisplay() 
+	void SetIntendedOrientation(double IntendedOrientation, bool Absolute = true)
+	{
+		///This is used by AI controller (this will have LockShipHeadingToOrientation set to false)
+		///This allows setting the desired heading directly either relative to the current heading or absolute
+		m_LockShipHeadingToOrientation = false; //this must be false for this to work (if not already)
+		m_IntendedOrientation = Absolute ? IntendedOrientation : NormalizeRotation2(m_IntendedOrientation + IntendedOrientation);
+	}
+	void SetSimFlightMode(bool SimFlightMode)
+	{
+		//It seems that some people want/need to call this function repeatedly so I have included a valve branch here to prevent the debug flooding
+		//And to not do extra work on the m_RequestedVelocity.
+		if (m_SimFlightMode != SimFlightMode)
+		{
+			//Vec2D LocalVelocity=GlobalToLocal(GetAtt_r(),m_Physics.GetLinearVelocity());
+			//m_RequestedVelocity=LocalVelocity;
+			//unfortunately a slide turn maneuver requires this, but fortunately it is for UI.  This is not perfect if the user intended to go backwards
+			//but that would not be something desirable
+			m_RequestedVelocity = GlobalToLocal(GetAtt_r(), m_Physics.GetLinearVelocity());
+			m_SimFlightMode = SimFlightMode;
+			//DebugOutput("SimFlightMode=%d\n",SimFlightMode);
+		}
+	}
+	#pragma endregion
+	#pragma region _accessors_
+	const Vec2D GetPos_m() const
+	{
+		if (m_ExternGetCurrentPosition)
+			return m_ExternGetCurrentPosition();
+		else
+			return m_current_position;
+	}
+	double GetAtt_r() const
+	{
+		{
+			if (m_ExternGetCurrentHeading)
+				return m_ExternGetCurrentHeading();
+			else
+				return m_current_heading;
+		}
+	}
+	double GetRequestedSpeed() const
+	{
+		//Note:This has some direction so technically it is also velocity
+		return m_RequestedVelocity[1];
+	}
+	Vec2D GetRequestedVelocity() const
+	{
+		return m_RequestedVelocity;
+	}
+	const double &GetIntendedOrientation() const
+	{
+		/// This is where both the vehicle entity and camera need to align to
+		return m_IntendedOrientation;
+	}
+	Vec2D GetLinearVelocity_ToDisplay() const
 	{ 
 		//Override to get sensor/encoder's real velocity
 		return GlobalToLocal(GetAtt_r(), GetPhysics().GetLinearVelocity()); 
 	}
-	virtual double GetAngularVelocity_ToDisplay() 
+	double GetAngularVelocity_ToDisplay() const
 	{ 
 		return GetPhysics().GetAngularVelocity(); 
 	}
-	virtual const bool CanStrafe() 
-	{ 
-		//Override if the ship is not able to strafe... used for DriveToLocation()
-		return true;
-	}
-	const Ship_Properties &GetShipProperties() 
+	const Ship_Properties &GetShipProperties() const
 	{ 
 		return m_ShipProps; 
 	}
+	#pragma endregion
 	#pragma endregion
 };
 
 #pragma endregion
 
-#pragma region _Motion Control 2D Internal_
-
+#pragma region _helper functions_
 __inline MotionControl2D::Vector2D as_vector_2d(Vec2D input)
 {
 	MotionControl2D::Vector2D ret = { input[0],input[1] };
 	return ret;
 }
 
-__inline  Vec2D as_Vec2D( MotionControl2D::Vector2D input)
+__inline  Vec2D as_Vec2D(MotionControl2D::Vector2D input)
 {
-	Vec2D ret(input.x,input.y);
+	Vec2D ret(input.x, input.y);
 	return ret;
 }
+#pragma endregion
+#pragma region _Simple fallback case_
+#ifdef __UseSimpleFallback__
+#pragma region _Motion Control 2D Internal_
+
 
 class MotionControl2D_internal
 {
@@ -2157,48 +2220,6 @@ private:
 	std::function<void(double new_velocity)> m_ExternSetHeadingVelocity=nullptr;
 	std::function <MotionControl2D::Vector2D()> m_ExternGetCurrentPosition=nullptr;
 	std::function <double()> m_ExternGetCurrentHeading=nullptr;
-
-	#pragma endregion
-	#pragma region _normalize rotation_
-	inline void NormalizeRotation(double &Rotation)
-	{
-		const double Pi2 = M_PI * 2.0;
-		//Normalize the rotation
-		if (Rotation > M_PI)
-			Rotation -= Pi2;
-		else if (Rotation < -M_PI)
-			Rotation += Pi2;
-	}
-
-	inline double NormalizeRotation2(double Rotation)
-	{
-		const double Pi2 = M_PI * 2.0;
-		//Normalize the rotation
-		if (Rotation > M_PI)
-			Rotation -= Pi2;
-		else if (Rotation < -M_PI)
-			Rotation += Pi2;
-		return Rotation;
-	}
-
-	inline double NormalizeRotation_HalfPi(double Orientation)
-	{
-		if (Orientation > PI_2)
-			Orientation -= M_PI;
-		else if (Orientation < -PI_2)
-			Orientation += M_PI;
-		return Orientation;
-	}
-
-	inline double SaturateRotation(double Rotation)
-	{
-		//Normalize the rotation
-		if (Rotation > M_PI)
-			Rotation = M_PI;
-		else if (Rotation < -M_PI)
-			Rotation = -M_PI;
-		return Rotation;
-	}
 
 	#pragma endregion
 	void process_slice(double d_time_s)
@@ -2442,7 +2463,6 @@ public:
 	#pragma endregion
 };
 #pragma endregion
-
 #pragma region _wrapper methods_
 MotionControl2D::MotionControl2D()
 {
@@ -2545,5 +2565,196 @@ void MotionControl2D::Set_GetCurrentHeading(std::function <double()> callback)
 }
 
 #pragma endregion
+#endif
+#pragma endregion
+#pragma region _Using Ship case_
+#ifndef __UseSimpleFallback__
 
+//Using inheritance to avoid renaming the class, also can adapt methods to fit here
+class MotionControl2D_internal : public Ship_2D
+{
+private:
+	std::function<void(const MotionControl2D::Vector2D &new_velocity)> m_ExternSetPosition_AsVector2D = nullptr;
+	std::function <MotionControl2D::Vector2D()> m_ExternGetCurrentPosition_AsVector2D = nullptr;
+
+public:
+	using properties = MotionControl2D::properties;
+	void Reset(double X, double Y, double heading)
+	{
+		//TODO support parms
+		ResetPos();
+	}
+	void SetLinearVelocity_local(double forward, double right)
+	{
+		SetRequestedVelocity(GlobalToLocal2(GetAtt_r(), Vec2D(right, forward)));
+	}
+	void SetProperties(const properties &props)
+	{
+		//TODO translate here
+	}
+	void DriveToLocation(double north, double east, bool stop_at_destination, double max_speed, bool can_strafe)
+	{
+		//TODO route to controller
+	}
+	bool GetIsDrivenLinear() const
+	{
+		//Note: auto pilot was managed in the UI controller, so we'll have to work out how to manage here
+		return false;
+	}
+	bool GetIsDrivenAngular() const
+	{
+		return !m_LockShipHeadingToOrientation;
+	}
+	Vec2D Get_SetVelocity_local() const
+	{
+		return GlobalToLocal2(GetAtt_r(), GetRequestedVelocity());
+	}
+	#pragma region _Callbacks_
+	//Optional Linker callbacks:
+	void Set_UpdateGlobalVelocity(std::function<void(const MotionControl2D::Vector2D &new_velocity)> callback)
+	{
+		m_ExternSetPosition_AsVector2D = callback;
+		//do the conversion
+		if (callback)
+		{
+			m_ExternSetPosition =
+				[&](const Vec2D &new_velocity)
+			{
+				m_ExternSetPosition_AsVector2D(as_vector_2d(new_velocity));
+			};
+		}
+		else
+			m_ExternSetPosition = nullptr;
+	}
+	void Set_UpdateHeadingVelocity(std::function<void(double new_velocity)> callback)
+	{
+		m_ExternSetHeadingVelocity = callback;
+	}
+	void Set_GetCurrentPosition(std::function <MotionControl2D::Vector2D()> callback)
+	{
+		m_ExternGetCurrentPosition_AsVector2D = callback;
+		//do the conversion
+		if (callback)
+		{
+			m_ExternGetCurrentPosition =
+				[&]()
+			{
+				return as_Vec2D(m_ExternGetCurrentPosition_AsVector2D());
+			};
+		}
+		else
+			m_ExternGetCurrentPosition = nullptr;
+	}
+	void Set_GetCurrentHeading(std::function <double()> callback)
+	{
+		m_ExternGetCurrentHeading = callback;
+	}
+	#pragma endregion
+
+};
+
+#pragma region _wrapper methods_
+MotionControl2D::MotionControl2D()
+{
+	m_MotionControl2D = std::make_shared<MotionControl2D_internal>();
+}
+void MotionControl2D::SetProperties(const properties &props)
+{
+	m_MotionControl2D->SetProperties(props);
+}
+void MotionControl2D::TimeSlice(double d_time_s)
+{
+	m_MotionControl2D->TimeChange(d_time_s);
+}
+void MotionControl2D::Reset(double X, double Y, double heading)
+{
+	m_MotionControl2D->Reset(X, Y, heading);
+}
+
+//Tele-op methods:-----------------------------------------------------------------------
+void MotionControl2D::SetLinearVelocity_local(double forward, double right)
+{
+	m_MotionControl2D->SetLinearVelocity_local(forward, right);
+}
+void MotionControl2D::SetLinearVelocity_global(double north, double east)
+{
+	m_MotionControl2D->SetRequestedVelocity(Vec2D(north, east));
+}
+void MotionControl2D::SetAngularVelocity(double clockwise)
+{
+	m_MotionControl2D->SetCurrentAngularAcceleration(clockwise,true);
+}
+//AI methods: ---------------------------------------------------------------------------
+void MotionControl2D::SetIntendedOrientation(double intended_orientation, bool absolute)
+{
+	m_MotionControl2D->SetIntendedOrientation(intended_orientation, absolute);
+}
+void MotionControl2D::DriveToLocation(double north, double east, bool stop_at_destination, double max_speed, bool can_strafe)
+{
+	m_MotionControl2D->DriveToLocation(north, east, stop_at_destination, max_speed, can_strafe);
+}
+
+//Accessors:---------------------------------------------
+bool MotionControl2D::GetIsDrivenLinear() const
+{
+	return m_MotionControl2D->GetIsDrivenLinear();
+}
+bool MotionControl2D::GetIsVelocityGlobal() const
+{
+	return true;
+}
+bool MotionControl2D::GetIsDrivenAngular() const
+{
+	return m_MotionControl2D->GetIsDrivenAngular();
+}
+
+MotionControl2D::Vector2D MotionControl2D::Get_SetVelocity_local() const
+{
+	return as_vector_2d(m_MotionControl2D->Get_SetVelocity_local());
+}
+MotionControl2D::Vector2D MotionControl2D::Get_SetVelocity_global() const
+{
+	return as_vector_2d(m_MotionControl2D->GetRequestedVelocity());
+}
+double MotionControl2D::Get_IntendedOrientation() const
+{
+	return m_MotionControl2D->GetIntendedOrientation();
+}
+MotionControl2D::Vector2D MotionControl2D::GetCurrentVelocity() const
+{
+	return as_vector_2d(m_MotionControl2D->GetLinearVelocity_ToDisplay());
+}
+MotionControl2D::Vector2D MotionControl2D::GetCurrentPosition() const
+{
+	return as_vector_2d(m_MotionControl2D->GetPos_m());
+}
+double MotionControl2D::GetCurrentHeading() const
+{
+	return m_MotionControl2D->GetAtt_r();
+}
+double MotionControl2D::GetCurrentAngularVelocity() const
+{
+	return m_MotionControl2D->GetAngularVelocity_ToDisplay();
+}
+//Optional Linker callbacks:
+void MotionControl2D::Set_UpdateGlobalVelocity(std::function<void(const Vector2D &new_velocity)> callback)
+{
+	m_MotionControl2D->Set_UpdateGlobalVelocity(callback);
+}
+void MotionControl2D::Set_UpdateHeadingVelocity(std::function<void(double new_velocity)> callback)
+{
+	m_MotionControl2D->Set_UpdateHeadingVelocity(callback);
+}
+void MotionControl2D::Set_GetCurrentPosition(std::function <Vector2D()> callback)
+{
+	m_MotionControl2D->Set_GetCurrentPosition(callback);
+}
+void MotionControl2D::Set_GetCurrentHeading(std::function <double()> callback)
+{
+	m_MotionControl2D->Set_GetCurrentHeading(callback);
+}
+
+#pragma endregion
+#endif
+#pragma endregion
 }}}
