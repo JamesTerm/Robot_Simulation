@@ -20,7 +20,7 @@
 
 #include "MotionControl2D.h"
 
-#define __UseSimpleFallback__
+//#define __UseSimpleFallback__
 #pragma endregion
 namespace Module {
 	namespace Robot	{
@@ -33,12 +33,6 @@ namespace Module {
 const double G = 6.673E-11;
 
 inline Vec2D GlobalToLocal(double Heading, const Vec2D &GlobalVector)
-{
-	return Vec2D(sin(-Heading)*GlobalVector[1] + cos(Heading)*GlobalVector[0],
-		cos(-Heading)*GlobalVector[1] + sin(Heading)*GlobalVector[0]);
-}
-
-inline Vec2D GlobalToLocal2(double Heading, const Vec2D &GlobalVector)
 {
 	return Vec2D(sin(-Heading)*GlobalVector[1] + cos(Heading)*GlobalVector[0],
 		cos(-Heading)*GlobalVector[1] + sin(Heading)*GlobalVector[0]);
@@ -643,7 +637,7 @@ public:
 		//return GetCentripetalAcceleration(DeltaTime_s) * m_EntityMass;
 
 		//This way is more efficient
-		Vec2D AlteredVelocity = GlobalToLocal2(m_AngularVelocity*DeltaTime_s, m_LinearVelocity);
+		Vec2D AlteredVelocity = GlobalToLocal(m_AngularVelocity*DeltaTime_s, m_LinearVelocity);
 		return GetForceFromVelocity(AlteredVelocity, DeltaTime_s) * DeltaTime_s;
 	}
 };
@@ -1291,25 +1285,13 @@ private:
 	#pragma endregion
 
 	AI_Base_Controller* m_controller=nullptr;
-	Ship_Properties m_ShipProps;
-	double MAX_SPEED, ENGAGED_MAX_SPEED;
-
-	// Used in Keyboard acceleration and braking
-	double ACCEL, BRAKE, STRAFE, AFTERBURNER_ACCEL, AFTERBURNER_BRAKE;
-	double dHeading;
+	Ship_Properties m_ShipProperties;
 
 	double m_RadialArmDefault; //cache the radius of concentrated mass square, which will allow us to apply torque in a r = 1 case
 
 	//Stuff needed for physics
-	double Mass;
-	double MaxAccelLeft, MaxAccelRight;//,MaxAccelForward,MaxAccelReverse;
-	double MaxTorqueYaw_SetPoint;
 	double Camera_Restraint;
 	double G_Dampener;
-
-	//! We can break this up even more if needed
-	double EngineRampForward, EngineRampReverse, EngineRampAfterBurner;
-	double EngineDeceleration, EngineRampStrafe;
 
 	//Use this technique when m_AlterTrajectory is true
 	Vec2D m_RequestedVelocity;
@@ -1346,7 +1328,7 @@ protected:
 	Vec2D m_current_position;
 	double m_current_heading = 0.0;
 
-	std::function<void(const Vec2D &new_velocity)> m_ExternSetPosition = nullptr;
+	std::function<void(const Vec2D &new_velocity)> m_ExternSetVelocity = nullptr;
 	std::function<void(double new_velocity)> m_ExternSetHeadingVelocity = nullptr;
 	std::function <Vec2D()> m_ExternGetCurrentPosition = nullptr;
 	std::function <double()> m_ExternGetCurrentHeading = nullptr;
@@ -1391,7 +1373,7 @@ protected:
 		m_IntendedOrientation += rotVel * YawResistance;
 
 		double TorqueToApply = m_IntendedOrientationPhysics.GetTorqueFromVelocity(rotVelControlled, dTime_s);
-		ApplyTorqueThrusters(m_IntendedOrientationPhysics, TorqueToApply, MaxTorqueYaw_SetPoint, dTime_s);
+		ApplyTorqueThrusters(m_IntendedOrientationPhysics, TorqueToApply,m_ShipProperties.GetShipProps().MaxTorqueYaw_SetPoint, dTime_s);
 		{
 			//Run physics update for displacement
 			Vec2D PositionDisplacement;
@@ -1494,7 +1476,7 @@ protected:
 	{
 		//TODO omit.. no controls 
 		//Its possible that each ship may have its own specific controls
-		//m_ShipProps.Get_ShipControls().BindAdditionalUIControls(Bind, joy, key);
+		//m_ShipProperties.Get_ShipControls().BindAdditionalUIControls(Bind, joy, key);
 	}
 	void CancelAllControls()
 	{
@@ -1541,23 +1523,23 @@ protected:
 	}
 	double GetMaxSpeed() const
 	{
-		return MAX_SPEED;
+		return m_ShipProperties.GetShipProps().MAX_SPEED;
 	}
 	double GetEngaged_Max_Speed() const
 	{
-		return ENGAGED_MAX_SPEED;
+		return m_ShipProperties.GetShipProps().ENGAGED_MAX_SPEED;
 	}
 	double GetStrafeSpeed() const
 	{
-		return STRAFE;
+		return m_ShipProperties.GetShipProps().STRAFE;
 	}
 	double GetAccelSpeed() const
 	{
-		return ACCEL;
+		return m_ShipProperties.GetShipProps().ACCEL;
 	}
 	double GetBrakeSpeed() const
 	{
-		return BRAKE;
+		return m_ShipProperties.GetShipProps().BRAKE;
 	}
 	double GetCameraRestraintScaler() const
 	{
@@ -1565,7 +1547,7 @@ protected:
 	}
 	double GetHeadingSpeed() const
 	{
-		return dHeading;
+		return m_ShipProperties.GetShipProps().dHeading;
 	}
 	#pragma endregion
 	#pragma endregion
@@ -1584,67 +1566,61 @@ public:
 	void UpdateShipProperties(const Ship_Props &props)
 	{
 		//Give ability to change ship properties 
-		m_ShipProps.UpdateShipProperties(props);
-		dHeading = props.dHeading;
-		MAX_SPEED = props.MAX_SPEED;
-		ENGAGED_MAX_SPEED = props.ENGAGED_MAX_SPEED;
-		ACCEL = props.ACCEL;
-		BRAKE = props.BRAKE;
-		STRAFE = props.STRAFE;
-		AFTERBURNER_ACCEL = props.AFTERBURNER_ACCEL;
-		AFTERBURNER_BRAKE = props.AFTERBURNER_BRAKE;
-
-		EngineRampAfterBurner = props.EngineRampAfterBurner;
-		EngineRampForward = props.EngineRampForward;
-		EngineRampReverse = props.EngineRampReverse;
-		EngineRampStrafe = props.EngineRampStrafe;
-		EngineDeceleration = props.EngineDeceleration;
-
-		MaxAccelLeft = props.MaxAccelLeft;
-		MaxAccelRight = props.MaxAccelRight;
-		MaxTorqueYaw_SetPoint = props.MaxTorqueYaw_SetPoint * m_Physics.GetMass();
+		m_ShipProperties.UpdateShipProperties(props);
 	}
 	void Initialize(const Ship_Properties *ship_props=nullptr)
 	{
 		//TODO see if we really need to initialize
+		m_Physics.SetMass(120.0 / 2.205); //the typical weight of the robot
 		//virtual void Initialize(Entity2D_Kind::EventMap& em, const Entity_Properties *props = NULL);
 		if (!m_controller)
 			m_controller = Create_Controller();
+		//These default values are pulled from 2014 robot (perhaps the best tuned robot for driver)
+		const double g_wheel_diameter_in = 4;
+		const double Inches2Meters = 0.0254;
+		const double Meters2Inches = 39.3700787;
+		const double HighGearSpeed = (873.53 / 60.0) * Pi * g_wheel_diameter_in * Inches2Meters  * 0.85;
+		const double WheelBase_Width_In = 26.5;	  //The wheel base will determine the turn rate, must be as accurate as possible!
+		const double WheelBase_Length_In = 10.0;  //was 9.625
+		const double WheelTurningDiameter_In = sqrt((WheelBase_Width_In * WheelBase_Width_In) + (WheelBase_Length_In * WheelBase_Length_In));
+		const double skid = cos(atan2(WheelBase_Length_In, WheelBase_Width_In));
+		const double Drive_MaxAccel = 5.0;
+		const double gMaxTorqueYaw = (2 * Drive_MaxAccel * Meters2Inches / WheelTurningDiameter_In) * skid;
+		Ship_Props props =
+		{
+		//double dHeading;
+			(2 * HighGearSpeed * Meters2Inches / WheelTurningDiameter_In) * skid,
+		//double EngineRampForward, EngineRampReverse, EngineRampAfterBurner;
+		10.0,10.0,10.0,
+		//double EngineDeceleration, EngineRampStrafe;
+		10.0,10.0,
+		//double MAX_SPEED, ENGAGED_MAX_SPEED;
+		HighGearSpeed,HighGearSpeed,
+		//double ACCEL, BRAKE, STRAFE, AFTERBURNER_ACCEL, AFTERBURNER_BRAKE;
+		10.0,10.0,10.0,10.0,10.0,
+		//double MaxAccelLeft, MaxAccelRight, MaxAccelForward, MaxAccelReverse;
+		20.0,20.0,Drive_MaxAccel,Drive_MaxAccel,
+		//double MaxAccelForward_High, MaxAccelReverse_High;
+		Drive_MaxAccel*2,Drive_MaxAccel*2,
+		//double MaxTorqueYaw, MaxTorqueYaw_High;
+		gMaxTorqueYaw * 0.78,gMaxTorqueYaw * 5.0,
+		//double MaxTorqueYaw_SetPoint, MaxTorqueYaw_SetPoint_High;
+		gMaxTorqueYaw * 2,gMaxTorqueYaw * 10,
+		//double Rotation_Tolerance;
+		DEG_2_RAD(2),
+		//double Rotation_ToleranceConsecutiveCount;
+		0.0,  //disabled by default using  0.0
+		//double Rotation_TargetDistanceScalar;
+		1.0
+		};
 		if (ship_props)
 		{
-			UpdateShipProperties(ship_props->GetShipProps());
-			m_ShipProps = *ship_props;
+			m_ShipProperties = *ship_props;
+			props = ship_props->GetShipProps();
 		}
-		else
-		{
-			m_Physics.SetMass(120.0/2.205); //the typical weight of the robot
-			double Scale = 0.2;  //we must scale everything down to see on the view
-			MAX_SPEED = 2000.0 * Scale;
-			ENGAGED_MAX_SPEED = 400.0 * Scale;
-			ACCEL = 60.0 * Scale;
-			BRAKE = 50.0 * Scale;
-			STRAFE = BRAKE; //could not find this one
-			AFTERBURNER_ACCEL = 107.0 * Scale;
-			AFTERBURNER_BRAKE = BRAKE;
-
-			double RAMP_UP_DUR = 1.0;
-			double RAMP_DOWN_DUR = 1.0;
-			EngineRampAfterBurner = AFTERBURNER_ACCEL / RAMP_UP_DUR;
-			EngineRampForward = ACCEL / RAMP_UP_DUR;
-			EngineRampReverse = BRAKE / RAMP_UP_DUR;
-			EngineRampStrafe = STRAFE / RAMP_UP_DUR;
-			EngineDeceleration = ACCEL / RAMP_DOWN_DUR;
-
-			MaxAccelLeft = 40.0 * Scale;
-			MaxAccelRight = 40.0 * Scale;
-			//MaxAccelForward=87.0 * Scale;
-			//MaxAccelReverse=70.0 * Scale;
-			MaxTorqueYaw_SetPoint = 2.5;
-			dHeading = DEG_2_RAD(270.0);
-		}
+		UpdateShipProperties(props);
 
 		Camera_Restraint = G_Dampener = 1.0;
-		Mass = m_Physics.GetMass();
 
 		//For now I don't really care about these numbers yet, so I'm pulling from the q33
 		//m_Physics.StructuralDmgGLimit = 10.0;
@@ -1655,17 +1631,18 @@ public:
 		//Pass these acceleration derivatives on to the Physics/Flight-Dynamics
 		{
 			FlightDynamics_2D::LinearAccelerationRates &_ = m_Physics.GetLinearAccelerationRates();
-			_.AccDeltaPos = Vec2D(EngineRampStrafe, EngineRampForward);
-			_.AccDeltaNeg = Vec2D(EngineRampStrafe, EngineRampReverse);
-			Vec2D Deceleration(EngineDeceleration, EngineDeceleration);
+			_.AccDeltaPos = Vec2D(props.EngineRampStrafe, props.EngineRampForward);
+			_.AccDeltaNeg = Vec2D(props.EngineRampStrafe, props.EngineRampReverse);
+			Vec2D Deceleration(props.EngineDeceleration, props.EngineDeceleration);
 			_.DecDeltaPos = _.DecDeltaNeg = Deceleration;
 		}
 
 		m_IntendedOrientation = GetAtt_r();
-		m_IntendedOrientationPhysics.SetMass(Mass);
+		m_IntendedOrientationPhysics.SetMass(25);
 	}
 	void TimeChange(double dTime_s)
 	{
+		const double Mass = m_Physics.GetMass();
 		// Update my controller
 		m_controller->UpdateController(dTime_s);
 
@@ -1677,7 +1654,7 @@ public:
 		bool afterBurnerOn = (m_RequestedVelocity[1] > GetEngaged_Max_Speed());
 		bool afterBurnerBrakeOn = (fabs(currVelocity) > GetEngaged_Max_Speed());
 		//const FlightCharacteristics& currFC((afterBurnerOn||afterBurnerBrakeOn) ? Afterburner_Characteristics : GetFlightCharacteristics());
-		const Ship_Props &ship_props = m_ShipProps.GetShipProps();
+		const Ship_Props &props = m_ShipProperties.GetShipProps();
 
 		Vec2D ForceToApply;
 		//Enable to monitor current speed
@@ -1717,11 +1694,11 @@ public:
 				SmartDashboard::PutNumber("desired y", RAD_2_DEG(m_IntendedOrientation));
 				SmartDashboard::PutNumber("actual y", RAD_2_DEG(NormalizeRotation2(m_Physics.GetHeading())));
 				#endif
-				const double TargetDistanceScalar = ship_props.Rotation_TargetDistanceScalar;
+				const double TargetDistanceScalar = props.Rotation_TargetDistanceScalar;
 				if (TargetDistanceScalar != 1.0)
 				{
 					//a simple linear blend on the scalar should be fine (could upgrade to poly if needed)
-					const double ratio = fabs(m_Physics.GetAngularVelocity()) / dHeading;
+					const double ratio = fabs(m_Physics.GetAngularVelocity()) / props.dHeading;
 					//Note the slower it goes the more blend of the TargetDistanceScalar needs to become to slow it down more towards
 					//the last moments
 					const double scale = (ratio * 1.0) + ((1.0 - ratio) * TargetDistanceScalar);
@@ -1731,12 +1708,12 @@ public:
 					#endif
 					m_rotDisplacement_rad *= scale;
 				}
-				if (fabs(m_rotDisplacement_rad) < ship_props.Rotation_Tolerance)
+				if (fabs(m_rotDisplacement_rad) < props.Rotation_Tolerance)
 				{
 					//If we are not using a tolerance counter we'll zero out anytime it hits the tolerance threshold
 					//If we are using it... then we keep feeding the displacement give PID and tolerance count a change to center into
 					//the tolerance threshold
-					if (ship_props.Rotation_ToleranceConsecutiveCount == 0.0)
+					if (props.Rotation_ToleranceConsecutiveCount == 0.0)
 						m_rotDisplacement_rad = 0.0;
 					m_RotationToleranceCounter++;
 				}
@@ -1749,7 +1726,7 @@ public:
 
 				//SmartDashboard::PutBoolean("Test m_rotDisplacement_rad",m_rotDisplacement_rad==0.0);
 
-				if ((m_RotationToleranceCounter > 0.0) && (m_RotationToleranceCounter >= ship_props.Rotation_ToleranceConsecutiveCount))
+				if ((m_RotationToleranceCounter > 0.0) && (m_RotationToleranceCounter >= props.Rotation_ToleranceConsecutiveCount))
 					m_LockShipHeadingToOrientation = true;
 			}
 			//SmartDashboard::PutBoolean("m_LockShipHeadingToOrientation",m_LockShipHeadingToOrientation);
@@ -1765,8 +1742,8 @@ public:
 		const bool AutoPilot = false;
 		//Apply the restraints now... for now the lock ship member is a good way to know if it is being driven or autonomous, but we wouldn't want
 		//to do this in the game
-		Vec2D AccRestraintPositive(MaxAccelRight, AutoPilot ? ship_props.MaxAccelForward : m_ShipProps.GetMaxAccelForward(currVelocity));
-		Vec2D AccRestraintNegative(MaxAccelLeft, AutoPilot ? ship_props.MaxAccelReverse : m_ShipProps.GetMaxAccelReverse(currVelocity));
+		Vec2D AccRestraintPositive(props.MaxAccelRight, AutoPilot ? props.MaxAccelForward : m_ShipProperties.GetMaxAccelForward(currVelocity));
+		Vec2D AccRestraintNegative(props.MaxAccelLeft, AutoPilot ? props.MaxAccelReverse : m_ShipProperties.GetMaxAccelReverse(currVelocity));
 
 		if (!manualMode)
 		{
@@ -1826,15 +1803,15 @@ public:
 				//  [2/14/2013 James]
 				if (VelocityToUse[1] < 0) // Watch for braking too far backwards, we do not want to go beyond -ENGAGED_MAX_SPEED
 				{
-					if ((VelocityToUse[1]) < -ENGAGED_MAX_SPEED)
+					if ((VelocityToUse[1]) < -props.ENGAGED_MAX_SPEED)
 					{
-						m_RequestedVelocity[1] = VelocityToUse[1] = -ENGAGED_MAX_SPEED;
+						m_RequestedVelocity[1] = VelocityToUse[1] = -props.ENGAGED_MAX_SPEED;
 						m_currAccel[1] = 0.0;
 					}
 				}
 				else
 				{
-					double MaxSpeed = afterBurnerOn ? MAX_SPEED : ENGAGED_MAX_SPEED;
+					double MaxSpeed = afterBurnerOn ? props.MAX_SPEED : props.ENGAGED_MAX_SPEED;
 					if ((VelocityToUse[1]) > MaxSpeed)
 					{
 						m_RequestedVelocity[1] = VelocityToUse[1] = MaxSpeed;
@@ -1886,14 +1863,14 @@ public:
 			{
 				//TODO we may want to compute the fractional forces to fill in the final room left, but before that the engine ramp up would need to
 				//be taken into consideration as it currently causes it to slightly go beyond the boundary
-				double MaxForwardSpeed = afterBurnerOn ? MAX_SPEED : ENGAGED_MAX_SPEED;
+				double MaxForwardSpeed = afterBurnerOn ? props.MAX_SPEED : props.ENGAGED_MAX_SPEED;
 				for (size_t i = 0; i < 2; i++)
 				{
-					double MaxSpeedThisAxis = i == 1 ? MaxForwardSpeed : ENGAGED_MAX_SPEED;
+					double MaxSpeedThisAxis = i == 1 ? MaxForwardSpeed : props.ENGAGED_MAX_SPEED;
 					double VelocityDelta = (m_currAccel[1] * dTime_s);
 					if ((LocalVelocity[i] + VelocityDelta > MaxSpeedThisAxis) && (m_currAccel[i] > 0))
 						m_currAccel[i] = 0.0;
-					else if ((LocalVelocity[i] + VelocityDelta < -ENGAGED_MAX_SPEED) && (m_currAccel[i] < 0))
+					else if ((LocalVelocity[i] + VelocityDelta < -props.ENGAGED_MAX_SPEED) && (m_currAccel[i] < 0))
 						m_currAccel[i] = 0.0;
 				}
 			}
@@ -1918,13 +1895,13 @@ public:
 
 			//This is not perfect in that all the accelerated and deceleration vector elements need to have this ramp value for non-sliding mode
 			//We may alternately consider putting it in slide mode when using afterburner
-			m_Physics.GetLinearAccelerationRates().AccDeltaPos = Vec2D(EngineRampAfterBurner, EngineRampAfterBurner);
-			m_Physics.GetLinearAccelerationRates().DecDeltaPos = Vec2D(EngineRampAfterBurner, EngineRampAfterBurner);
+			m_Physics.GetLinearAccelerationRates().AccDeltaPos = Vec2D(props.EngineRampAfterBurner, props.EngineRampAfterBurner);
+			m_Physics.GetLinearAccelerationRates().DecDeltaPos = Vec2D(props.EngineRampAfterBurner, props.EngineRampAfterBurner);
 		}
 		else
 		{
-			m_Physics.GetLinearAccelerationRates().AccDeltaPos = Vec2D(EngineRampStrafe, EngineRampForward);
-			m_Physics.GetLinearAccelerationRates().DecDeltaPos = Vec2D(EngineDeceleration, EngineDeceleration);
+			m_Physics.GetLinearAccelerationRates().AccDeltaPos = Vec2D(props.EngineRampStrafe, props.EngineRampForward);
+			m_Physics.GetLinearAccelerationRates().DecDeltaPos = Vec2D(props.EngineDeceleration, props.EngineDeceleration);
 		}
 
 		ForceToApply = m_Physics.ComputeRestrainedForce(ForceToApply, AccRestraintPositive*Mass, AccRestraintNegative*Mass, dTime_s);
@@ -1934,8 +1911,8 @@ public:
 		//If we are using set point we don't want the blend of torque high as this will throw off the computations
 		//Note: GetMaxTorqueYaw get it as angular acceleration (we should rename it)... so it needs to be multiplied by mass to become torque
 		const double Ships_TorqueRestraint = m_LockShipHeadingToOrientation ?
-			m_ShipProps.GetMaxTorqueYaw(std::min(m_Physics.GetAngularVelocity(), dHeading)) * m_Physics.GetMass() :
-			m_ShipProps.GetMaxTorqueYaw_SetPoint(std::min(m_Physics.GetAngularVelocity(), dHeading)) * m_Physics.GetMass();
+			m_ShipProperties.GetMaxTorqueYaw(std::min(m_Physics.GetAngularVelocity(), props.dHeading)) * Mass :
+			m_ShipProperties.GetMaxTorqueYaw_SetPoint(std::min(m_Physics.GetAngularVelocity(), props.dHeading)) * Mass;
 
 		if (m_StabilizeRotation)
 		{
@@ -1951,9 +1928,9 @@ public:
 				double DistanceToUse = m_rotDisplacement_rad;
 				//The match velocity needs to be in the same direction as the distance (It will not be if the ship is banking)
 				double MatchVel = 0.0;
-				//Note using  * m_ShipProps.GetRotateToScaler(DistanceToUse) is now depreciated, as the set point restraint really needs to be constant
+				//Note using  * m_ShipProperties.GetRotateToScaler(DistanceToUse) is now depreciated, as the set point restraint really needs to be constant
 				//we can have a higher torque restraint to deal with overshoot... but keep the rate steady and lower
-				rotVel = m_Physics.GetVelocityFromDistance_Angular(DistanceToUse, MaxTorqueYaw_SetPoint, dTime_s, MatchVel, !m_LockShipHeadingToOrientation);
+				rotVel = m_Physics.GetVelocityFromDistance_Angular(DistanceToUse, props.MaxTorqueYaw_SetPoint, dTime_s, MatchVel, !m_LockShipHeadingToOrientation);
 			}
 			else
 				rotVel = m_rotDisplacement_rad;
@@ -1976,7 +1953,7 @@ public:
 			//While joystick and keyboard never exceed the speeds, the mouse can... so cap it off here
 			//Note: The m_HeadingSpeedScale applies to both yaw and pitch since we perform coordinated turns
 			{
-				double SpeedRestraint = dHeading * m_HeadingSpeedScale;
+				double SpeedRestraint = props.dHeading * m_HeadingSpeedScale;
 				double SmallestRatio = 1.0;
 				//This works similar to LocalTorque restraints; 
 				//This method computes the smallest ratio needed to scale down the vectors.  It should give the maximum amount
@@ -2030,6 +2007,15 @@ public:
 		m_rotAccel_rad_s = 0.0;
 		m_currAccel = Vec2D(0, 0);
 
+		//send this velocity to entity if it exists
+		if (m_ExternSetVelocity)
+		{
+			Vec2D LocalVelocity = GlobalToLocal(-GetAtt_r(), m_Physics.GetLinearVelocity());
+			//send local velocity
+			m_ExternSetVelocity(LocalVelocity);
+		}
+		if (m_ExternSetHeadingVelocity)
+			m_ExternSetHeadingVelocity(m_Physics.GetAngularVelocity());
 	}
 	~Ship_2D()
 	{
@@ -2158,7 +2144,7 @@ public:
 	}
 	const Ship_Properties &GetShipProperties() const
 	{ 
-		return m_ShipProps; 
+		return m_ShipProperties;
 	}
 	#pragma endregion
 	#pragma endregion
@@ -2216,7 +2202,7 @@ private:
 	bool m_stop_at_waypoint = true;
 	bool m_can_strafe = true;
 
-	std::function<void(const MotionControl2D::Vector2D &new_velocity)> m_ExternSetPosition=nullptr;
+	std::function<void(const MotionControl2D::Vector2D &new_velocity)> m_ExternSetVelocity=nullptr;
 	std::function<void(double new_velocity)> m_ExternSetHeadingVelocity=nullptr;
 	std::function <MotionControl2D::Vector2D()> m_ExternGetCurrentPosition=nullptr;
 	std::function <double()> m_ExternGetCurrentHeading=nullptr;
@@ -2262,10 +2248,10 @@ private:
 			//now update the current velocity
 			m_current_velocity = normalized_request * adjusted_magnitude;
 			//send this velocity to entity if it exists
-			if (m_ExternSetPosition)
-				m_ExternSetPosition(as_vector_2d(m_current_velocity));
+			if (m_ExternSetVelocity)
+				m_ExternSetVelocity(as_vector_2d(m_current_velocity));
 			//If we don't have the callbacks for both set and get... we'll update our own default implementation
-			if ((!m_ExternGetCurrentPosition) || (!m_ExternSetPosition))
+			if ((!m_ExternGetCurrentPosition) || (!m_ExternSetVelocity))
 			{
 				//from current velocity we can update the position
 				m_current_position += m_current_velocity * d_time_s;
@@ -2446,7 +2432,7 @@ public:
 	//Optional Linker callbacks:
 	void Set_UpdateGlobalVelocity(std::function<void(const MotionControl2D::Vector2D &new_velocity)> callback)
 	{
-		m_ExternSetPosition = callback;
+		m_ExternSetVelocity = callback;
 	}
 	void Set_UpdateHeadingVelocity(std::function<void(double new_velocity)> callback)
 	{
@@ -2574,7 +2560,7 @@ void MotionControl2D::Set_GetCurrentHeading(std::function <double()> callback)
 class MotionControl2D_internal : public Ship_2D
 {
 private:
-	std::function<void(const MotionControl2D::Vector2D &new_velocity)> m_ExternSetPosition_AsVector2D = nullptr;
+	std::function<void(const MotionControl2D::Vector2D &new_velocity)> m_ExternSetVelocity_AsVector2D = nullptr;
 	std::function <MotionControl2D::Vector2D()> m_ExternGetCurrentPosition_AsVector2D = nullptr;
 
 public:
@@ -2586,7 +2572,7 @@ public:
 	}
 	void SetLinearVelocity_local(double forward, double right)
 	{
-		SetRequestedVelocity(GlobalToLocal2(GetAtt_r(), Vec2D(right, forward)));
+		SetRequestedVelocity(GlobalToLocal(GetAtt_r(), Vec2D(right, forward)));
 	}
 	void SetProperties(const properties &props)
 	{
@@ -2607,24 +2593,24 @@ public:
 	}
 	Vec2D Get_SetVelocity_local() const
 	{
-		return GlobalToLocal2(GetAtt_r(), GetRequestedVelocity());
+		return GlobalToLocal(GetAtt_r(), GetRequestedVelocity());
 	}
 	#pragma region _Callbacks_
 	//Optional Linker callbacks:
 	void Set_UpdateGlobalVelocity(std::function<void(const MotionControl2D::Vector2D &new_velocity)> callback)
 	{
-		m_ExternSetPosition_AsVector2D = callback;
+		m_ExternSetVelocity_AsVector2D = callback;
 		//do the conversion
 		if (callback)
 		{
-			m_ExternSetPosition =
+			m_ExternSetVelocity =
 				[&](const Vec2D &new_velocity)
 			{
-				m_ExternSetPosition_AsVector2D(as_vector_2d(new_velocity));
+				m_ExternSetVelocity_AsVector2D(as_vector_2d(new_velocity));
 			};
 		}
 		else
-			m_ExternSetPosition = nullptr;
+			m_ExternSetVelocity = nullptr;
 	}
 	void Set_UpdateHeadingVelocity(std::function<void(double new_velocity)> callback)
 	{

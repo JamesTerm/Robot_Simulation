@@ -17,6 +17,7 @@
 #include "../../../Modules/Robot/DriveKinematics/DriveKinematics/Vehicle_Drive.h"
 #include "../../../Modules/Robot/Entity2D/Entity2D/Entity2D.h"
 #include "../../../Modules/Robot/MotionControl2D_simple/MotionControl2D/MotionControl2D.h"
+#include "../../../Modules/Robot/MotionControl2D_physics/MotionControl2D_physics/MotionControl2D.h"
 #include "../../../Modules/Output/OSG_Viewer/OSG_Viewer/OSG_Viewer.h"
 #include "../../../Modules/Output/OSG_Viewer/OSG_Viewer/SwerveRobot_UI.h"
 #include "../../../Modules/Output/OSG_Viewer/OSG_Viewer/Keyboard_State.h"
@@ -36,6 +37,7 @@
 #endif
 #endif
 
+//#define __UseSimpleMotionControl__
 #pragma endregion
 
 namespace Application
@@ -48,7 +50,13 @@ class Test_Swerve_Viewer
 private:
 	#pragma region _member variables_
 	Module::Localization::Entity2D m_Entity;
+	//Here we can choose which motion control to use, this works because the interface
+	//between them remain (mostly) identical
+	#ifdef __UseSimpleMotionControl__
 	Module::Robot::Simple::MotionControl2D m_MotionControl2D;
+	#else
+	Module::Robot::Physics::MotionControl2D m_MotionControl2D;
+	#endif
 	Module::Input::dx_Joystick m_joystick;  //Note: always late binding, so we can aggregate direct easy here
 	Module::Input::Analog_EventEntry m_joystick_options;  //for now a simple one-stop option for all
 	Module::Robot::Swerve_Drive m_robot;
@@ -245,7 +253,11 @@ public:
 		//Note: We'll skip properties for motion control since we have good defaults
 		#pragma region _optional linking of entity to motion control_
 		//Now to link up the callbacks for motion control:  Note we can link them up even if we are not using it
+		#ifdef __UseSimpleMotionControl__
 		using Vector2D = Module::Robot::Simple::MotionControl2D::Vector2D;
+		#else
+		using Vector2D = Module::Robot::Physics::MotionControl2D::Vector2D;
+		#endif
 		m_MotionControl2D.Set_UpdateGlobalVelocity([&](const Vector2D &new_velocity)
 			{	m_Entity.SetLinearVelocity_global(new_velocity.y, new_velocity.x);
 			});
