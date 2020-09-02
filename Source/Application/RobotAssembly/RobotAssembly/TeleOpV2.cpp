@@ -42,6 +42,11 @@
 
 namespace Application
 {
+inline Vec2D LocalToGlobal(double Heading, const Vec2D &LocalVector)
+{
+	return Vec2D(sin(Heading)*LocalVector[1] + cos(-Heading)*LocalVector[0],
+		cos(Heading)*LocalVector[1] + sin(-Heading)*LocalVector[0]);
+}
 
 #pragma region _Test_Swerve_Viewer_
 
@@ -59,7 +64,8 @@ private:
 	#endif
 	Module::Input::dx_Joystick m_joystick;  //Note: always late binding, so we can aggregate direct easy here
 	Module::Input::Analog_EventEntry m_joystick_options;  //for now a simple one-stop option for all
-	Module::Robot::Swerve_Drive m_robot;
+	Module::Robot::Swerve_Drive m_robot;  //keep track of our intended velocities
+	Module::Robot::Swerve_Drive m_robot_display; //For our display we'll interpret the velocities computed 
 	Module::Robot::Inv_Swerve_Drive m_Entity_Input;
 	
 	Module::Output::OSG_Viewer m_viewer;
@@ -77,7 +83,7 @@ private:
 	{
 		Module::Localization::Entity2D &entity = m_Entity;
 		using namespace Module::Localization;
-		Entity2D::Vector2D linear_velocity = entity.GetCurrentVelocity();
+		const Entity2D::Vector2D linear_velocity = entity.GetCurrentVelocity();
 		Vec2D velocity_normalized(linear_velocity.x, linear_velocity.y);
 		double magnitude = velocity_normalized.normalize();
 		//Entity variables-------------------------------------------
@@ -93,6 +99,7 @@ private:
 		m_current_state.bits.IntendedOrientation = atan2(velocity_normalized[0], velocity_normalized[1]);
 		SmartDashboard::PutNumber("Heading", RAD_2_DEG(entity.GetCurrentHeading()));
 		m_current_state.bits.Att_r = entity.GetCurrentHeading();
+		//To make this interesting, we keep the SmartDashboard to show the intended velocities...
 		//SmartDashboard::PutNumber("setpoint_angle", RAD_2_DEG(entity.Get_IntendedOrientation()));
 		//kinematic variables-------------------------------------------
 		SmartDashboard::PutNumber("Wheel_fl_Velocity", Meters2Feet(m_robot.GetIntendedVelocitiesFromIndex(0)));
@@ -105,8 +112,12 @@ private:
 		SmartDashboard::PutNumber("swivel_fr_Raw", RAD_2_DEG(m_robot.GetSwerveVelocitiesFromIndex(1)));
 		SmartDashboard::PutNumber("swivel_rl_Raw", RAD_2_DEG(m_robot.GetSwerveVelocitiesFromIndex(2)));
 		SmartDashboard::PutNumber("swivel_rr_Raw", RAD_2_DEG(m_robot.GetSwerveVelocitiesFromIndex(3)));
+		//but for our current state of the UI, use the actual velocities from the entity 
+		//(which will be different as it accounts for mechanical resolve of momentum)
+		Vec2D global_velocity= LocalToGlobal(entity.GetCurrentHeading(), Vec2D(linear_velocity.y,linear_velocity.x));
+		m_robot_display.UpdateVelocities(global_velocity[0], global_velocity[1],entity.GetCurrentAngularVelocity());
 		for (size_t i = 0; i < 8; i++)
-			m_current_state.bits.SwerveVelocitiesFromIndex[i] = m_robot.GetIntendedVelocities().Velocity.AsArray[i];
+			m_current_state.bits.SwerveVelocitiesFromIndex[i] = m_robot_display.GetIntendedVelocities().Velocity.AsArray[i];
 	}
 
 	void GetInputSlice()
@@ -233,6 +244,7 @@ public:
 		};
 		//Set the properties... this should be a one-time setup operation
 		m_robot.SetProperties(props);
+		m_robot_display.SetProperties(props);
 		//redundant but reserved to be different
 		Inv_Swerve_Drive::properties inv_props =
 		{
