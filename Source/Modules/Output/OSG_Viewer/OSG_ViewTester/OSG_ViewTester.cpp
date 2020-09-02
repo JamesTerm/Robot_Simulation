@@ -130,7 +130,7 @@ private:
 	OSG_Viewer *m_viewer = nullptr;
 	Input::Keyboard_State m_Keyboard;
 	double m_dTime_s=0.016;
-
+	bool m_IsInit = false;  //cache state of this for early test which do not use the robot and entity objects
 	void SetHooks(bool enable)
 	{
 		if (enable)
@@ -138,6 +138,8 @@ private:
 			//Tell viewer to look at our scene for our object
 			m_viewer->SetSceneCallback([&](void *rootNode, void *geode) 
 			{ 
+				if (!m_IsInit) 
+					return;
 				m_Robot.As_SwerveRobot_UI().UpdateScene(geode, true); 
 				m_Entity.As_EntityUI().UpdateScene(geode, true);
 			});
@@ -145,6 +147,8 @@ private:
 			m_viewer->SetUpdateCallback(
 				[&](double dTime_s)
 			{
+				if (!m_IsInit)
+					return;
 				m_dTime_s = dTime_s; //for other callbacks to access
 				{
 					//any updates can go here to the current state
@@ -181,6 +185,7 @@ public:
 	}
 	void init()
 	{
+		m_IsInit = true;
 		m_Robot.init();
 		m_Entity.init();
 		m_Entity.get_current_state_rw().Pos_m.x = Feet2Meters(5);

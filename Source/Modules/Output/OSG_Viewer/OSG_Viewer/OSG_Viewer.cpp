@@ -5449,8 +5449,9 @@ public:
 		}
 	}
 
+	//TODO provide method to blend skid of red here
 	virtual osg::Vec4 GetFrontWheelColor() const { return osg::Vec4(0.0, 1.0, 0.0, 1.0); }
-	virtual osg::Vec4 GetBackWheelColor() const { return osg::Vec4(1.0, 0.0, 0.0, 1.0); }
+	virtual osg::Vec4 GetBackWheelColor() const { return osg::Vec4(0.0, 0.0, 1.0, 1.0); }
 };
 
 #pragma endregion
@@ -5494,7 +5495,7 @@ public:
 			entity_name,
 			Dimensions,
 			Character_Dimensions,
-			"     \n,   ,\n(-+-)\n'   '\n     "
+			"     \n,   ,\n(-^-)\n'   '\n     "
 		};
 		return ret;
 	}
@@ -6257,7 +6258,7 @@ public:
 					IntendedOrientation += NormalizeRotation2(sample * 0.25);
 					current_state.SwerveVelocitiesFromIndex[0] += NormalizeRotation2(sample * 0.02);
 					current_state.SwerveVelocitiesFromIndex[5] += NormalizeRotation2(sample * 0.02);
-					current_state.Pos_m.y = sample * 10.0;
+					current_state.Pos_m.y = sample * 2.0;
 				});
 			test.init(); //call back the UI thread
 			m_UI_thread->SetCallbackInterface(&test);
@@ -6298,7 +6299,7 @@ public:
 					IntendedOrientation += NormalizeRotation2(sample * 0.25);
 					current_state.SwerveVelocitiesFromIndex[0] += NormalizeRotation2(sample * 0.02);
 					current_state.SwerveVelocitiesFromIndex[5] += NormalizeRotation2(sample * 0.02);
-					current_state.Pos_m.x = sample * 10.0;
+					current_state.Pos_m.x = sample * 2.0;
 					s_robot.TimeChange(dTime_s);
 				});
 
