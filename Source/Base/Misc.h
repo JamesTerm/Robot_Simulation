@@ -351,3 +351,32 @@ namespace Base=Framework::Base;
 namespace Entity2D_Kind=Framework::Base;
 #define COMMON_API
 
+#pragma region _helper functions_
+//The actual force between two objects are f=(G m1 m2)/ r^2
+//For example g = ( G * (Me->5.98E+24)) / (Re->6.38E+6)^2 = 9.8 m/s^2
+//G is ideal to compute forces on ships from various planets
+const double G = 6.673E-11;
+
+//Normalize it in the bound of Pi2
+inline void NormalizeToPi2(double &A)
+{
+	if (A < 0)
+		A += Pi2;
+	else if (A > Pi2)
+		A -= Pi2;
+}
+
+inline void NormalizeToPi2wDirection(double &A)
+{
+	if (A < -Pi2)
+		A += Pi2;
+	else if (A > Pi2)
+		A -= Pi2;
+}
+
+__inline double shortest_angle(double Distance)
+{
+	return Distance - Pi2 * floor(Distance / Pi2 + 0.5);
+}
+
+#pragma endregion

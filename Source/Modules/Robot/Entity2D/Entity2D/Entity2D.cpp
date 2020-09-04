@@ -24,18 +24,6 @@ namespace Module {
 
 #pragma region _Entity 2D Internal_
 
-__inline Vec2D LocalToGlobal(double Heading, const Vec2D &LocalVector)
-{
-	return Vec2D(sin(Heading)*LocalVector[1] + cos(-Heading)*LocalVector[0],
-		cos(Heading)*LocalVector[1] + sin(-Heading)*LocalVector[0]);
-}
-
-__inline Vec2D GlobalToLocal(double Heading, const Vec2D &GlobalVector)
-{
-	return Vec2D(sin(-Heading)*GlobalVector[1] + cos(Heading)*GlobalVector[0],
-		cos(-Heading)*GlobalVector[1] + sin(Heading)*GlobalVector[0]);
-}
-
 class Entity2D_internal
 {
 private:

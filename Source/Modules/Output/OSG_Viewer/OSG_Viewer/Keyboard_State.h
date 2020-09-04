@@ -1,4 +1,7 @@
 #pragma once
+#undef min
+#undef max
+#include <algorithm>
 //This helper class is a self contained example of translating OSG Keyboard callbacks to a state.  Due to the actual keyboard
 //codes themselves this remains simple and a part of OSG Viewer, even though it is a part of the module input namespace
 //It is possible to re-use the internal working of this to be mapped to keys, and that could then be generic enough to stand
@@ -89,7 +92,7 @@ public:
 
 			m_state.raw.element[i] += m_rate.raw.element[i] * dTime_s;
 			//clip range
-			m_state.raw.element[i] = min(1.0, max(-1.0, m_state.raw.element[i]));
+			m_state.raw.element[i] = std::min(1.0, std::max(-1.0, m_state.raw.element[i]));
 		}
 	}
 	uKeyState GetState() const { return m_state; }

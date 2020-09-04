@@ -42,11 +42,6 @@
 
 namespace Application
 {
-inline Vec2D LocalToGlobal(double Heading, const Vec2D &LocalVector)
-{
-	return Vec2D(sin(Heading)*LocalVector[1] + cos(-Heading)*LocalVector[0],
-		cos(Heading)*LocalVector[1] + sin(-Heading)*LocalVector[0]);
-}
 
 #pragma region _Test_Swerve_Viewer_
 

@@ -1,5 +1,11 @@
 
 #pragma once
+#include "Base_Includes.h"
+#include <math.h>
+#include <assert.h>
+#include <algorithm>
+#undef min
+#undef max
 
 #if 0
     inline bool isNaN(float v) { return _isnan(v)!=0; }
@@ -168,6 +174,37 @@ class Vec2d
 
 };    // end of class Vec2d
 
+inline Vec2d GlobalToLocal(double Heading, const Vec2d &GlobalVector)
+{
+	return Vec2d(sin(-Heading)*GlobalVector[1] + cos(Heading)*GlobalVector[0],
+		cos(-Heading)*GlobalVector[1] + sin(Heading)*GlobalVector[0]);
+}
+
+inline Vec2d LocalToGlobal(double Heading, const Vec2d &LocalVector)
+{
+	return Vec2d(sin(Heading)*LocalVector[1] + cos(-Heading)*LocalVector[0],
+		cos(Heading)*LocalVector[1] + sin(-Heading)*LocalVector[0]);
+}
+
+inline bool PosBNE(double val, double t)
+{
+	return !(fabs(val - t) < 1E-3);
+}
+
+
+inline const Vec2d Vec2Multiply(const Vec2d &A, const Vec2d &rhs)
+{
+	return Vec2d(A[0] * rhs._v[0], A[1] * rhs._v[1]);
+}
+
+inline const Vec2d Vec2_abs(const Vec2d &A)
+{
+	return Vec2d(fabs(A[0]), fabs(A[1]));
+}
+inline const Vec2d Vec2_min(const Vec2d &A, const Vec2d &B)
+{
+	return Vec2d(std::min(A[0], B[0]), std::min(A[1], B[1]));
+}
 }    // end of namespace Base
 }	//end of namespace Framework
 

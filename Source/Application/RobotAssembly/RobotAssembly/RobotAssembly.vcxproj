@@ -173,6 +173,7 @@
     <ClCompile Include="TeleOpV2.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\..\Base\Physics.h" />
     <ClInclude Include="..\..\..\Modules\Input\dx_Joystick_Controller\dx_Joystick_Controller\dx_Joystick.h" />
     <ClInclude Include="..\..\..\Modules\Input\JoystickConverter.h" />
     <ClInclude Include="..\..\..\Modules\Output\OSG_Viewer\OSG_Viewer\Entity_UI.h" />
