@@ -19,7 +19,7 @@ public:
 	//Run the simulation time-slice
 	void TimeSlice(double d_time_s);
 	//Output: contains the current speeds and positions of any given moment of time
-	const SwerveVelocities &GetIntendedVelocities() const;
+	const SwerveVelocities &GetCurrentVelocities() const;
 private:
 	std::shared_ptr<SimulatoedOdometry_Internal> m_simulator;
 };
