@@ -11,7 +11,7 @@ class SwerveManagement
 {
 private:
 	SwerveVelocities m_Velocity;
-	std::function<const SwerveVelocities &()> m_OdometryCallback=nullptr;
+	std::function< SwerveVelocities ()> m_OdometryCallback=nullptr;
 public:
 	//Input
 	void InterpolateVelocities(const SwerveVelocities &Velocities)
@@ -36,7 +36,7 @@ public:
 	}
 
 	//Odometry callback of each wheel module
-	void SetOdometryCallback(std::function<const SwerveVelocities &()> callback)
+	void SetOdometryCallback(std::function< SwerveVelocities ()> callback)
 	{
 		m_OdometryCallback = callback;
 	}

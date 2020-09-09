@@ -55,7 +55,7 @@ private:
 
 	std::function<void(const Vec2D &new_velocity)> m_ExternSetVelocity = nullptr;
 	std::function<void(double new_velocity)> m_ExternSetHeadingVelocity = nullptr;
-	std::function <Vec2D()> m_ExternGetCurrentVelocity = nullptr;
+	std::function <Vec2D()> m_ExternGetCurrentPosition = nullptr;
 	std::function <double()> m_ExternGetCurrentHeading = nullptr;
 
 	#pragma endregion
@@ -335,8 +335,8 @@ public:
 	//accessors
 	Vec2D GetCurrentPosition() const
 	{
-		if (m_ExternGetCurrentVelocity)
-			return m_ExternGetCurrentVelocity();
+		if (m_ExternGetCurrentPosition)
+			return m_ExternGetCurrentPosition();
 		else
 			return m_current_position;
 	}
@@ -347,6 +347,73 @@ public:
 		else
 			return m_current_heading;
 	}
-
+	void Set_UpdateGlobalVelocity(std::function<void(const Vec2D &new_velocity)> callback)
+	{
+		m_ExternSetVelocity = callback;
+	}
+	void Set_UpdateHeadingVelocity(std::function<void(double new_velocity)> callback)
+	{
+		m_ExternSetHeadingVelocity = callback;
+	}
+	void Set_GetCurrentPosition(std::function <Vec2D()> callback)
+	{
+		m_ExternGetCurrentPosition = callback;
+	}
+	void Set_GetCurrentHeading(std::function <double()> callback)
+	{
+		m_ExternGetCurrentHeading = callback;
+	}
 };
+#pragma region _wrapper methods_
+void SwerveRobot::Init()
+{
+	m_SwerveRobot = std::make_shared<SwerveRobot_Internal>();
+	m_SwerveRobot->Init();
+}
+void SwerveRobot::Shutdown()
+{
+	m_SwerveRobot->Shutdown();
+}
+void SwerveRobot::SetLinearVelocity_local(double forward, double right)
+{
+	m_SwerveRobot->SetLinearVelocity_local(forward, right);
+}
+void SwerveRobot::SetAngularVelocity(double clockwise)
+{
+	m_SwerveRobot->SetAngularVelocity(clockwise);
+}
+void SwerveRobot::TimeSlice(double d_time_s)
+{
+	m_SwerveRobot->TimeSlice(d_time_s);
+}
+void SwerveRobot::Reset(double X, double Y, double heading)
+{
+	m_SwerveRobot->Reset(X, Y, heading);
+}
+Vec2D SwerveRobot::GetCurrentPosition() const
+{
+	return m_SwerveRobot->GetCurrentPosition();
+}
+double SwerveRobot::GetCurrentHeading() const
+{
+	return m_SwerveRobot->GetCurrentHeading();
+}
+void SwerveRobot::Set_UpdateGlobalVelocity(std::function<void(const Vec2D &new_velocity)> callback)
+{
+	m_SwerveRobot->Set_UpdateGlobalVelocity(callback);
+}
+void SwerveRobot::Set_UpdateHeadingVelocity(std::function<void(double new_velocity)> callback)
+{
+	m_SwerveRobot->Set_UpdateHeadingVelocity(callback);
+}
+void SwerveRobot::Set_GetCurrentPosition(std::function <Vec2D()> callback)
+{
+	m_SwerveRobot->Set_GetCurrentPosition(callback);
+}
+void SwerveRobot::Set_GetCurrentHeading(std::function <double()> callback)
+{
+	m_SwerveRobot->Set_GetCurrentHeading(callback);
+}
+#pragma endregion
+
 }}

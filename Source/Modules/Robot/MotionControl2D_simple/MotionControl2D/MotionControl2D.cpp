@@ -71,7 +71,7 @@ private:
 
 	std::function<void(const MotionControl2D::Vector2D &new_velocity)> m_ExternSetVelocity=nullptr;
 	std::function<void(double new_velocity)> m_ExternSetHeadingVelocity=nullptr;
-	std::function <MotionControl2D::Vector2D()> m_ExternGetCurrentVelocity=nullptr;
+	std::function <MotionControl2D::Vector2D()> m_ExternGetCurrentPosition=nullptr;
 	std::function <double()> m_ExternGetCurrentHeading=nullptr;
 
 	#pragma endregion
@@ -160,7 +160,7 @@ private:
 			if (m_ExternSetVelocity)
 				m_ExternSetVelocity(as_vector_2d(m_current_velocity));
 			//If we don't have the callbacks for both set and get... we'll update our own default implementation
-			if ((!m_ExternGetCurrentVelocity) || (!m_ExternSetVelocity))
+			if ((!m_ExternGetCurrentPosition) || (!m_ExternSetVelocity))
 			{
 				//from current velocity we can update the position
 				m_current_position += m_current_velocity * d_time_s;
@@ -320,8 +320,8 @@ public:
 	}
 	Vec2D GetCurrentPosition() const
 	{
-		if (m_ExternGetCurrentVelocity)
-			return as_Vec2d(m_ExternGetCurrentVelocity());
+		if (m_ExternGetCurrentPosition)
+			return as_Vec2d(m_ExternGetCurrentPosition());
 		else
 			return m_current_position;
 	}
@@ -349,7 +349,7 @@ public:
 	}
 	void Set_GetCurrentPosition(std::function <MotionControl2D::Vector2D()> callback)
 	{
-		m_ExternGetCurrentVelocity = callback;
+		m_ExternGetCurrentPosition = callback;
 	}
 	void Set_GetCurrentHeading(std::function <double()> callback)
 	{

@@ -15,7 +15,7 @@ class OdometryManager
 private:
 	SwerveVelocities m_Velocity;
 	double m_Heading=0.0;
-	std::function<const SwerveVelocities &()> m_OdometryCallback = nullptr;
+	std::function< SwerveVelocities ()> m_OdometryCallback = nullptr;
 	std::function<double ()> m_OdometryHeadingCallback = nullptr;
 public:
 	//Input: pace the updates per time-slice
@@ -38,7 +38,7 @@ public:
 	}
 
 	//Odometry callback of each wheel module
-	void SetOdometryCallback(std::function<const SwerveVelocities &()> callback)
+	void SetOdometryCallback(std::function<SwerveVelocities ()> callback)
 	{
 		m_OdometryCallback = callback;
 	}
