@@ -42,7 +42,7 @@ private:
 	SwerveManagement m_swerve_mgmt;
 	RotarySystem_Position m_Swivel[4];
 	RotarySystem_Velocity m_Drive[4];
-	SimulatoedOdometry m_Simulation;
+	SimulatedOdometry m_Simulation;
 	OdometryManager m_Odometry;
 	Inv_Swerve_Drive m_Entity_Input;
 

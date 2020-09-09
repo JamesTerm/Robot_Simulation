@@ -9,10 +9,13 @@
 namespace Module {
 	namespace Robot {
 
-class Rotary_Position_Control;
+class RotaryPosition_Internal;
 class RotarySystem_Position
 {
 public:
+	RotarySystem_Position();
+	void Init();
+	void ShutDown();
 	//Recommended units: radians or meters for linear
 	//This allows setting the desired position
 	//If this is angular it is always absolute, so relative can be managed by the caller
@@ -27,13 +30,16 @@ public:
 	//provide access to the odometry for closed loops (e.g. potentiometer), use nullptr for open loops
 	void SetOdometryCallback(std::function<double()> callback);
 private:
-	std::shared_ptr<RotarySystem_Position> m_rotary_system;
+	std::shared_ptr<RotaryPosition_Internal> m_rotary_system;
 };
 
-class Rotary_Velocity_Control;
+class RotaryVelocity_Internal;
 class RotarySystem_Velocity
 {
 public:
+	RotarySystem_Velocity();
+	void Init();
+	void ShutDown();
 	//Recommended units: radians per second
 	//Note: For angular 0 north, pi/2 east, pi south, pi+pi/2 west, so positive gives clockwise direction
 	void SetVelocity(double rate);
@@ -47,7 +53,7 @@ public:
 	//provide access to the odometry for closed loops (e.g. encoder), use nullptr for open loops
 	void SetOdometryCallback(std::function<double()> callback);
 private:
-	std::shared_ptr<Rotary_Velocity_Control> m_rotary_system;
+	std::shared_ptr<RotaryVelocity_Internal> m_rotary_system;
 };
 
 

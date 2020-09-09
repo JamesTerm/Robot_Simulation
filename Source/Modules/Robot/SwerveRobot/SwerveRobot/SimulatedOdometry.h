@@ -9,11 +9,14 @@
 namespace Module {
 	namespace Robot {
 
-class SimulatoedOdometry_Internal;
+class SimulatedOdometry_Internal;
 
-class SimulatoedOdometry
+class SimulatedOdometry
 {
 public:
+	SimulatedOdometry();
+	void Init();
+	void Shutdown();
 	//Input: for simulation only, grab the voltages from each rotary system
 	void SetVoltageCallback(std::function<SwerveVelocities ()> callback);
 	//Run the simulation time-slice
@@ -21,7 +24,7 @@ public:
 	//Output: contains the current speeds and positions of any given moment of time
 	const SwerveVelocities &GetCurrentVelocities() const;
 private:
-	std::shared_ptr<SimulatoedOdometry_Internal> m_simulator;
+	std::shared_ptr<SimulatedOdometry_Internal> m_simulator;
 };
 	}
 }

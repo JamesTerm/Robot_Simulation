@@ -151,6 +151,10 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\DriveKinematics\DriveKinematics\Vehicle_Drive.cpp" />
+    <ClCompile Include="..\..\MotionControl2D_simple\MotionControl2D\MotionControl2D.cpp" />
+    <ClCompile Include="RotarySystem.cpp" />
+    <ClCompile Include="SimulatedOdometry.cpp" />
     <ClCompile Include="SwerveRobot.cpp" />
     <ClCompile Include="SwerveRobot_Tester.cpp" />
   </ItemGroup>

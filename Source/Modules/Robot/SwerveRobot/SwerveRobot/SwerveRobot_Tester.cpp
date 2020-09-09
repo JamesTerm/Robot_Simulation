@@ -31,5 +31,21 @@
 
 int main()
 {
-	std::cout << "Hello World!\n";
+	using namespace Module::Robot;
+	SwerveRobot _robot;
+	_robot.Init();
+	_robot.SetLinearVelocity_local(1.0, 0.0);  //simple move forward
+	for (size_t i = 0; i < 16; i++)
+	{
+		_robot.TimeSlice(0.010); //update a time slice
+		printf("position=%.2f\n",_robot.GetCurrentPosition().y());
+	}
+	_robot.Reset();
+	_robot.SetAngularVelocity(Pi);
+	for (size_t i = 0; i < 16; i++)
+	{
+		_robot.TimeSlice(0.010); //update a time slice
+		printf("heading=%.2f\n", _robot.GetCurrentHeading());
+	}
+	_robot.Reset();
 }
