@@ -154,8 +154,12 @@
     <ClCompile Include="..\..\..\Modules\Robot\Entity2D\Entity2D\Entity2D.cpp" />
     <ClCompile Include="..\..\..\Modules\Robot\MotionControl2D_physics\MotionControl2D_physics\MotionControl2D_physics.cpp" />
     <ClCompile Include="..\..\..\Modules\Robot\MotionControl2D_simple\MotionControl2D\MotionControl2D.cpp" />
+    <ClCompile Include="..\..\..\Modules\Robot\SwerveRobot\SwerveRobot\RotarySystem.cpp" />
+    <ClCompile Include="..\..\..\Modules\Robot\SwerveRobot\SwerveRobot\SimulatedOdometry.cpp" />
+    <ClCompile Include="..\..\..\Modules\Robot\SwerveRobot\SwerveRobot\SwerveRobot.cpp" />
     <ClCompile Include="TeleOpV1.cpp" />
     <ClCompile Include="TeleOpV2.cpp" />
+    <ClCompile Include="TeleOpV3.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

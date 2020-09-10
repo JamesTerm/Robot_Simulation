@@ -25,10 +25,13 @@ class SimulatedOdometry_Internal
 private:
 	SwerveVelocities m_CurrentVelocities;
 	std::function<SwerveVelocities()> m_VoltageCallback;
+	double m_maxspeed = Feet2Meters(12.0); //max velocity forward in meters per second
 public:
 	void Init()
 	{
 		//reserved
+		//TODO bind properties used in main assembly via external properties
+		//we'll have other properties, and we'll need to work out the common ones
 	}
 	void ShutDown()
 	{
@@ -49,6 +52,11 @@ public:
 		#ifdef __UseBypass__
 		//If only life were this simple, but alas robots are not god-ships
 		m_CurrentVelocities = m_VoltageCallback();
+		//convert voltages back to velocities
+		for (size_t i = 0; i < 4; i++)
+		{
+			m_CurrentVelocities.Velocity.AsArray[i] *= m_maxspeed;
+		}
 		#else
 		//TODO reserved
 		m_CurrentVelocities = m_VoltageCallback();

@@ -23,10 +23,13 @@ class RotaryPosition_Internal
 {
 private:
 	double m_Position = 0.0;
+	double m_maxspeed = 1.0;
 	std::function<void(double new_voltage)> m_VoltageCallback;
 public:
 	void Init()
-	{}
+	{
+		//TODO
+	}
 	void ShutDown()
 	{}
 	void SetPosition(double position)
@@ -55,10 +58,14 @@ class RotaryVelocity_Internal
 {
 private:
 	double m_Velocity = 0.0;
+	double m_maxspeed = Feet2Meters(12.0); //max velocity forward in meters per second
 	std::function<void(double new_voltage)> m_VoltageCallback;
 public:
 	void Init()
-	{}
+	{
+		//TODO bind max speed to properties used in main assembly via external properties
+		//we'll have other properties, and we'll need to work out the common ones
+	}
 	void ShutDown()
 	{}
 	void SetVelocity(double rate)
@@ -68,7 +75,8 @@ public:
 	void TimeSlice(double d_time_s)
 	{
 		#ifdef __UseBypass__
-		m_VoltageCallback(m_Velocity);
+		//voltage in the bypass case is a normalized velocity
+		m_VoltageCallback(m_Velocity/m_maxspeed);
 		#else
 		#endif
 	}
