@@ -39,6 +39,18 @@
     <ClCompile Include="..\..\..\Modules\Robot\MotionControl2D_physics\MotionControl2D_physics\MotionControl2D_physics.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="TeleOpV3.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\Modules\Robot\SwerveRobot\SwerveRobot\SwerveRobot.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\Modules\Robot\SwerveRobot\SwerveRobot\RotarySystem.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\Modules\Robot\SwerveRobot\SwerveRobot\SimulatedOdometry.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="stdafx.h">
@@ -81,6 +93,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\Base\Physics.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="TeleOpV3.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\Modules\Robot\SwerveRobot\SwerveRobot\SwerveRobot.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

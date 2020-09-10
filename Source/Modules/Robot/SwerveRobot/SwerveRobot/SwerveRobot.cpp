@@ -74,7 +74,7 @@ private:
 			m_swerve_mgmt.SetOdometryCallback(
 				[&]()
 			{
-				return m_Odometry.GetIntendedVelocities();
+				return m_Odometry.GetCurrentVelocities();
 			});
 			m_MotionControl2D.Set_GetCurrentHeading(
 				[&]()
@@ -129,22 +129,22 @@ private:
 			m_Drive[0].SetOdometryCallback(
 				[&]()
 			{
-				return m_Odometry.GetIntendedVelocities().Velocity.AsArray[0];
+				return m_Odometry.GetCurrentVelocities().Velocity.AsArray[0];
 			});
 			m_Drive[1].SetOdometryCallback(
 				[&]()
 			{
-				return m_Odometry.GetIntendedVelocities().Velocity.AsArray[1];
+				return m_Odometry.GetCurrentVelocities().Velocity.AsArray[1];
 			});
 			m_Drive[2].SetOdometryCallback(
 				[&]()
 			{
-				return m_Odometry.GetIntendedVelocities().Velocity.AsArray[2];
+				return m_Odometry.GetCurrentVelocities().Velocity.AsArray[2];
 			});
 			m_Drive[3].SetOdometryCallback(
 				[&]()
 			{
-				return m_Odometry.GetIntendedVelocities().Velocity.AsArray[3];
+				return m_Odometry.GetCurrentVelocities().Velocity.AsArray[3];
 			});
 			#pragma endregion
 			#pragma region _Swivel hooks_
@@ -171,22 +171,22 @@ private:
 			m_Swivel[0].SetOdometryCallback(
 				[&]()
 			{
-				return m_Odometry.GetIntendedVelocities().Velocity.AsArray[4 + 0];
+				return m_Odometry.GetCurrentVelocities().Velocity.AsArray[4 + 0];
 			});
 			m_Swivel[1].SetOdometryCallback(
 				[&]()
 			{
-				return m_Odometry.GetIntendedVelocities().Velocity.AsArray[4 + 1];
+				return m_Odometry.GetCurrentVelocities().Velocity.AsArray[4 + 1];
 			});
 			m_Swivel[2].SetOdometryCallback(
 				[&]()
 			{
-				return m_Odometry.GetIntendedVelocities().Velocity.AsArray[4 + 2];
+				return m_Odometry.GetCurrentVelocities().Velocity.AsArray[4 + 2];
 			});
 			m_Swivel[3].SetOdometryCallback(
 				[&]()
 			{
-				return m_Odometry.GetIntendedVelocities().Velocity.AsArray[4 + 3];
+				return m_Odometry.GetCurrentVelocities().Velocity.AsArray[4 + 3];
 			});
 			#pragma endregion
 		}
@@ -312,7 +312,7 @@ public:
 		//We'll go ahead and maintain an internal state of the position and heading even if this gets managed
 		//We can bind to our entity here if client supports it
 		//externally since it doesn't cost any overhead
-		m_Entity_Input.InterpolateVelocities(m_Odometry.GetIntendedVelocities());
+		m_Entity_Input.InterpolateVelocities(m_Odometry.GetCurrentVelocities());
 		//send this velocity to entity if it exists
 		m_current_velocity = Vec2d(m_Entity_Input.GetLocalVelocityX(), m_Entity_Input.GetLocalVelocityY());
 		if (m_ExternSetVelocity)
@@ -363,11 +363,18 @@ public:
 	{
 		m_ExternGetCurrentHeading = callback;
 	}
+	const SwerveVelocities &GetCurrentVelocities() const
+	{
+		return m_Odometry.GetCurrentVelocities();
+	}
 };
 #pragma region _wrapper methods_
-void SwerveRobot::Init()
+SwerveRobot::SwerveRobot()
 {
 	m_SwerveRobot = std::make_shared<SwerveRobot_Internal>();
+}
+void SwerveRobot::Init()
+{
 	m_SwerveRobot->Init();
 }
 void SwerveRobot::Shutdown()
@@ -413,6 +420,10 @@ void SwerveRobot::Set_GetCurrentPosition(std::function <Vec2D()> callback)
 void SwerveRobot::Set_GetCurrentHeading(std::function <double()> callback)
 {
 	m_SwerveRobot->Set_GetCurrentHeading(callback);
+}
+const SwerveVelocities &SwerveRobot::GetCurrentVelocities() const
+{
+	return m_SwerveRobot->GetCurrentVelocities();
 }
 #pragma endregion
 

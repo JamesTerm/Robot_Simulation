@@ -28,7 +28,7 @@ public:
 			m_Heading = m_OdometryHeadingCallback();
 	}
 	//Output
-	const SwerveVelocities &GetIntendedVelocities() const
+	const SwerveVelocities &GetCurrentVelocities() const
 	{
 		return m_Velocity;
 	}

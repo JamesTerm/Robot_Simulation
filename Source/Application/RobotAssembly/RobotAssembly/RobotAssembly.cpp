@@ -21,6 +21,7 @@
 #include "../../../Modules/Robot/Entity2D/Entity2D/Entity2D.h"
 #include "TeleOpV1.h"  //still a great test which doesn't require OSG (but can be ran separately)
 #include "TeleOpV2.h"
+#include "TeleOpV3.h"
 //Note these are not needed for tests 1-4
 #include "../../../Modules/Robot/MotionControl2D_physics/MotionControl2D_physics/MotionControl2D.h"
 #include "../../../Modules/Output/OSG_Viewer/OSG_Viewer/OSG_Viewer.h"
@@ -631,15 +632,17 @@ public:
 	{
 		eTeleOpV1,
 		eTeleOpV2,
+		eTeleOpV3,
 		eBypassKinematics
 	};
 private:
 	#pragma region _Test objects_
 	Application::TeleOp_V1 m_RobotTester_V1;
 	Application::TeleOp_V2 m_RobotTester_V2;
+	Application::TeleOp_V3 m_RobotTester_V3;
 	Test05_Test_Bypass_with_OSG m_Entity_Bypass;
 	#pragma endregion
-	Testers m_Tester_Selection=eTeleOpV2;
+	Testers m_Tester_Selection=eTeleOpV3;
 	bool m_IsInit = false; //provide a valve at this level
 public:
 	//Call this before init
@@ -657,6 +660,9 @@ public:
 		case eTeleOpV2:
 			m_RobotTester_V2.Reset();
 			break;
+		case eTeleOpV3:
+			m_RobotTester_V3.Reset();
+			break;
 		case eBypassKinematics:
 			m_Entity_Bypass.Reset();
 			break;
@@ -670,6 +676,7 @@ public:
 			{
 			case eTeleOpV1:
 			case eTeleOpV2:
+			case eTeleOpV3:
 				SmartDashboard::init();
 				break;
 			}
@@ -680,6 +687,9 @@ public:
 				break;
 			case eTeleOpV2:
 				m_RobotTester_V2.init();
+				break;
+			case eTeleOpV3:
+				m_RobotTester_V3.init();
 				break;
 			case eBypassKinematics:
 				m_Entity_Bypass.init();
@@ -700,6 +710,9 @@ public:
 		case eTeleOpV2:
 			m_RobotTester_V2.Start();
 			break;
+		case eTeleOpV3:
+			m_RobotTester_V3.Start();
+			break;
 		case eBypassKinematics:
 			m_Entity_Bypass.Start();
 			break;
@@ -714,6 +727,9 @@ public:
 			break;
 		case eTeleOpV2:
 			m_RobotTester_V2.Stop();
+			break;
+		case eTeleOpV3:
+			m_RobotTester_V3.Stop();
 			break;
 		case eBypassKinematics:
 			m_Entity_Bypass.Stop();

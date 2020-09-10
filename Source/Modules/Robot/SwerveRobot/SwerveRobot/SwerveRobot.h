@@ -3,6 +3,8 @@
 #include <functional>
 //need Vec2D
 #include "../../../../Base/Vec2d.h"
+//need SwerveVelocities
+#include "../../DriveKinematics/DriveKinematics/Vehicle_Drive.h"
 
 namespace Module {
 	namespace Robot {
@@ -13,6 +15,7 @@ class SwerveRobot_Internal;
 class SwerveRobot
 {
 public:
+	SwerveRobot();
 	//Handle property initialization
 	void Init();
 	void Shutdown(); //give ability to shut down early
@@ -37,7 +40,7 @@ public:
 	//The dependency on the position and heading is needed for set-point computations
 	void Set_GetCurrentPosition(std::function <Vec2D()> callback);  //returns x y coordinates of current position
 	void Set_GetCurrentHeading(std::function <double()> callback);  //returns heading where 0 is north in radians
-
+	const SwerveVelocities &GetCurrentVelocities() const;  //access to odometry readings
 private:
 	std::shared_ptr<SwerveRobot_Internal> m_SwerveRobot;
 };
