@@ -314,7 +314,7 @@ public:
 		//externally since it doesn't cost any overhead
 		m_Entity_Input.InterpolateVelocities(m_Odometry.GetCurrentVelocities());
 		//send this velocity to entity if it exists
-		m_current_velocity = Vec2d(m_Entity_Input.GetLocalVelocityX(), m_Entity_Input.GetLocalVelocityY());
+		m_current_velocity = LocalToGlobal(GetCurrentHeading(), Vec2d(m_Entity_Input.GetLocalVelocityX(), m_Entity_Input.GetLocalVelocityY()));
 		if (m_ExternSetVelocity)
 			m_ExternSetVelocity(m_current_velocity);
 		m_current_position += m_current_velocity * d_time_s;
