@@ -33,6 +33,9 @@
     <ClCompile Include="..\..\DriveKinematics\DriveKinematics\Vehicle_Drive.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\MotionControl2D_physics\MotionControl2D_physics\MotionControl2D_physics.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="SwerveManagement.h">

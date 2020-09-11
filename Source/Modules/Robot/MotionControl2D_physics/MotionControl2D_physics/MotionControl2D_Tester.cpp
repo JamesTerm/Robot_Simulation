@@ -132,7 +132,8 @@ public:
 			eCurrent,
 			eMoveForward,
 			eFlip180,
-			eTurn90
+			eTurn90,
+			eGlobalHeading
 		};
 
 		const char * const csz_tests[] =
@@ -140,7 +141,8 @@ public:
 			"current",
 			"forward",
 			"flip180",
-			"Turn90"
+			"Turn90",
+			"GlobalHeading"
 		};
 
 		int Test = atoi(csz_test);
@@ -170,7 +172,6 @@ public:
 		switch (Test)
 		{
 		case eMoveForward:
-		case eCurrent:
 			//Setup the motion... for this we move forward whatever our heading is and do it locally
 			entity.SetLinearVelocity_local(Feet2Meters(12.0), 0.0);
 			for (size_t i = 0; i < 200; i++)
@@ -208,6 +209,23 @@ public:
 			UpdateVariables();
 			entity.SetLinearVelocity_local(0.0,Feet2Meters(12.0));
 			entity.TimeSlice(0.010);
+			break;
+		case eGlobalHeading:
+		case eCurrent:
+			for (size_t i = 0; i < 8; i++)
+			{
+				entity.SetAngularVelocity(Pi2);
+				entity.TimeSlice(0.033); //update a time slice
+				printf("heading=%.2f\n", RAD_2_DEG(entity.GetCurrentHeading()));
+			}
+			entity.SetAngularVelocity(0.0);
+			for (size_t i = 0; i < 16; i++)
+			{
+				entity.SetLinearVelocity_local(1.0, 0.0);  //simple move forward
+				entity.TimeSlice(0.010); //update a time slice
+				printf("position=%.2f, x=%.2f\n", Meters2Feet(entity.GetCurrentPosition().y), Meters2Feet(entity.GetCurrentPosition().x));
+			}
+			entity.Reset();
 			break;
 		}
 	}

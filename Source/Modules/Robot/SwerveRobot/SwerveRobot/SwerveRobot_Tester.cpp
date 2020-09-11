@@ -34,18 +34,21 @@ int main()
 	using namespace Module::Robot;
 	SwerveRobot _robot;
 	_robot.Init();
-	_robot.SetLinearVelocity_local(1.0, 0.0);  //simple move forward
-	for (size_t i = 0; i < 16; i++)
+	_robot.SetAngularVelocity(Pi2);
+	for (size_t i = 0; i < 8; i++)
 	{
-		_robot.TimeSlice(0.010); //update a time slice
-		printf("position=%.2f\n",_robot.GetCurrentPosition().y());
+		_robot.SetAngularVelocity(Pi2);
+		_robot.TimeSlice(0.033); //update a time slice
+		printf("heading=%.2f\n", RAD_2_DEG( _robot.GetCurrentHeading()));
 	}
-	_robot.Reset();
-	_robot.SetAngularVelocity(Pi);
+
+	_robot.SetAngularVelocity(0.0);
+	
 	for (size_t i = 0; i < 16; i++)
 	{
+		_robot.SetLinearVelocity_local(1.0, 0.0);  //simple move forward
 		_robot.TimeSlice(0.010); //update a time slice
-		printf("heading=%.2f\n", _robot.GetCurrentHeading());
+		printf("position=%.2f, x=%.2f\n", Meters2Feet( _robot.GetCurrentPosition().y()), Meters2Feet( _robot.GetCurrentPosition().x()));
 	}
 	_robot.Reset();
 }

@@ -1091,13 +1091,12 @@ public:
 
 		//send this velocity to entity if it exists
 		if (m_ExternSetVelocity)
-		{
-			Vec2D LocalVelocity = GlobalToLocal(-GetAtt_r(), m_Physics.GetLinearVelocity());
-			//send local velocity
-			m_ExternSetVelocity(LocalVelocity);
-		}
+			m_ExternSetVelocity(m_Physics.GetLinearVelocity());
+
 		if (m_ExternSetHeadingVelocity)
 			m_ExternSetHeadingVelocity(m_Physics.GetAngularVelocity());
+		m_current_heading += m_Physics.GetAngularVelocity()*dTime_s;
+		m_current_position += m_Physics.GetLinearVelocity() * dTime_s;
 	}
 	~Ship_2D()
 	{
@@ -1220,6 +1219,12 @@ public:
 		//Override to get sensor/encoder's real velocity
 		return GlobalToLocal(GetAtt_r(), GetPhysics().GetLinearVelocity()); 
 	}
+	Vec2D GetLinearVelocity() const
+	{
+		//Override to get sensor/encoder's real velocity
+		return GetPhysics().GetLinearVelocity();
+	}
+
 	double GetAngularVelocity_ToDisplay() const
 	{ 
 		return GetPhysics().GetAngularVelocity(); 
@@ -1654,7 +1659,8 @@ public:
 	}
 	void SetLinearVelocity_local(double forward, double right)
 	{
-		SetRequestedVelocity(GlobalToLocal(GetAtt_r(), Vec2D(right, forward)));
+		//Note: SetRequestedVelocity is local
+		SetRequestedVelocity(Vec2D(right, forward));
 	}
 	void SetProperties(const properties &props)
 	{
@@ -1790,7 +1796,7 @@ double MotionControl2D::Get_IntendedOrientation() const
 }
 MotionControl2D::Vector2D MotionControl2D::GetCurrentVelocity() const
 {
-	return as_vector_2d(m_MotionControl2D->GetLinearVelocity_ToDisplay());
+	return as_vector_2d(m_MotionControl2D->GetLinearVelocity());
 }
 MotionControl2D::Vector2D MotionControl2D::GetCurrentPosition() const
 {
