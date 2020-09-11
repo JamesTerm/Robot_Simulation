@@ -117,6 +117,35 @@ private:
 	}
 
 	#pragma endregion
+	void process_update_velocity(Vec2D velocity, double d_time_s)
+	{
+		m_current_velocity = velocity;
+		//send this velocity to entity if it exists
+		if (m_ExternSetVelocity)
+			m_ExternSetVelocity(as_vector_2d(m_current_velocity));
+		//If we don't have the callbacks for both set and get... we'll update our own default implementation
+		if ((!m_ExternGetCurrentPosition) || (!m_ExternSetVelocity))
+		{
+			//from current velocity we can update the position
+			m_current_position += m_current_velocity * d_time_s;
+		}
+	}
+	void process_update_angular_velocity(double velocity, double d_time_s)
+	{
+		m_current_angular_velocity = velocity;
+		//send this velocity to entity if it exists
+		if (m_ExternSetHeadingVelocity)
+			m_ExternSetHeadingVelocity(m_current_angular_velocity);
+		//If we don't have the callbacks for both set and get... we'll update our own default implementation
+		if ((!m_ExternGetCurrentHeading) || (!m_ExternSetHeadingVelocity))
+		{
+			//from current velocity we can update the position
+			m_current_heading += m_current_angular_velocity * d_time_s;
+			//Almost there... the heading needs to be adjusted to fit in the range from -pi2 to pi2
+			m_current_heading = NormalizeRotation2(m_current_heading);  //written out for ease of debugging
+
+		}
+	}
 	void process_slice(double d_time_s)
 	{
 		//apply linear velocity first, then angular
@@ -155,16 +184,7 @@ private:
 			}
 
 			//now update the current velocity
-			m_current_velocity = normalized_request * adjusted_magnitude;
-			//send this velocity to entity if it exists
-			if (m_ExternSetVelocity)
-				m_ExternSetVelocity(as_vector_2d(m_current_velocity));
-			//If we don't have the callbacks for both set and get... we'll update our own default implementation
-			if ((!m_ExternGetCurrentPosition) || (!m_ExternSetVelocity))
-			{
-				//from current velocity we can update the position
-				m_current_position += m_current_velocity * d_time_s;
-			}
+			process_update_velocity(normalized_request * adjusted_magnitude,d_time_s);
 		}
 		//TODO way point here
 
@@ -218,29 +238,28 @@ private:
 				}
 
 				//now update the current velocity,  Note: this can go beyond the boundary of 2 pi
-				m_current_angular_velocity = direction_to_use * adjusted_magnitude;
-				//send this velocity to entity if it exists
-				if (m_ExternSetHeadingVelocity)
-					m_ExternSetHeadingVelocity(m_current_angular_velocity);
-				//If we don't have the callbacks for both set and get... we'll update our own default implementation
-				if ((!m_ExternGetCurrentHeading)||(!m_ExternSetHeadingVelocity))
-				{
-					//from current velocity we can update the position
-					m_current_heading += m_current_angular_velocity * d_time_s;
-					//Almost there... the heading needs to be adjusted to fit in the range from -pi2 to pi2
-					m_current_heading = NormalizeRotation2(m_current_heading);  //written out for ease of debugging
-
-				}
+				process_update_angular_velocity(direction_to_use * adjusted_magnitude,d_time_s);
 			}
 			else
 			{
 			}
 		}
 	}
+	void process_bypass(double d_time_s)
+	{
+		//This is useful for diagnostics, but also shows the input to output conversion used
+		if (m_is_linear_driven == false)
+		{
+			process_update_velocity((m_is_velocity_global) ? m_requested_global : LocalToGlobal(GetCurrentHeading(), m_requested_local), d_time_s);
+			process_update_angular_velocity(m_requested_angular_velocity, d_time_s);
+		}
+	}
 public:
 	void TimeSlice(double d_time_s)
 	{
-		process_slice(d_time_s);  //keep public small and compact
+		//keep public small and compact
+		process_slice(d_time_s);
+		//process_bypass(d_time_s);
 	}
 
 	void SetProperties(const properties &props)
