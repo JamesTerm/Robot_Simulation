@@ -3,6 +3,7 @@
 #include "Robot_Tester.h"
 #include "../../RobotAssembly/RobotAssembly/TeleOpV1.h"
 #include "../../RobotAssembly/RobotAssembly/TeleOpV2.h"
+#include "../../RobotAssembly/RobotAssembly/TeleOpV3.h"
 
 
 //I'm leaving it able to test older versions.
@@ -13,7 +14,7 @@ class RobotTester_Internal
 {
 private:
 	//Application::TeleOp_V1 m_tele;
-	Application::TeleOp_V2 m_tele;
+	Application::TeleOp_V3 m_tele;
 public:
 	RobotTester_Internal()
 	{
