@@ -26,6 +26,7 @@ private:
 	SwerveVelocities m_CurrentVelocities;
 	std::function<SwerveVelocities()> m_VoltageCallback;
 	double m_maxspeed = Feet2Meters(12.0); //max velocity forward in meters per second
+	double m_current_position[4] = {};  //keep track of the pot's position of each angle
 public:
 	void Init()
 	{
@@ -53,9 +54,20 @@ public:
 		//If only life were this simple, but alas robots are not god-ships
 		m_CurrentVelocities = m_VoltageCallback();
 		//convert voltages back to velocities
+		//for drive this is easy
 		for (size_t i = 0; i < 4; i++)
 		{
 			m_CurrentVelocities.Velocity.AsArray[i] *= m_maxspeed;
+		}
+		//for position we have to track this ourselves
+		for (size_t i = 0; i < 4; i++)
+		{
+			//go ahead and apply the voltage to the position... this is over-simplified but effective for a bypass
+			//from the voltage determine the velocity delta
+			const double max_speed = 8;
+			const double velocity_delta = m_CurrentVelocities.Velocity.AsArray[i + 4] * max_speed;
+			m_current_position[i] += velocity_delta * d_time_s;
+			m_CurrentVelocities.Velocity.AsArray[i+4] = m_current_position[i];
 		}
 		#else
 		//TODO reserved
