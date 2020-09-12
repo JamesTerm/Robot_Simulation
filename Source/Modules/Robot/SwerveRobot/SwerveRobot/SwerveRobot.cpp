@@ -367,6 +367,14 @@ public:
 	{
 		return m_Odometry.GetCurrentVelocities();
 	}
+	const SwerveVelocities &GetCurrentVoltages() const
+	{
+		return m_Voltage;
+	}
+	const SwerveVelocities &GetIntendedVelocities() const
+	{
+		return m_robot.GetIntendedVelocities();
+	}
 };
 #pragma region _wrapper methods_
 SwerveRobot::SwerveRobot()
@@ -425,6 +433,15 @@ const SwerveVelocities &SwerveRobot::GetCurrentVelocities() const
 {
 	return m_SwerveRobot->GetCurrentVelocities();
 }
+const SwerveVelocities &SwerveRobot::GetCurrentVoltages() const
+{
+	return m_SwerveRobot->GetCurrentVoltages();
+}
+const SwerveVelocities &SwerveRobot::GetIntendedVelocities() const
+{
+	return m_SwerveRobot->GetIntendedVelocities();
+}
+
 #pragma endregion
 
 }}

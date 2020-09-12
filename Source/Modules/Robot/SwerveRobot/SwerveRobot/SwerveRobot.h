@@ -41,6 +41,8 @@ public:
 	void Set_GetCurrentPosition(std::function <Vec2D()> callback);  //returns x y coordinates of current position
 	void Set_GetCurrentHeading(std::function <double()> callback);  //returns heading where 0 is north in radians
 	const SwerveVelocities &GetCurrentVelocities() const;  //access to odometry readings
+	const SwerveVelocities &GetCurrentVoltages() const;    //access to voltage writings
+	const SwerveVelocities &GetIntendedVelocities() const;  //access to kinematics
 private:
 	std::shared_ptr<SwerveRobot_Internal> m_SwerveRobot;
 };

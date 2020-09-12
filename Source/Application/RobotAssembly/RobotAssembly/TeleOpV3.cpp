@@ -75,10 +75,11 @@ private:
 		double magnitude = velocity_normalized.normalize();
 		//Entity variables-------------------------------------------
 		SmartDashboard::PutNumber("Velocity", Meters2Feet(magnitude));
+		SmartDashboard::PutNumber("Rotation Velocity", m_Entity.GetCurrentAngularVelocity());
 		Entity2D::Vector2D position = entity.GetCurrentPosition();
-		SmartDashboard::PutNumber("X", Meters2Feet(position.x));
+		SmartDashboard::PutNumber("X_ft", Meters2Feet(position.x));
 		m_current_state.bits.Pos_m.x = position.x;
-		SmartDashboard::PutNumber("Y", Meters2Feet(position.y));
+		SmartDashboard::PutNumber("Y_ft", Meters2Feet(position.y));
 		m_current_state.bits.Pos_m.y = position.y;
 		//for swerve the direction of travel is not necessarily the heading, so we show this as well as heading
 		SmartDashboard::PutNumber("Travel_Heading", RAD_2_DEG(atan2(velocity_normalized[0], velocity_normalized[1])));
@@ -90,17 +91,33 @@ private:
 		//SmartDashboard::PutNumber("setpoint_angle", RAD_2_DEG(entity.Get_IntendedOrientation()));
 		//kinematic variables-------------------------------------------
 		const Module::Robot::SwerveVelocities &cv = m_robot.GetCurrentVelocities();
-		
-		SmartDashboard::PutNumber("Wheel_fl_Velocity", Meters2Feet(cv.Velocity.AsArray[0]));
-		SmartDashboard::PutNumber("Wheel_fr_Velocity", Meters2Feet(cv.Velocity.AsArray[1]));
-		SmartDashboard::PutNumber("Wheel_rl_Velocity", Meters2Feet(cv.Velocity.AsArray[2]));
-		SmartDashboard::PutNumber("Wheel_rr_Velocity", Meters2Feet(cv.Velocity.AsArray[3]));
+		const Module::Robot::SwerveVelocities &iv = m_robot.GetIntendedVelocities();
+		const Module::Robot::SwerveVelocities &vo = m_robot.GetCurrentVoltages();
+
+		SmartDashboard::PutNumber("Wheel_fl_Velocity", Meters2Feet(iv.Velocity.AsArray[0]));
+		SmartDashboard::PutNumber("Wheel_fr_Velocity", Meters2Feet(iv.Velocity.AsArray[1]));
+		SmartDashboard::PutNumber("Wheel_rl_Velocity", Meters2Feet(iv.Velocity.AsArray[2]));
+		SmartDashboard::PutNumber("Wheel_rr_Velocity", Meters2Feet(iv.Velocity.AsArray[3]));
+		SmartDashboard::PutNumber("Wheel_fl_Voltage", vo.Velocity.AsArray[0]);
+		SmartDashboard::PutNumber("Wheel_fr_Voltage", vo.Velocity.AsArray[1]);
+		SmartDashboard::PutNumber("Wheel_rl_Voltage", vo.Velocity.AsArray[2]);
+		SmartDashboard::PutNumber("Wheel_rr_Voltage", vo.Velocity.AsArray[3]);
+		SmartDashboard::PutNumber("wheel_fl_Encoder", Meters2Feet(cv.Velocity.AsArray[0]));
+		SmartDashboard::PutNumber("wheel_fr_Encoder", Meters2Feet(cv.Velocity.AsArray[1]));
+		SmartDashboard::PutNumber("wheel_rl_Encoder", Meters2Feet(cv.Velocity.AsArray[2]));
+		SmartDashboard::PutNumber("wheel_rr_Encoder", Meters2Feet(cv.Velocity.AsArray[3]));
+
 		//For the angles either show raw or use simple dial using 180 to -180 with a 45 tick interval
 		//its not perfect, but it gives a good enough direction to tell (especially when going down)
+		SmartDashboard::PutNumber("Swivel_fl_Voltage", vo.Velocity.AsArray[4]);
+		SmartDashboard::PutNumber("Swivel_fr_Voltage", vo.Velocity.AsArray[5]);
+		SmartDashboard::PutNumber("Swivel_rl_Voltage", vo.Velocity.AsArray[6]);
+		SmartDashboard::PutNumber("Swivel_rr_Voltage", vo.Velocity.AsArray[7]);
 		SmartDashboard::PutNumber("swivel_fl_Raw", RAD_2_DEG(cv.Velocity.AsArray[4]));
 		SmartDashboard::PutNumber("swivel_fr_Raw", RAD_2_DEG(cv.Velocity.AsArray[5]));
 		SmartDashboard::PutNumber("swivel_rl_Raw", RAD_2_DEG(cv.Velocity.AsArray[6]));
 		SmartDashboard::PutNumber("swivel_rr_Raw", RAD_2_DEG(cv.Velocity.AsArray[7]));
+
 		for (size_t i = 0; i < 8; i++)
 			m_current_state.bits.SwerveVelocitiesFromIndex[i] = cv.Velocity.AsArray[i];
 	}
