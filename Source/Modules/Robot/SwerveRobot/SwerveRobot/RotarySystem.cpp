@@ -681,11 +681,20 @@ public:
 		return m_UsingRange_props; 
 	}
 };
-///This is the next layer of the linear Ship_1D that converts velocity into voltage, on a system that has sensor feedback
-///It currently has a single PID (Dual PID may either be integrated or a new class)... to manage voltage error.  This is used for fixed point
-/// position setting... like a turret or arm
+inline void ComputeDeadZone(double &Voltage, double PositiveDeadZone, double NegativeDeadZone, bool ZeroOut = false)
+{
+	if ((Voltage > 0.0) && (Voltage < PositiveDeadZone))
+		Voltage = ZeroOut ? 0.0 : PositiveDeadZone;
+	else if ((Voltage < 0.0) && (Voltage > NegativeDeadZone))
+		Voltage = ZeroOut ? 0.0 : NegativeDeadZone;
+}
+
 class COMMON_API Rotary_Position_Control : public Rotary_System
 {
+	///This is the next layer of the linear Ship_1D that converts velocity into voltage, on a system that has sensor feedback
+	///It currently has a single PID (Dual PID may either be integrated or a new class)... to manage voltage error.  This is used for fixed point
+	/// position setting... like a turret or arm
+
 public:
 	enum PotUsage
 	{
@@ -693,9 +702,8 @@ public:
 		ePassive,  //Will read them but never alter velocities
 		eActive, //Will attempt to match predicted velocity to actual velocity
 	};
-	//Give client code access to the actual position, as the position of the entity cannot be altered for its projected position
-	double GetActualPos() const;
 private:
+	#pragma region _members_
 	using PIDController2 = Framework::Base::PIDController2;
 	//Copy these lines to the subclass that binds the events
 	//events are a bit picky on what to subscribe so we'll just wrap from here
@@ -707,45 +715,503 @@ private:
 	PIDController2 m_PIDControllerDown;
 	Rotary_Props m_Rotary_Props;
 
-	double m_LastPosition;  //used for calibration
-	double m_MatchVelocity;
-	double m_ErrorOffset;
-	double m_LastTime; //used for calibration
-	double m_MaxSpeedReference; //used for calibration
-	double m_PreviousVelocity; //used to compute acceleration
+	double m_LastPosition=0.0;  //used for calibration
+	double m_MatchVelocity=0.0;
+	double m_ErrorOffset=0.0;
+	double m_LastTime=0.0; //used for calibration
+	double m_MaxSpeedReference=0.0; //used for calibration
+	double m_PreviousVelocity=0.0; //used to compute acceleration
 	//We use the negative sign bit to indicate it was turned off... or zero
-	double m_BurstIntensity;  //This keeps track of the current level of burst to apply... it usually is full 1.0 or 0.0 but will blend on unaligned frame boundaries
-	double m_CurrentBurstTime; //This keeps track of the time between bursts and the burst itself depending on the current state
-	size_t m_PulseBurstCounter;  //keeps count of how many pulse bursts have happened
-	size_t m_StallCounter;   //Keeps count for each cycle the motor stalls
-	PotUsage m_PotentiometerState; //dynamically able to turn off (e.g. panic button)
+	double m_BurstIntensity=0.0;  //This keeps track of the current level of burst to apply... it usually is full 1.0 or 0.0 but will blend on unaligned frame boundaries
+	double m_CurrentBurstTime=0.0; //This keeps track of the time between bursts and the burst itself depending on the current state
+	size_t m_PulseBurstCounter=0;  //keeps count of how many pulse bursts have happened
+	size_t m_StallCounter=0;   //Keeps count for each cycle the motor stalls
+	PotUsage m_PotentiometerState=eNoPot; //dynamically able to turn off (e.g. panic button)
 	//A counter to count how many times the predicted position and intended position are withing tolerance consecutively
-	size_t m_ToleranceCounter;
+	size_t m_ToleranceCounter=0;
+	#pragma endregion
+protected:
+	//Intercept the time change to obtain current height as well as sending out the desired velocity
+	virtual void TimeChange(double dTime_s)
+	{
+		//TODO we'll probably want velocity PID for turret no load type... we'll need to test to see
+		const bool TuneVelocity = false;
+		const double CurrentVelocity = m_Physics.GetVelocity();
+		const Rotary_Props::Rotary_Arm_GainAssist_Props &arm = m_Rotary_Props.ArmGainAssist;
+		const Rotary_Props::Voltage_Stall_Safety &arm_stall_safety = m_Rotary_Props.VoltageStallSafety;
+		const bool NeedGainAssistForUp = ((arm.SlowVelocityVoltage != 0.0) && (CurrentVelocity > 0.0));
+
+		//Note: the order has to be in this order where it grabs the potentiometer position first and then performs the time change and finally updates the
+		//new arm velocity.  Doing it this way avoids oscillating if the potentiometer and gear have been calibrated
+		if (!m_LastTime)
+		{
+			m_LastTime = dTime_s;
+			#if 1
+			assert(dTime_s != 0.0);
+			#endif
+		}
+
+		const double NewPosition = GetActualPos();
+		const double Displacement = NewPosition - m_LastPosition;
+		const double PotentiometerVelocity = Displacement / m_LastTime;
+
+		const bool UsingMoterStallSafety = (arm_stall_safety.ErrorThreshold > 0.0) || (arm_stall_safety.StallCounterThreshold > 0);
+		double BurstIntensity = 0.0;
+		bool IsPulsing = false;
+
+		//Update the position to where the potentiometer says where it actually is
+		if (m_PotentiometerState == eActive)
+		{
+			if ((!GetLockShipToPosition()) || (m_Rotary_Props.LoopState == Rotary_Props::eClosed_ManualAssist))
+			{
+				if (TuneVelocity)
+				{
+					if (m_PIDControllerUp.GetI() == 0.0)
+					{
+						m_ErrorOffset = m_PIDControllerUp(CurrentVelocity, PotentiometerVelocity, dTime_s);
+						const double Acceleration = (CurrentVelocity - m_PreviousVelocity) / dTime_s;
+						const bool Decel = (Acceleration * CurrentVelocity < 0);
+						//normalize errors... these will not be reflected for I so it is safe to normalize here to avoid introducing oscillation from P
+						//Note: that it is important to bias towards deceleration this can help satisfy both requirements of avoiding oscillation as well
+						//As well as avoiding a potential overshoot when trying stop at a precise distance
+						m_ErrorOffset = Decel || fabs(m_ErrorOffset) > m_Rotary_Props.PrecisionTolerance ? m_ErrorOffset : 0.0;
+					}
+				}
+				else
+				{
+					const double PredictedPositionUp = NewPosition + (PotentiometerVelocity * arm.VelocityPredictUp);
+					//PID will correct for position... this may need to use I to compensate for latency
+					if ((arm.UsePID_Up_Only) || (GetPos_m() > PredictedPositionUp))
+					{
+						m_PIDControllerDown.ResetI();
+						m_ErrorOffset = m_PIDControllerUp(GetPos_m(), PredictedPositionUp, dTime_s);
+					}
+					else
+					{
+						const double PredictedPosition = NewPosition + (PotentiometerVelocity * arm.VelocityPredictDown);
+						m_PIDControllerUp.ResetI();
+						m_ErrorOffset = m_PIDControllerDown(GetPos_m(), PredictedPosition, dTime_s);
+					}
+
+					if (UsingMoterStallSafety && (IsZero(Displacement, 1e-2)) && (m_Physics.GetVelocity() > 0.0))
+					{
+						//to measure motor stall... we evaluate the voltage
+						const double MaxSpeed = m_Ship_1D_Props.MAX_SPEED;
+						const double Voltage = (m_Physics.GetVelocity() + m_ErrorOffset) / MaxSpeed;
+						//we may want a property for this value, but typically 0.1 is below dead zone and safe
+						if (Voltage > 0.1)
+						{
+							//printf("[%d] %d %.3f \n",m_InstanceIndex,m_StallCounter,Displacement);
+							m_StallCounter++;
+						}
+					}
+					else
+						m_StallCounter = 0;
+
+					IsPulsing = ((arm_stall_safety.StallCounterThreshold > 0) && (m_StallCounter > arm_stall_safety.StallCounterThreshold)) ||
+						(arm_stall_safety.ErrorThreshold > 0.0 && fabs(m_ErrorOffset) > arm_stall_safety.ErrorThreshold);
+
+					//unlike for velocity all error offset values are taken... two PIDs and I should help stabilize oscillation
+					if (((arm.PulseBurstTimeMs > 0.0) && (fabs(m_ErrorOffset) < arm.PulseBurstRange) && (fabs(m_ErrorOffset) > m_Rotary_Props.PrecisionTolerance)) || (IsPulsing))
+					{
+						//we are in the pulse burst zone... now to manage the burst intensity
+						m_CurrentBurstTime += dTime_s;  //increment the pulse burst time with this new time slice
+						//The off-time should really match the latency time where we can sample the change interval and get a reading
+						//This could be its own property if necessary
+						const double Off_Time = (GetPos_m() > PredictedPositionUp) ? arm.VelocityPredictUp : arm.VelocityPredictDown;
+						//We use the negative sign bit to indicate it was turned off... or zero
+						if (m_BurstIntensity <= 0.0)
+						{	//Burst has been off... is it time to turn it back on
+							if (m_CurrentBurstTime >= Off_Time)
+							{
+								m_PulseBurstCounter++;
+								if (UsingMoterStallSafety)
+								{
+									BurstIntensity = arm_stall_safety.OnBurstLevel;
+								}
+								else
+								{
+									//Turn on the pulse... the intensity here is computed by the overlap
+									const double overlap = m_CurrentBurstTime - Off_Time;
+									if (overlap < dTime_s)
+										BurstIntensity = overlap / dTime_s;
+									else
+									{
+										BurstIntensity = 1.0;
+										//This shouldn't happen often... probably shouldn't matter much... but keep this for diagnostic testing
+										printf("test burst begin[%d]... overlap=%.2f vs delta slice=%.2f\n", m_InstanceIndex, overlap, dTime_s);
+									}
+								}
+								m_CurrentBurstTime = 0.0;  //reset timer
+							}
+						}
+						else
+						{  //Burst has been on... is it time to turn it back off
+							if (m_CurrentBurstTime >= arm.PulseBurstTimeMs)
+							{
+								//Turn off the pulse... the intensity here is computed by the overlap
+								const double overlap = m_CurrentBurstTime - arm.PulseBurstTimeMs;
+								//We use the negative sign bit to indicate it was turned off... or zero
+								if ((overlap < dTime_s) && (!UsingMoterStallSafety))
+									BurstIntensity = -(overlap / dTime_s);
+								else
+								{
+									BurstIntensity = 0.0;
+									//This shouldn't happen often... probably shouldn't matter much... but keep this for diagnostic testing
+									if (!UsingMoterStallSafety)
+										printf("test burst end[%d]... overlap=%.2f vs delta slice=%.2f\n", m_InstanceIndex, overlap, dTime_s);
+								}
+								m_CurrentBurstTime = 0.0;  //reset timer
+							}
+							else
+							{
+								BurstIntensity = (!UsingMoterStallSafety) ? 1.0 : arm_stall_safety.OnBurstLevel;  //still on under time... so keep it on full
+							}
+						}
+					}
+					//When in eClosed_ManualAssist check the locked position to end weak voltage when it is within tolerance
+					//setpoint will turn locked position on once the tolerance is achieved with its count
+					if (GetLockShipToPosition())
+						m_ErrorOffset = fabs(m_ErrorOffset) > m_Rotary_Props.PrecisionTolerance ? m_ErrorOffset : 0.0;
+
+				}
+			}
+			else
+			{
+				//If we are manually controlling, we should still update displacement to properly work with limits and maintain where the position really
+				//is to seamlessly transfer between manual and auto
+				m_ErrorOffset = 0.0;
+				m_PIDControllerUp.ResetI();
+				m_PIDControllerDown.ResetI();
+			}
+
+
+			if (!IsPulsing)
+				m_PulseBurstCounter = 0;
+			//have a way to handle to end pulsing when timeout is exceeded
+			if (m_PulseBurstCounter > arm_stall_safety.PulseBurstTimeOut)
+				BurstIntensity = 0.0;
+			//We do not want to alter position if we are using position control PID
+			if ((TuneVelocity) || (IsZero(NewPosition - m_LastPosition) && (!IsPulsing)) || NeedGainAssistForUp)
+				SetPos_m(NewPosition);
+		}
+
+		else if (m_PotentiometerState == ePassive)
+		{
+			//ensure the positions are calibrated when we are not moving
+			if (IsZero(NewPosition - m_LastPosition) || NeedGainAssistForUp)
+				SetPos_m(NewPosition);  //this will help min and max limits work properly even though we do not have PID
+		}
+
+		#if 0
+		if (m_Rotary_Props.PID_Console_Dump)
+		{
+			const bool ManualPositionTesting = SmartDashboard::GetBoolean("ManualPositionTesting");
+			const bool InDegrees = SmartDashboard::GetBoolean("ManualInDegrees");
+			if (InDegrees)
+			{
+				if (ManualPositionTesting)
+					SetIntendedPosition(DEG_2_RAD(SmartDashboard::GetNumber("IntendedPosition")));
+				else
+					SmartDashboard::PutNumber("IntendedPosition", RAD_2_DEG(m_IntendedPosition));
+			}
+			else
+			{
+				if (ManualPositionTesting)
+					SetIntendedPosition(SmartDashboard::GetNumber("IntendedPosition"));
+				else
+					SmartDashboard::PutNumber("IntendedPosition", m_IntendedPosition);
+			}
+		}
+		#endif
+
+		//if we are heading for an intended position and we graze on it... turn off the corrections
+		if (!GetLockShipToPosition())
+		{
+
+			if (fabs(NewPosition - m_IntendedPosition) < m_Rotary_Props.PrecisionTolerance)
+				m_ToleranceCounter++;
+			else
+				m_ToleranceCounter = 0;
+
+			if (m_ToleranceCounter >= arm.ToleranceConsecutiveCount)
+			{
+				SetRequestedVelocity(0.0);  //ensure the requested velocity is zero once it gets locked to ship position
+				SetCurrentLinearAcceleration(0.0);  //lock ship to position
+				m_ErrorOffset = 0.0;  //no error correction to factor in (avoids noisy resting point)
+			}
+		}
+
+		m_LastPosition = NewPosition;
+		m_LastTime = dTime_s;
+
+		__super::TimeChange(dTime_s);
+
+		//Note: CurrentVelocity variable is retained before the time change (for proper debugging of PID) we use the new velocity (called Velocity) here for voltage
+		const double Velocity = m_Physics.GetVelocity();
+		const double Acceleration = (Velocity - m_PreviousVelocity) / dTime_s;
+
+		const double MaxSpeed = m_Ship_1D_Props.MAX_SPEED;
+		double Voltage = (Velocity + m_ErrorOffset) / MaxSpeed;
+
+		bool IsAccel = (Acceleration * Velocity > 0);
+		if (Velocity > 0)
+			Voltage += Acceleration * (IsAccel ? arm.InverseMaxAccel_Up : arm.InverseMaxDecel_Up);
+		else
+			Voltage += Acceleration * (IsAccel ? arm.InverseMaxAccel_Down : arm.InverseMaxDecel_Down);
+
+		//See if we are using the arm gain assist (only when going up)
+		if ((NeedGainAssistForUp) || ((arm.SlowVelocityVoltage != 0.0) && m_ErrorOffset > 0.0))
+		{
+			//first start out by allowing the max amount to correspond to the angle of the arm... this assumes the arm zero degrees is parallel to the ground
+			//90 is straight up... should work for angles below zero (e.g. hiking viking)... angles greater than 90 will be negative which is also correct
+			const double MaxVoltage = cos(NewPosition * arm.GainAssistAngleScalar) * arm.SlowVelocityVoltage;
+			double BlendStrength = 0.0;
+			const double SlowVelocity = arm.SlowVelocity;
+			//Now to compute blend strength... a simple linear distribution of how much slower it is from the slow velocity
+			if (MaxVoltage > 0.0)
+			{
+				if (PotentiometerVelocity < SlowVelocity)
+					BlendStrength = (SlowVelocity - PotentiometerVelocity) / SlowVelocity;
+			}
+			else
+			{
+				if (PotentiometerVelocity > -SlowVelocity)
+					BlendStrength = (SlowVelocity - fabs(PotentiometerVelocity)) / SlowVelocity;
+			}
+			Voltage += MaxVoltage * BlendStrength;
+		}
+
+		//apply additional pulse burst as needed
+		m_BurstIntensity = BurstIntensity;
+		if (!UsingMoterStallSafety)
+		{
+			//The intensity we use is the same as full speed with the gain assist... we may want to have own properties for these if they do not work well
+			const double PulseBurst = fabs(m_BurstIntensity) * ((m_ErrorOffset > 0.0) ? MaxSpeed * 1.0 * arm.InverseMaxAccel_Up : (-MaxSpeed) * 1.0 * arm.InverseMaxAccel_Down);
+			Voltage += PulseBurst;
+		}
+		else
+		{
+			if (IsPulsing)
+				Voltage = m_BurstIntensity;
+		}
+
+		//if (PulseBurst!=0.0)
+		//	printf("pb=%.2f\n",PulseBurst);
+		#if 0
+		if ((arm.PulseBurstTimeMs > 0.0) && (fabs(m_ErrorOffset) < arm.PulseBurstRange) && (fabs(m_ErrorOffset) > m_Rotary_Props.PrecisionTolerance))
+		{
+			if (BurstIntensity == 0)
+				printf("\rOff %.2f       ", m_CurrentBurstTime);
+			else
+				printf("\n+On=%.2f  pb=%.2f from bi=%.2f\n", m_CurrentBurstTime, PulseBurst, m_BurstIntensity);
+		}
+		#endif
+
+		//Keep track of previous velocity to compute acceleration
+		m_PreviousVelocity = Velocity;
+		Voltage = m_VoltagePoly(Voltage);
+
+		if (IsZero(PotentiometerVelocity) && (CurrentVelocity == 0.0))
+		{
+			//avoid dead zone... if we are accelerating set the dead zone to the minim value... all else zero out
+			if (IsAccel)
+				ComputeDeadZone(Voltage, m_Rotary_Props.Positive_DeadZone, m_Rotary_Props.Negative_DeadZone);
+			else
+				ComputeDeadZone(Voltage, m_Rotary_Props.Positive_DeadZone, m_Rotary_Props.Negative_DeadZone, true);
+		}
+
+		{
+			//Clamp range, PID (i.e. integral) controls may saturate the amount needed
+			if (Voltage > 0.0)
+			{
+				if (Voltage > 1.0)
+					Voltage = 1.0;
+			}
+			else if (Voltage < 0.0)
+			{
+				if (Voltage < -1.0)
+					Voltage = -1.0;
+			}
+			else
+				Voltage = 0.0;  //is nan case
+		}
+
+		if (m_Rotary_Props.PID_Console_Dump)
+		{
+			NetworkEditProperties(m_Rotary_Props, true);
+			Ship_1D::NetworkEditProperties(m_Ship_1D_Props);
+			m_PIDControllerUp.SetPID(m_Rotary_Props.ArmGainAssist.PID_Up[0], m_Rotary_Props.ArmGainAssist.PID_Up[1], m_Rotary_Props.ArmGainAssist.PID_Up[2]);
+			m_PIDControllerDown.SetPID(m_Rotary_Props.ArmGainAssist.PID_Down[0], m_Rotary_Props.ArmGainAssist.PID_Down[1], m_Rotary_Props.ArmGainAssist.PID_Down[2]);
+			switch (m_Rotary_Props.LoopState)
+			{
+			case Rotary_Props::eNone:
+				SetPotentiometerSafety(true);
+				break;
+			case Rotary_Props::eOpen:
+				m_PotentiometerState = ePassive;
+				break;
+			case Rotary_Props::eClosed:
+			case Rotary_Props::eClosed_ManualAssist:
+				m_PotentiometerState = eActive;
+				break;
+			}
+
+			#ifdef __DebugLUA__
+			const double PosY = m_LastPosition * arm.GainAssistAngleScalar; //The scalar makes position more readable
+			const double PredictedPosY = GetPos_m()  * arm.GainAssistAngleScalar;
+			if ((fabs(PotentiometerVelocity) > 0.03) || (CurrentVelocity != 0.0) || (Voltage != 0.0))
+			{
+				//double PosY=RAD_2_DEG(m_LastPosition * arm.GainAssistAngleScalar);
+				printf("v=%.2f y=%.2f py=%.2f p=%.2f e=%.2f eo=%.2f\n", Voltage, PosY, PredictedPosY, CurrentVelocity, PotentiometerVelocity, m_ErrorOffset);
+			}
+			//We may want a way to pick these separately 
+			#if 1
+			SmartDashboard::PutNumber("voltage", Voltage);
+			SmartDashboard::PutNumber("actual y", PosY);
+			SmartDashboard::PutNumber("desired y", PredictedPosY);
+			SmartDashboard::PutNumber("desired velocity", CurrentVelocity);
+			SmartDashboard::PutNumber("actual velocity", PotentiometerVelocity);
+			SmartDashboard::PutNumber("pid error offset", m_ErrorOffset);
+			#endif
+			#endif
+		}
+
+		//Finally check to see if limit switches have been activated
+		if ((Voltage > 0.0) && DidHitMaxLimit())
+		{
+			Voltage = 0.0;  // disallow voltage in this direction
+			ResetPosition(m_Rotary_Props.MaxLimitRange);
+		}
+		else if ((Voltage < 0.0) && DidHitMinLimit())
+		{
+			Voltage = 0.0;
+			ResetPosition(m_Rotary_Props.MinLimitRange);
+		}
+		m_RobotControl->UpdateRotaryVoltage(m_InstanceIndex, Voltage);
+
+	}
+	virtual void SetPotentiometerSafety(bool DisableFeedback)
+	{
+		//printf("\r%f       ",Value);
+		if (DisableFeedback)
+		{
+			if (m_PotentiometerState != eNoPot)
+			{
+				//first disable it
+				m_PotentiometerState = eNoPot;
+				//Now to reset stuff
+				printf("Disabling potentiometer for %s\n", GetName().c_str());
+				//m_PIDController.Reset();
+				ResetPos();
+				//This is no longer necessary
+				m_LastPosition = 0.0;
+				m_ErrorOffset = 0.0;
+				m_LastTime = 0.0;
+				m_Ship_1D_Props.UsingRange = false;
+			}
+		}
+		else
+		{
+			if (m_PotentiometerState == eNoPot)
+			{
+				switch (m_Rotary_Props.LoopState)
+				{
+				case Rotary_Props::eNone:
+					m_PotentiometerState = eNoPot;
+					//This should not happen but added for completeness
+					printf("Rotary_Velocity_Control::SetEncoderSafety %s set to no potentiometer\n", GetName().c_str());
+					break;
+				case Rotary_Props::eOpen:
+					m_PotentiometerState = ePassive;
+					break;
+				case Rotary_Props::eClosed:
+				case Rotary_Props::eClosed_ManualAssist:
+					m_PotentiometerState = eActive;
+					break;
+				}
+
+				//setup the initial value with the potentiometers value
+				printf("Enabling potentiometer for %s\n", GetName().c_str());
+				ResetPos();
+				m_Ship_1D_Props.UsingRange = GetUsingRange_Props();
+				m_ErrorOffset = 0.0;
+			}
+		}
+	}
+	PotUsage GetPotUsage() const
+	{
+		return m_PotentiometerState;
+	}
+	virtual double GetMatchVelocity() const
+	{
+		return m_MatchVelocity;
+	}
+	virtual bool DidHitMinLimit() const
+	{
+		//TODO have callbacks for these
+		//Override these methods if the rotary system has some limit switches included in its setup
+		return false;
+	}
+	virtual bool DidHitMaxLimit() const
+	{
+		return false;
+	}
 public:
-	Rotary_Position_Control(const char EntityName[], Rotary_Control_Interface *robot_control, size_t InstanceIndex = 0);
+	Rotary_Position_Control(const char EntityName[], Rotary_Control_Interface *robot_control, size_t InstanceIndex = 0) :
+		Rotary_System(EntityName), m_RobotControl(robot_control), m_InstanceIndex(InstanceIndex),
+		m_PIDControllerUp(0.0, 0.0, 0.0), m_PIDControllerDown(0.0, 0.0, 0.0)
+	{
+		//Note members will be overridden in properties
+	}
 	//IEvent::HandlerList ehl;
 	//The parent needs to call initialize
 	//virtual void Initialize(Base::EventMap& em, const Entity1D_Properties *props = NULL);
-	virtual void ResetPosition(double Position);
-	const Rotary_Props &GetRotary_Properties() const { return m_Rotary_Props; }
-	//This is optionally used to lock to another ship (e.g. drive using rotary system)
-	void SetMatchVelocity(double MatchVel) { m_MatchVelocity = MatchVel; }
-protected:
-	//Intercept the time change to obtain current height as well as sending out the desired velocity
-	virtual void TimeChange(double dTime_s);
-	virtual void SetPotentiometerSafety(bool DisableFeedback);
-	PotUsage GetPotUsage() const { return m_PotentiometerState; }
-	virtual double GetMatchVelocity() const { return m_MatchVelocity; }
-	//Override these methods if the rotary system has some limit switches included in its setup
-	virtual bool DidHitMinLimit() const { return false; }
-	virtual bool DidHitMaxLimit() const { return false; }
+	virtual void ResetPosition(double Position)
+	{
+		__super::ResetPosition(Position);  //Let the super do it stuff first
+
+		//TODO find case where I had this duplicate call to reset rotary I may omit this... but want to find if it needs to be here
+		//  [2/18/2014 James]
+		//We may need this if we use Kalman filters
+		//m_RobotControl->Reset_Rotary(m_InstanceIndex);
+
+		if ((m_PotentiometerState != eNoPot) && (!GetBypassPos_Update()))
+		{
+			m_PIDControllerUp.Reset();
+			m_PIDControllerDown.Reset();
+			//Only reset the encoder if we are reseting the position to the starting position
+			if (Position == GetStartingPosition())
+				m_RobotControl->Reset_Rotary(m_InstanceIndex);
+			double NewPosition = m_RobotControl->GetRotaryCurrentPorV(m_InstanceIndex);
+			Stop();
+			SetPos_m(NewPosition);
+			m_LastPosition = NewPosition;
+		}
+		m_ToleranceCounter = 0;
+	}
+	const Rotary_Props &GetRotary_Properties() const 
+	{ 
+		return m_Rotary_Props; 
+	}
+	void SetMatchVelocity(double MatchVel) 
+	{ 
+		//This is optionally used to lock to another ship (e.g. drive using rotary system)
+		m_MatchVelocity = MatchVel;
+	}
+	double GetActualPos() const
+	{
+		//Give client code access to the actual position, as the position of the entity cannot be altered for its projected position
+		const double NewPosition = (m_PotentiometerState != eNoPot) ? m_RobotControl->GetRotaryCurrentPorV(m_InstanceIndex) : GetPos_m();
+		return NewPosition;
+	}
 };
 
-///This is the next layer of the linear Ship_1D that converts velocity into voltage, on a system that has sensor feedback
-///This models itself much like the drive train and encoders where it allows an optional encoder sensor read back to calibrate.
-///This is a kind of speed control system that manages the velocity and does not need to keep track of position (like the drive or a shooter)
 class COMMON_API Rotary_Velocity_Control : public Rotary_System
 {
+	///This is the next layer of the linear Ship_1D that converts velocity into voltage, on a system that has sensor feedback
+	///This models itself much like the drive train and encoders where it allows an optional encoder sensor read back to calibrate.
+	///This is a kind of speed control system that manages the velocity and does not need to keep track of position (like the drive or a shooter)
 public:
 	enum EncoderUsage
 	{
@@ -754,6 +1220,7 @@ public:
 		eActive, //Will attempt to match predicted velocity to actual velocity
 	};
 private:
+	#pragma region _members_
 	using PIDController2 = Framework::Base::PIDController2;
 	using LatencyPredictionFilter = Framework::Base::LatencyPredictionFilter;
 	//Copy these lines to the subclass that binds the events
@@ -772,38 +1239,284 @@ private:
 	#endif
 
 	//We have both ways to implement PID calibration depending on if we have aggressive stop property enabled
-	double m_MatchVelocity;
-	double m_CalibratedScaler; //used for calibration
-	double m_ErrorOffset; //used for calibration
+	double m_MatchVelocity=0.0;
+	double m_CalibratedScaler=1.0; //used for calibration
+	double m_ErrorOffset=0.0; //used for calibration
 
-	double m_MaxSpeedReference; //used for calibration
-	double m_EncoderVelocity;  //cache for later use
-	double m_RequestedVelocity_Difference;
-	EncoderUsage m_EncoderState; //dynamically able to change state
-	double m_PreviousVelocity; //used to compute acceleration
+	double m_MaxSpeedReference=0.0; //used for calibration
+	double m_EncoderVelocity=0.0;  //cache for later use
+	double m_RequestedVelocity_Difference=0.0;
+	EncoderUsage m_EncoderState=eNoEncoder; //dynamically able to change state
+	double m_PreviousVelocity=0.0; //used to compute acceleration
+	#pragma endregion
+protected:
+	virtual void TimeChange(double dTime_s)
+	{
+		//Intercept the time change to obtain current height as well as sending out the desired velocity
+		const double CurrentVelocity = m_Physics.GetVelocity();
+		const double MaxSpeed = m_Ship_1D_Props.MAX_SPEED;
+
+		double Encoder_Velocity = 0.0;
+		if ((m_EncoderState == eActive) || (m_EncoderState == ePassive))
+		{
+			Encoder_Velocity = m_RobotControl->GetRotaryCurrentPorV(m_InstanceIndex);
+
+			//Unlike linear there is no displacement measurement therefore no need to check GetLockShipToPosition()
+			if (m_EncoderState == eActive)
+			{
+				if (!m_Rotary_Props.UseAggressiveStop)
+				{
+					double control = 0.0;
+					//only adjust calibration when both velocities are in the same direction, or in the case where the encoder is stopped which will
+					//allow the scaler to normalize if it need to start up again.
+					if (((CurrentVelocity * Encoder_Velocity) > 0.0) || IsZero(Encoder_Velocity))
+					{
+						control = -m_PIDController(fabs(CurrentVelocity), fabs(Encoder_Velocity), dTime_s);
+						m_CalibratedScaler = MaxSpeed + control;
+					}
+				}
+				else
+				{
+					m_ErrorOffset = m_PIDController(CurrentVelocity, Encoder_Velocity, dTime_s);
+					const double Acceleration = (CurrentVelocity - m_PreviousVelocity) / dTime_s;
+					const bool Decel = (Acceleration * CurrentVelocity < 0);
+					//normalize errors... these will not be reflected for I so it is safe to normalize here to avoid introducing oscillation from P
+					//Note: that it is important to bias towards deceleration this can help satisfy both requirements of avoiding oscillation as well
+					//As well as avoiding a potential overshoot when trying stop at a precise distance
+					m_ErrorOffset = Decel || fabs(m_ErrorOffset) > m_Rotary_Props.PrecisionTolerance ? m_ErrorOffset : 0.0;
+				}
+			}
+			else
+				m_RobotControl->GetRotaryCurrentPorV(m_InstanceIndex);  //For ease of debugging the controls (no harm to read)
+
+
+			m_EncoderVelocity = Encoder_Velocity;
+		}
+		__super::TimeChange(dTime_s);
+		const double Velocity = m_Physics.GetVelocity();
+		double Acceleration = (Velocity - m_PreviousVelocity) / dTime_s;
+		//CurrentVelocity is retained before the time change (for proper debugging of PID) we use the new velocity here for voltage
+		//Either error offset or calibrated scaler will be used depending on the aggressive stop property, we need not branch this as
+		//they both can be represented in the same equation
+		double Voltage = (Velocity + m_ErrorOffset) / m_CalibratedScaler;
+
+		bool IsAccel = (Acceleration * Velocity > 0);
+		//if we are coasting we must not apply reverse voltage when decelerating
+		if (!IsAccel && m_Rotary_Props.UseAggressiveStop == false)
+			Acceleration = 0.0;
+		Voltage += Acceleration * (IsAccel ? m_Rotary_Props.InverseMaxAccel : m_Rotary_Props.InverseMaxDecel);
+
+		//Keep track of previous velocity to compute acceleration
+		m_PreviousVelocity = Velocity;
+
+		//Apply the polynomial equation to the voltage to linearize the curve
+		Voltage = m_VoltagePoly(Voltage);
+
+		if ((IsZero(m_EncoderVelocity)) && IsAccel)
+			ComputeDeadZone(Voltage, m_Rotary_Props.Positive_DeadZone, m_Rotary_Props.Negative_DeadZone);
+
+		//Keep voltage override disabled for simulation to test precision stability
+		//if (!m_VoltageOverride)
+		if (true)
+		{
+			//Clamp range, PID (i.e. integral) controls may saturate the amount needed
+			if (Voltage > 0.0)
+			{
+				if (Voltage > 1.0)
+					Voltage = 1.0;
+			}
+			else if (Voltage < 0.0)
+			{
+				if (Voltage < -1.0)
+					Voltage = -1.0;
+			}
+			else
+				Voltage = 0.0;  //is nan case
+		}
+		else
+		{
+			Voltage = 0.0;
+			m_PIDController.ResetI(m_MaxSpeedReference * -0.99);  //clear error for I for better transition back
+		}
+
+		#if 0
+		Voltage *= Voltage;  //square them for more give
+		//restore the sign
+		if (CurrentVelocity < 0)
+			Voltage = -Voltage;
+		#endif
+
+		if (m_Rotary_Props.PID_Console_Dump)
+		{
+			NetworkEditProperties(m_Rotary_Props);
+			Ship_1D::NetworkEditProperties(m_Ship_1D_Props);
+			m_PIDController.SetPID(m_Rotary_Props.PID[0], m_Rotary_Props.PID[1], m_Rotary_Props.PID[2]);
+			switch (m_Rotary_Props.LoopState)
+			{
+			case Rotary_Props::eNone:
+				SetEncoderSafety(true);
+				break;
+			case Rotary_Props::eOpen:
+				m_EncoderState = ePassive;
+				break;
+			case Rotary_Props::eClosed:
+				m_EncoderState = eActive;
+				break;
+			default:
+				assert(false);
+			}
+
+			#ifdef __DebugLUA__
+			if (Encoder_Velocity != 0.0)
+			{
+				if (m_Rotary_Props.UseAggressiveStop)
+					printf("v=%.2f p=%.2f e=%.2f eo=%.2f\n", Voltage, CurrentVelocity, Encoder_Velocity, m_ErrorOffset);
+				else
+				{
+					if (m_PIDController.GetI() == 0.0)
+						printf("v=%.2f p=%.2f e=%.2f eo=%.2f cs=%.2f\n", Voltage, CurrentVelocity, Encoder_Velocity, m_ErrorOffset, m_CalibratedScaler / MaxSpeed);
+					else
+						printf("v=%.2f p=%.2f e=%.2f i=%.2f cs=%.2f\n", Voltage, CurrentVelocity, Encoder_Velocity, m_PIDController.GetTotalError(), m_CalibratedScaler / MaxSpeed);
+				}
+			}
+			#endif
+		}
+
+		m_RobotControl->UpdateRotaryVoltage(m_InstanceIndex, Voltage);
+	}
+	virtual void RequestedVelocityCallback(double VelocityToUse, double DeltaTime_s)
+	{
+		if ((m_EncoderState == eActive) || (m_EncoderState == ePassive))
+			m_RequestedVelocity_Difference = VelocityToUse - m_RobotControl->GetRotaryCurrentPorV(m_InstanceIndex);
+	}
+	virtual bool InjectDisplacement(double DeltaTime_s, double &PositionDisplacement)
+	{
+		bool ret = false;
+		const bool UpdateDisplacement = ((m_EncoderState == eActive) || (m_EncoderState == ePassive));
+		if (UpdateDisplacement)
+		{
+			double computedVelocity = m_Physics.GetVelocity();
+			m_Physics.SetVelocity(m_EncoderVelocity);
+			m_Physics.TimeChangeUpdate(DeltaTime_s, PositionDisplacement);
+			//We must set this back so that the PID can compute the entire error
+			m_Physics.SetVelocity(computedVelocity);
+			ret = true;
+		}
+		if (!ret)
+			ret = __super::InjectDisplacement(DeltaTime_s, PositionDisplacement);
+		return ret;
+	}
+	virtual double GetMatchVelocity() const { return m_MatchVelocity; }
 public:
-	Rotary_Velocity_Control(const char EntityName[], Rotary_Control_Interface *robot_control, size_t InstanceIndex = 0, EncoderUsage EncoderState = eNoEncoder);
+	Rotary_Velocity_Control(const char EntityName[], Rotary_Control_Interface *robot_control, size_t InstanceIndex = 0, EncoderUsage EncoderState = eNoEncoder) :
+		Rotary_System(EntityName), m_RobotControl(robot_control), m_InstanceIndex(InstanceIndex),
+		m_PIDController(0.0, 0.0, 0.0), //This will be overridden in properties
+		m_EncoderState(EncoderState)
+	{}
 	//IEvent::HandlerList ehl;
 	//The parent needs to call initialize
 	//virtual void Initialize(Base::EventMap& em, const Entity1D_Properties *props = NULL);
-	virtual void ResetPos();
+	virtual void ResetPos()
+	{
+		__super::ResetPos();  //Let the super do it stuff first
+
+		m_PIDController.Reset();
+		//We may need this if we use Kalman filters
+		m_RobotControl->Reset_Rotary(m_InstanceIndex);
+		if ((m_EncoderState == eActive) || (m_EncoderState == ePassive))
+			m_EncoderVelocity = m_RobotControl->GetRotaryCurrentPorV(m_InstanceIndex);
+		else
+			m_EncoderVelocity = 0.0;
+
+		//ensure teleop has these set properly
+		m_CalibratedScaler = m_Ship_1D_Props.MAX_SPEED;
+		m_ErrorOffset = 0.0;
+		m_RequestedVelocity_Difference = 0.0;
+	}
 	double GetRequestedVelocity_Difference() const { return m_RequestedVelocity_Difference; }
 	const Rotary_Props &GetRotary_Properties() const { return m_Rotary_Props; }
-	//This is optionally used to lock to another ship (e.g. drive using rotary system)
-	void SetMatchVelocity(double MatchVel) { m_MatchVelocity = MatchVel; }
-	//Give ability to change properties
-	void UpdateRotaryProps(const Rotary_Props &RotaryProps);
-	virtual void SetEncoderSafety(bool DisableFeedback);
+	void SetMatchVelocity(double MatchVel) 
+	{ 
+		//This is optionally used to lock to another ship (e.g. drive using rotary system)
+		m_MatchVelocity = MatchVel;
+	}
+	void UpdateRotaryProps(const Rotary_Props &RotaryProps)
+	{
+		//Give ability to change properties
+		m_Rotary_Props = RotaryProps;
+		m_CalibratedScaler = m_Ship_1D_Props.MAX_SPEED;
+		m_PIDController.SetPID(m_Rotary_Props.PID[0], m_Rotary_Props.PID[1], m_Rotary_Props.PID[2]);
+		switch (m_Rotary_Props.LoopState)
+		{
+		case Rotary_Props::eNone:
+			SetEncoderSafety(true);
+			break;
+		case Rotary_Props::eOpen:
+			m_EncoderState = ePassive;
+			break;
+		case Rotary_Props::eClosed:
+			m_EncoderState = eActive;
+			break;
+		default:
+			assert(false);
+		}
+	}
+	virtual void SetEncoderSafety(bool DisableFeedback)
+	{
+		//printf("\r%f       ",Value);
+		if (DisableFeedback)
+		{
+			if (m_EncoderState != eNoEncoder)
+			{
+				//first disable it
+				m_EncoderState = eNoEncoder;
+				//Now to reset stuff
+				printf("Disabling encoder for %s\n", GetName().c_str());
+				//m_PIDController.Reset();
+				ResetPos();
+				//This is no longer necessary
+				//m_MaxSpeed=m_MaxSpeedReference;
+				m_EncoderVelocity = 0.0;
+				m_CalibratedScaler = m_Ship_1D_Props.MAX_SPEED;
+				m_ErrorOffset = 0;
+				m_Ship_1D_Props.UsingRange = false;
+			}
+		}
+		else
+		{
+			if (m_EncoderState == eNoEncoder)
+			{
+				switch (m_Rotary_Props.LoopState)
+				{
+				case Rotary_Props::eNone:
+					m_EncoderState = eNoEncoder;
+					//This should not happen but added for completeness
+					printf("Rotary_Velocity_Control::SetEncoderSafety %s set to no encoder\n", GetName().c_str());
+					break;
+				case Rotary_Props::eOpen:
+					m_EncoderState = ePassive;
+					break;
+				case Rotary_Props::eClosed:
+					m_EncoderState = eActive;
+					break;
+				default:
+					assert(false);
+				}
+				//setup the initial value with the potentiometers value
+				printf("Enabling encoder for %s\n", GetName().c_str());
+				ResetPos();
+				m_Ship_1D_Props.UsingRange = GetUsingRange_Props();
+				m_CalibratedScaler = m_Ship_1D_Props.MAX_SPEED;
+				m_ErrorOffset = 0;
+			}
+		}
+	}
 	EncoderUsage GetEncoderUsage() const { return m_EncoderState; }
-	//Give client code ability to change rotary system to break or coast
-	void SetAggresiveStop(bool UseAggresiveStop) { m_Rotary_Props.UseAggressiveStop = UseAggresiveStop; }
-protected:
-	//Intercept the time change to obtain current height as well as sending out the desired velocity
-	virtual void TimeChange(double dTime_s);
-	virtual void RequestedVelocityCallback(double VelocityToUse, double DeltaTime_s);
-
-	virtual bool InjectDisplacement(double DeltaTime_s, double &PositionDisplacement);
-	virtual double GetMatchVelocity() const { return m_MatchVelocity; }
+	void SetAggresiveStop(bool UseAggresiveStop) 
+	{ 
+		//Give client code ability to change rotary system to break or coast
+		m_Rotary_Props.UseAggressiveStop = UseAggresiveStop;
+	}
 };
 
 #pragma endregion
