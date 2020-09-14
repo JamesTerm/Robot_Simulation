@@ -14,7 +14,7 @@ class RotarySystem_Position
 {
 public:
 	RotarySystem_Position();
-	void Init();
+	void Init(size_t InstanceIndex);  // \param IntanceIndex optional to help diagnose which instance is being ran
 	void ShutDown();
 	//Recommended units: radians or meters for linear
 	//This allows setting the desired position
@@ -38,7 +38,7 @@ class RotarySystem_Velocity
 {
 public:
 	RotarySystem_Velocity();
-	void Init();
+	void Init(size_t InstanceIndex);   // \param IntanceIndex optional to help diagnose which instance is being ran
 	void ShutDown();
 	//Recommended units: radians per second
 	//Note: For angular 0 north, pi/2 east, pi south, pi+pi/2 west, so positive gives clockwise direction

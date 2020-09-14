@@ -268,6 +268,12 @@ public:
 		wheel_dimensions[1] //Width between wheels
 		};
 		m_Entity_Input.SetProperties(inv_props);
+		//TODO set properties here
+		for (size_t i = 0; i < 4; i++)
+		{
+			m_Drive[i].Init(i);
+			m_Swivel[i].Init(i+4);
+		}
 		Reset();
 	}
 	void SetLinearVelocity_local(double forward, double right)

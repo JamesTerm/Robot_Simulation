@@ -731,9 +731,123 @@ private:
 	size_t m_ToleranceCounter=0;
 	#pragma endregion
 protected:
-	//Intercept the time change to obtain current height as well as sending out the desired velocity
+	virtual void SetPotentiometerSafety(bool DisableFeedback)
+	{
+		//printf("\r%f       ",Value);
+		if (DisableFeedback)
+		{
+			if (m_PotentiometerState != eNoPot)
+			{
+				//first disable it
+				m_PotentiometerState = eNoPot;
+				//Now to reset stuff
+				printf("Disabling potentiometer for %s\n", GetName().c_str());
+				//m_PIDController.Reset();
+				ResetPos();
+				//This is no longer necessary
+				m_LastPosition = 0.0;
+				m_ErrorOffset = 0.0;
+				m_LastTime = 0.0;
+				m_Ship_1D_Props.UsingRange = false;
+			}
+		}
+		else
+		{
+			if (m_PotentiometerState == eNoPot)
+			{
+				switch (m_Rotary_Props.LoopState)
+				{
+				case Rotary_Props::eNone:
+					m_PotentiometerState = eNoPot;
+					//This should not happen but added for completeness
+					printf("Rotary_Velocity_Control::SetEncoderSafety %s set to no potentiometer\n", GetName().c_str());
+					break;
+				case Rotary_Props::eOpen:
+					m_PotentiometerState = ePassive;
+					break;
+				case Rotary_Props::eClosed:
+				case Rotary_Props::eClosed_ManualAssist:
+					m_PotentiometerState = eActive;
+					break;
+				}
+
+				//setup the initial value with the potentiometers value
+				printf("Enabling potentiometer for %s\n", GetName().c_str());
+				ResetPos();
+				m_Ship_1D_Props.UsingRange = GetUsingRange_Props();
+				m_ErrorOffset = 0.0;
+			}
+		}
+	}
+	PotUsage GetPotUsage() const
+	{
+		return m_PotentiometerState;
+	}
+	virtual double GetMatchVelocity() const
+	{
+		return m_MatchVelocity;
+	}
+	virtual bool DidHitMinLimit() const
+	{
+		//TODO have callbacks for these
+		//Override these methods if the rotary system has some limit switches included in its setup
+		return false;
+	}
+	virtual bool DidHitMaxLimit() const
+	{
+		return false;
+	}
+public:
+	Rotary_Position_Control(const char EntityName[], Rotary_Control_Interface *robot_control, size_t InstanceIndex = 0) :
+		Rotary_System(EntityName), m_RobotControl(robot_control), m_InstanceIndex(InstanceIndex),
+		m_PIDControllerUp(0.0, 0.0, 0.0), m_PIDControllerDown(0.0, 0.0, 0.0)
+	{
+		//Note members will be overridden in properties
+	}
+	//IEvent::HandlerList ehl;
+	//The parent needs to call initialize
+	//virtual void Initialize(Base::EventMap& em, const Entity1D_Properties *props = NULL);
+	virtual void ResetPosition(double Position)
+	{
+		__super::ResetPosition(Position);  //Let the super do it stuff first
+
+		//TODO find case where I had this duplicate call to reset rotary I may omit this... but want to find if it needs to be here
+		//  [2/18/2014 James]
+		//We may need this if we use Kalman filters
+		//m_RobotControl->Reset_Rotary(m_InstanceIndex);
+
+		if ((m_PotentiometerState != eNoPot) && (!GetBypassPos_Update()))
+		{
+			m_PIDControllerUp.Reset();
+			m_PIDControllerDown.Reset();
+			//Only reset the encoder if we are reseting the position to the starting position
+			if (Position == GetStartingPosition())
+				m_RobotControl->Reset_Rotary(m_InstanceIndex);
+			double NewPosition = m_RobotControl->GetRotaryCurrentPorV(m_InstanceIndex);
+			Stop();
+			SetPos_m(NewPosition);
+			m_LastPosition = NewPosition;
+		}
+		m_ToleranceCounter = 0;
+	}
+	const Rotary_Props &GetRotary_Properties() const 
+	{ 
+		return m_Rotary_Props; 
+	}
+	void SetMatchVelocity(double MatchVel) 
+	{ 
+		//This is optionally used to lock to another ship (e.g. drive using rotary system)
+		m_MatchVelocity = MatchVel;
+	}
+	double GetActualPos() const
+	{
+		//Give client code access to the actual position, as the position of the entity cannot be altered for its projected position
+		const double NewPosition = (m_PotentiometerState != eNoPot) ? m_RobotControl->GetRotaryCurrentPorV(m_InstanceIndex) : GetPos_m();
+		return NewPosition;
+	}
 	virtual void TimeChange(double dTime_s)
 	{
+		//Intercept the time change to obtain current height as well as sending out the desired velocity
 		//TODO we'll probably want velocity PID for turret no load type... we'll need to test to see
 		const bool TuneVelocity = false;
 		const double CurrentVelocity = m_Physics.GetVelocity();
@@ -1091,120 +1205,6 @@ protected:
 		m_RobotControl->UpdateRotaryVoltage(m_InstanceIndex, Voltage);
 
 	}
-	virtual void SetPotentiometerSafety(bool DisableFeedback)
-	{
-		//printf("\r%f       ",Value);
-		if (DisableFeedback)
-		{
-			if (m_PotentiometerState != eNoPot)
-			{
-				//first disable it
-				m_PotentiometerState = eNoPot;
-				//Now to reset stuff
-				printf("Disabling potentiometer for %s\n", GetName().c_str());
-				//m_PIDController.Reset();
-				ResetPos();
-				//This is no longer necessary
-				m_LastPosition = 0.0;
-				m_ErrorOffset = 0.0;
-				m_LastTime = 0.0;
-				m_Ship_1D_Props.UsingRange = false;
-			}
-		}
-		else
-		{
-			if (m_PotentiometerState == eNoPot)
-			{
-				switch (m_Rotary_Props.LoopState)
-				{
-				case Rotary_Props::eNone:
-					m_PotentiometerState = eNoPot;
-					//This should not happen but added for completeness
-					printf("Rotary_Velocity_Control::SetEncoderSafety %s set to no potentiometer\n", GetName().c_str());
-					break;
-				case Rotary_Props::eOpen:
-					m_PotentiometerState = ePassive;
-					break;
-				case Rotary_Props::eClosed:
-				case Rotary_Props::eClosed_ManualAssist:
-					m_PotentiometerState = eActive;
-					break;
-				}
-
-				//setup the initial value with the potentiometers value
-				printf("Enabling potentiometer for %s\n", GetName().c_str());
-				ResetPos();
-				m_Ship_1D_Props.UsingRange = GetUsingRange_Props();
-				m_ErrorOffset = 0.0;
-			}
-		}
-	}
-	PotUsage GetPotUsage() const
-	{
-		return m_PotentiometerState;
-	}
-	virtual double GetMatchVelocity() const
-	{
-		return m_MatchVelocity;
-	}
-	virtual bool DidHitMinLimit() const
-	{
-		//TODO have callbacks for these
-		//Override these methods if the rotary system has some limit switches included in its setup
-		return false;
-	}
-	virtual bool DidHitMaxLimit() const
-	{
-		return false;
-	}
-public:
-	Rotary_Position_Control(const char EntityName[], Rotary_Control_Interface *robot_control, size_t InstanceIndex = 0) :
-		Rotary_System(EntityName), m_RobotControl(robot_control), m_InstanceIndex(InstanceIndex),
-		m_PIDControllerUp(0.0, 0.0, 0.0), m_PIDControllerDown(0.0, 0.0, 0.0)
-	{
-		//Note members will be overridden in properties
-	}
-	//IEvent::HandlerList ehl;
-	//The parent needs to call initialize
-	//virtual void Initialize(Base::EventMap& em, const Entity1D_Properties *props = NULL);
-	virtual void ResetPosition(double Position)
-	{
-		__super::ResetPosition(Position);  //Let the super do it stuff first
-
-		//TODO find case where I had this duplicate call to reset rotary I may omit this... but want to find if it needs to be here
-		//  [2/18/2014 James]
-		//We may need this if we use Kalman filters
-		//m_RobotControl->Reset_Rotary(m_InstanceIndex);
-
-		if ((m_PotentiometerState != eNoPot) && (!GetBypassPos_Update()))
-		{
-			m_PIDControllerUp.Reset();
-			m_PIDControllerDown.Reset();
-			//Only reset the encoder if we are reseting the position to the starting position
-			if (Position == GetStartingPosition())
-				m_RobotControl->Reset_Rotary(m_InstanceIndex);
-			double NewPosition = m_RobotControl->GetRotaryCurrentPorV(m_InstanceIndex);
-			Stop();
-			SetPos_m(NewPosition);
-			m_LastPosition = NewPosition;
-		}
-		m_ToleranceCounter = 0;
-	}
-	const Rotary_Props &GetRotary_Properties() const 
-	{ 
-		return m_Rotary_Props; 
-	}
-	void SetMatchVelocity(double MatchVel) 
-	{ 
-		//This is optionally used to lock to another ship (e.g. drive using rotary system)
-		m_MatchVelocity = MatchVel;
-	}
-	double GetActualPos() const
-	{
-		//Give client code access to the actual position, as the position of the entity cannot be altered for its projected position
-		const double NewPosition = (m_PotentiometerState != eNoPot) ? m_RobotControl->GetRotaryCurrentPorV(m_InstanceIndex) : GetPos_m();
-		return NewPosition;
-	}
 };
 
 class COMMON_API Rotary_Velocity_Control : public Rotary_System
@@ -1523,82 +1523,20 @@ public:
 #pragma endregion
 
 #pragma region _RotaryPosition_Internal_
-class RotaryPosition_Internal
+class RotaryPosition_Internal : public Rotary_Control_Interface
 {
 private:
+	#pragma region _bypass members_
 	double m_Position = 0.0;
 	double m_maxspeed = 1.0;
-	std::function<void(double new_voltage)> m_VoltageCallback=nullptr;
+	Framework::Base::PhysicsEntity_1D m_bypass_physics;
+	#pragma endregion
+	std::unique_ptr<Rotary_Position_Control> m_rotary_legacy;
+	#pragma region _members_
+	std::function<void(double new_voltage)> m_VoltageCallback = nullptr;
 	std::function<double()> m_OdometryCallack = nullptr;
-	double m_OpenLoop_position=0.0;  //keep track internally if we are open loop
-	static double GetVelocityFromDistance_Angular(double Distance, double Restraint, double DeltaTime_s, double matchVel, double EntityMass)
-	{
-		//pulled from physics 1D, needed for computing the velocity (bypass only) slightly altered to be member free
-		double ret;
-
-		//This is how many radians the ship is capable to turn for this given time frame
-		double Acceleration = (Restraint / EntityMass); //obtain acceleration
-
-		{
-			//first compute which direction to go
-			double DistanceDirection = Distance;
-			DistanceDirection -= matchVel * DeltaTime_s;
-			if (IsZero(DistanceDirection))
-			{
-				ret = matchVel;
-				return ret;
-			}
-
-			//Unlike in the 3D physics, we'll need while loops to ensure all of the accumulated turns are normalized, in the 3D physics the
-			//Quat is auto normalized to only require one if check here
-			while (DistanceDirection > M_PI)
-				DistanceDirection -= Pi2;
-			while (DistanceDirection < -M_PI)
-				DistanceDirection += Pi2;
-			double DistanceLength = fabs(DistanceDirection);
-
-			//Ideal speed needs to also be normalized
-			double IDS = Distance;
-			if (IDS > M_PI)
-				IDS -= Pi2;
-			else if (IDS < -M_PI)
-				IDS += Pi2;
-
-			double IdealSpeed = fabs(IDS / DeltaTime_s);
-
-			if (Restraint != -1)
-			{
-				//Given the distance compute the time needed
-				//Place the division first keeps the multiply small
-				double Time = sqrt(2.0*(DistanceLength / Acceleration));
-				//With torque and its fixed point nature... it is important to have the jump ahead of the slope so that it doesn't overshoot
-				//this can be accomplished by subtracting this delta time and working with that value... this should work very well but it could
-				//be possible for a slight overshoot when the delta times slices are irregular. 
-				if (Time > DeltaTime_s)
-				{
-					Time -= DeltaTime_s;
-					if (IsZero(Time))
-						Time = 0.0;
-				}
-
-				//Now compute maximum speed for this time
-				double MaxSpeed = Acceleration * Time;
-				ret = std::min(IdealSpeed, MaxSpeed);
-
-				if (DistanceDirection < 0)
-					ret = -ret;
-				ret += matchVel;
-			}
-			else
-			{
-				ret = IdealSpeed;  //i.e. god speed
-				if (IDS < 0)
-					ret = -ret;
-			}
-		}
-		return ret;
-	}
-
+	double m_OpenLoop_position = 0.0;  //keep track internally if we are open loop
+	#pragma endregion
 	void time_slice_bypass(double d_time_s)
 	{
 		//This example is the simplest logic needed to handle setpoint.  It first computes the delta of where it is vs. where
@@ -1617,11 +1555,9 @@ private:
 		//such as friction and mechanical transfer efficiency etc. This can be tuned empirically and in the real code have PID to
 		//work out any error.
 
-		//this is our wheel module weight and really does not count weight of robot or friction
-		const double EntityMass = 2.0 * 0.453592; //essentially our load of what we are applying the torque to
 		const double stall_torque = 0.38; //using a RS-550 which is plenty of power
 		const double torque_restraint = stall_torque * 100.0; //the total torque simple factors any gear reduction (counting the shaft to final gear reduction)
-		const double velocity = GetVelocityFromDistance_Angular(distance, torque_restraint, d_time_s, 0.0, EntityMass);
+		const double velocity = m_bypass_physics.GetVelocityFromDistance_Angular(distance, torque_restraint, d_time_s, 0.0);
 		//almost there now to normalize the voltage we need the max speed, this is provided by the free speed of the motor, and since it is the speed of the
 		//swivel itself we factor in the gear reduction.  This should go very quick because the load is light
 		const double free_speed_RPM = 19000.0 / 30.0;  //factor in gear reduction
@@ -1629,21 +1565,42 @@ private:
 		//Note: At some point I should determine why the numbers do not quite align, they are empirically tweaked to have a good acceleration, and
 		//should be fine for bypass demo
 		double voltage = velocity / 8;
+		m_OpenLoop_position += velocity * d_time_s; //update our internal position
 		//avoid oscillation by cutting out minor increments
 		if (fabs(voltage) < 0.01)
 			voltage = 0.0;
 		m_VoltageCallback(voltage);
 	}
-public:
-	void Init()
+	#pragma region _Rotary_Control_Interface_
+protected: //from Rotary_Control_Interface
+	virtual void Reset_Rotary(size_t index = 0)
 	{
-		//TODO
+		Reset();
+	}
+	virtual double GetRotaryCurrentPorV(size_t index = 0)
+	{
+		const double pot_pos = m_OdometryCallack ? m_OdometryCallack() : m_OpenLoop_position;
+		return pot_pos;
+	}
+	virtual void UpdateRotaryVoltage(size_t index, double Voltage)
+	{
+		m_VoltageCallback(Voltage);
+	}
+	#pragma endregion
+public:
+	void Init(size_t InstanceIndex)
+	{
+		//this is our wheel module weight and really does not count weight of robot or friction
+		m_bypass_physics.SetMass(2.0 * 0.453592);
+		if (m_rotary_legacy == nullptr)
+			m_rotary_legacy = std::make_unique<Rotary_Position_Control>("rotary",this,InstanceIndex);
 	}
 	void ShutDown()
 	{}
 	void SetPosition(double position)
 	{
 		m_Position = position;
+		m_rotary_legacy->SetIntendedPosition(position);
 	}
 	void TimeSlice(double d_time_s)
 	{
@@ -1651,6 +1608,7 @@ public:
 		#ifdef __UseBypass__
 		time_slice_bypass(d_time_s);
 		#else
+		m_rotary_legacy->TimeChange(d_time_s);
 		#endif
 	}
 	void Reset(double position = 0.0)
@@ -1673,7 +1631,7 @@ private:
 	double m_maxspeed = Feet2Meters(12.0); //max velocity forward in meters per second
 	std::function<void(double new_voltage)> m_VoltageCallback;
 public:
-	void Init()
+	void Init(size_t InstanceIndex)
 	{
 		//TODO bind max speed to properties used in main assembly via external properties
 		//we'll have other properties, and we'll need to work out the common ones
@@ -1710,9 +1668,9 @@ RotarySystem_Position::RotarySystem_Position()
 {
 	m_rotary_system = std::make_shared<RotaryPosition_Internal>();
 }
-void RotarySystem_Position::Init()
+void RotarySystem_Position::Init(size_t InstanceIndex)
 {
-	m_rotary_system->Init();
+	m_rotary_system->Init(InstanceIndex);
 }
 void RotarySystem_Position::ShutDown()
 {
@@ -1744,9 +1702,9 @@ RotarySystem_Velocity::RotarySystem_Velocity()
 {
 	m_rotary_system = std::make_shared<RotaryVelocity_Internal>();
 }
-void RotarySystem_Velocity::Init()
+void RotarySystem_Velocity::Init(size_t InstanceIndex)
 {
-	m_rotary_system->Init();
+	m_rotary_system->Init(InstanceIndex);
 }
 void RotarySystem_Velocity::ShutDown()
 {
