@@ -1,4 +1,6 @@
 #pragma once
+#include <memory>
+#include <functional>
 
 //Entity 2D
 //This records its current position on a 2 dimensional plane

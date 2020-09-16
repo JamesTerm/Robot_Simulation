@@ -22,6 +22,312 @@ namespace Module {
 	namespace Robot {
 
 #pragma region _Rotary System Legacy_
+#pragma region _Rotary System Properties_
+#pragma region _Entity1D_Properties_
+class COMMON_API Entity1D_Properties
+{
+public:
+	Entity1D_Properties()
+	{
+		m_EntityName = "Entity1D";
+		m_Mass = 10000.0;
+		m_Dimension = 12.0;
+		m_IsAngular = false;
+		m_StartingPosition = 0.0;
+	}
+	Entity1D_Properties(const char EntityName[], double Mass, double Dimension, bool IsAngular = false)
+	{
+		m_EntityName = EntityName;
+		m_Mass = Mass;
+		m_Dimension = Dimension;
+		m_IsAngular = IsAngular;
+		m_StartingPosition = 0.0;
+	}
+	virtual ~Entity1D_Properties() {}
+	//virtual void LoadFromScript(Scripting::Script& script, bool NoDefaults = false);
+	//void Initialize(Entity1D *NewEntity) const
+	//{
+	//	NewEntity->m_Dimension = m_Dimension;
+	//	NewEntity->GetPhysics().SetMass(m_Mass);
+	//	NewEntity->m_IsAngular = m_IsAngular;
+	//	NewEntity->m_StartingPosition = m_StartingPosition;
+	//}
+	double GetMass() const { return m_Mass; }
+protected:
+	std::string m_EntityName;  //derived classes can let base class know what type to read
+public:
+	//Stuff needed for physics
+	double m_StartingPosition;  //the position used when reset position is called
+	double m_Mass;
+	double m_Dimension; //Dimension- Length for linear and diameter for angular
+	bool m_IsAngular;
+};
+#pragma endregion
+#pragma region _Ship_1D_Properties_
+struct COMMON_API Ship_1D_Props
+{
+	//void SetFromShip_Properties(const Ship_Props & NewValue);
+
+	//Note there may be a difference between MAX_SPEED and MaxSpeed_Forward/MaxSpeed_Reverse, where MAX_SPEED represents the fastest speed something is capable of traveling, while
+	// MaxSpeed_Forward/MaxSpeed_Reverse is the fastest desired speed the controller will want to manage this becomes more important in robotics where the gearing has some rotary
+	// systems have a much faster max speed than what the desired speed would want to be.  These are also handy for button controlled operations to operate at a certain desired
+	// max speed when held down
+	double MAX_SPEED;
+	double MaxSpeed_Forward, MaxSpeed_Reverse;
+	double ACCEL, BRAKE;
+
+	double MaxAccelForward, MaxAccelReverse;
+	double MinRange, MaxRange;
+	//This is used to avoid overshoot when trying to rotate to a heading
+	double DistanceDegradeScalar;
+
+	//TODO these are somewhat specific, we may want to move subclass them or have more generic meaning
+	//enum Ship_Type
+	//{
+	//	eDefault,
+	//	eRobotArm,
+	//	eSimpleMotor,
+	//	eSwivel,
+	//};
+	//Ship_Type ShipType;
+	bool UsingRange;
+};
+
+class COMMON_API Ship_1D_Properties : public Entity1D_Properties
+{
+private:
+	Ship_1D_Props m_Ship_1D_Props;
+public:
+	//typedef Ship_1D_Props::Ship_Type Ship_Type;
+
+	Ship_1D_Properties()
+	{
+		double Scale = 0.2;  //we must scale everything down to see on the view
+		m_Ship_1D_Props.MAX_SPEED = m_Ship_1D_Props.MaxSpeed_Forward = 400.0 * Scale;
+		m_Ship_1D_Props.MaxAccelReverse = -m_Ship_1D_Props.MAX_SPEED;
+		m_Ship_1D_Props.ACCEL = 60.0 * Scale;
+		m_Ship_1D_Props.BRAKE = 50.0 * Scale;
+
+		m_Ship_1D_Props.MaxAccelForward = 87.0 * Scale;
+		m_Ship_1D_Props.MaxAccelReverse = 70.0 * Scale;
+		m_Ship_1D_Props.MinRange = m_Ship_1D_Props.MaxRange = 0.0;
+		m_Ship_1D_Props.UsingRange = false;
+		m_Ship_1D_Props.DistanceDegradeScalar = 1.0;  //only can be changed in script!
+	}
+	//Allow to construct props in constructor instead of using script
+	Ship_1D_Properties(const char EntityName[], double Mass, double Dimension,
+		double MAX_SPEED, double ACCEL, double BRAKE, double MaxAccelForward, double MaxAccelReverse,
+		//Ship_Type ShipType = Ship_1D_Props::eDefault, 
+		bool UsingRange = false, double MinRange = 0.0, double MaxRange = 0.0,
+		bool IsAngular = false)
+	{
+		m_Ship_1D_Props.MAX_SPEED = m_Ship_1D_Props.MaxSpeed_Forward = MAX_SPEED;
+		m_Ship_1D_Props.MaxSpeed_Reverse = -MAX_SPEED;
+		m_Ship_1D_Props.ACCEL = ACCEL;
+		m_Ship_1D_Props.BRAKE = BRAKE;
+		m_Ship_1D_Props.MaxAccelForward = MaxAccelForward;
+		m_Ship_1D_Props.MaxAccelReverse = MaxAccelReverse;
+		//m_Ship_1D_Props.ShipType = ShipType;
+		m_Ship_1D_Props.MinRange = MinRange;
+		m_Ship_1D_Props.MaxRange = MaxRange;
+		m_Ship_1D_Props.UsingRange = UsingRange;
+		m_Ship_1D_Props.DistanceDegradeScalar = 1.0;  //only can be changed in script!
+	}
+
+	//virtual void LoadFromScript(Scripting::Script& script, bool NoDefaults = false);
+	void UpdateShip1DProperties(const Ship_1D_Props &props)
+	{
+		//explicitly allow updating of ship props here
+		m_Ship_1D_Props = props;
+	}
+	//Ship_Type GetShipType() const { return m_Ship_1D_Props.ShipType; }
+	double GetMaxSpeed() const { return m_Ship_1D_Props.MAX_SPEED; }
+	const Ship_1D_Props &GetShip_1D_Props() const { return m_Ship_1D_Props; }
+	Ship_1D_Props &GetShip_1D_Props_rw() { return m_Ship_1D_Props; }
+public:
+	//These are for testing purposes only (do not use)
+	void SetMinRange(double MinRange) { m_Ship_1D_Props.MinRange = MinRange; }
+	void SetMaxRange(double MaxRange) { m_Ship_1D_Props.MaxRange = MaxRange; }
+	void SetUsingRange(bool UsingRange) { m_Ship_1D_Props.UsingRange = UsingRange; }
+	//copy constructor that can interpret the other type
+	//void SetFromShip_Properties(const Ship_Props & NewValue) { m_Ship_1D_Props.SetFromShip_Properties(NewValue); }
+};
+#pragma endregion
+#pragma region _Rotary_Properties_
+struct Rotary_Props
+{
+	using PolynomialEquation_forth_Props = Framework::Base::PolynomialEquation_forth_Props;
+	double VoltageScalar;		//Used to handle reversed voltage wiring
+	//Note: EncoderToRS_Ratio is a place holder property that is implemented in the robot control
+	//interface as needed for that control... it is not used in the rotary system code
+	//The gear reduction used when multiplied by the encoder RPS will equal the *Rotary System's* RPS
+	//This is typically the motor speed since this solves to apply voltage to it
+	double EncoderToRS_Ratio;
+	//Very similar to EncoderToRS_Ratio and is also a placeholder implemented in the robot control
+		//to initialize the pulse count on the encoders (0 default implies 360)
+	//While it ultimately solves the "gear reduction" it allows the script to specify the encoders specifications of the pulse count
+	//while the EncoderToRS_Ratio can represent the actual gear reduction
+	double EncoderPulsesPerRevolution;
+	double PID[3]; //p,i,d
+	double PrecisionTolerance;  //Used to manage voltage override and avoid oscillation
+	//Currently supporting 4 terms in polynomial equation
+	PolynomialEquation_forth_Props Voltage_Terms;  //Here is the curve fitting terms where 0th element is C, 1 = Cx^1, 2 = Cx^2, 3 = Cx^3 and so on...
+	//This may be computed from stall torque and then torque at wheel (does not factor in traction) to linear in reciprocal form to avoid division
+	//or alternatively solved empirically.  Using zero disables this feature
+	double InverseMaxAccel;  //This is used to solve voltage at the acceleration level where the acceleration / max acceleration gets scaled down to voltage
+	double InverseMaxDecel;  //used for deceleration case
+	double Positive_DeadZone;
+	double Negative_DeadZone;  //These must be in negative form
+	double MinLimitRange, MaxLimitRange; //for position control these are the angles reset to when limit switches are triggered (only works for open loop)
+
+	size_t Feedback_DiplayRow;  //Choose a row for display -1 for none (Only active if __DebugLUA__ is defined)
+	enum LoopStates
+	{
+		eNone, //Will never read them (ideal for systems that do not have any encoders)
+		eOpen,  //Will read them but never alter velocities
+		eClosed, //Will attempt to match predicted velocity to actual velocity
+		eClosed_ManualAssist //For position control this mode is also closed during manual assist
+	} LoopState; //This should always be false once control is fully functional
+	bool PID_Console_Dump;  //This will dump the console PID info (Only active if __DebugLUA__ is defined)
+
+	//Only supported in Rotary_Velocity_Control
+	bool UseAggressiveStop;  //If true, will use adverse force to assist in stopping.
+	//Very similar to EncoderToRS_Ratio and is also a placeholder implemented in the robot control
+	//This too is a method provided at startup to keep numbers positive
+	bool EncoderReversed_Wheel;
+
+	//Only supported in Rotary_Position_Control
+	struct Rotary_Arm_GainAssist_Props
+	{
+		double PID_Up[3]; //p,i,d
+		double PID_Down[3]; //p,i,d
+
+		double InverseMaxAccel_Up;
+		double InverseMaxDecel_Up;
+
+		double InverseMaxAccel_Down;
+		double InverseMaxDecel_Down;
+
+		double SlowVelocityVoltage;  //Empirically solved as the max voltage to keep load just above steady state for worst case scenario
+		double SlowVelocity;  //Rate at which the gain assist voltage gets blended out; This may be a bit more than the slow velocity used for SlowVelocityVoltage
+		double GainAssistAngleScalar;  //Convert gear ratio into the readable ratio for cos() (i.e. GearToArmRatio)
+		double ToleranceConsecutiveCount;
+		//In milliseconds predict what the position will be by using the potentiometers velocity to help compensate for lag
+		double VelocityPredictUp;
+		double VelocityPredictDown;
+
+		double PulseBurstTimeMs;  //Time in milliseconds for how long to enable pulse burst  (if zero this is disabled)
+		double PulseBurstRange;  //Extended tolerance time to activate pulse burst
+		bool UsePID_Up_Only;
+	} ArmGainAssist;
+
+	struct Voltage_Stall_Safety
+	{
+		//Note the on/off times will be shared resources of the gain assist
+		double ErrorThreshold;  //solved by observing a run without obstacle and run with obstacle finding a level as close with some room for error
+		double OnBurstLevel;  //the voltage level of the pulse
+		size_t PulseBurstTimeOut; //specify the max number of pulses before it disengages the lock
+		size_t StallCounterThreshold;  //specify the point when to activate pulse by counting stall time cycles
+	} VoltageStallSafety;
+};
+class COMMON_API Rotary_Properties : public Ship_1D_Properties
+{
+public:
+	void Init()
+	{
+		Rotary_Props props;
+		memset(&props, 0, sizeof(Rotary_Props));
+
+		props.VoltageScalar = 1.0;
+		props.EncoderToRS_Ratio = 1.0;
+		//Late assign this to override the initial default
+		props.PID[0] = 1.0; //set PIDs to a safe default of 1,0,0
+		props.PrecisionTolerance = 0.01;  //It is really hard to say what the default should be
+		props.Feedback_DiplayRow = (size_t)-1;  //Only assigned to a row during calibration of feedback sensor
+		props.LoopState = Rotary_Props::eNone;  //Always false when control is fully functional
+		props.PID_Console_Dump = false;  //Always false unless you want to analyze PID (only one system at a time!)
+		props.UseAggressiveStop = false;  //This is only for angular so false is a good default (must be explicit in script otherwise)
+		props.Voltage_Terms.Init();
+		props.InverseMaxAccel = props.InverseMaxDecel = 0.0;
+		props.Positive_DeadZone = props.Negative_DeadZone = 0.0;
+		props.MaxLimitRange = props.MinLimitRange = 0.0;  //just zero out; these are optionally used and explicitly set when used
+		props.EncoderPulsesPerRevolution = 0.0;
+		props.EncoderReversed_Wheel = false;
+		Rotary_Props::Rotary_Arm_GainAssist_Props &arm = props.ArmGainAssist;
+		arm.SlowVelocity = arm.SlowVelocityVoltage = 0.0;
+		arm.GainAssistAngleScalar = 1.0;
+		arm.InverseMaxAccel_Down = arm.InverseMaxAccel_Up = arm.InverseMaxDecel_Down = arm.InverseMaxDecel_Up = 0.0;
+		for (size_t i = 0; i < 3; i++)
+			arm.PID_Down[i] = arm.PID_Up[i] = 0.0;
+		arm.ToleranceConsecutiveCount = 1;
+		arm.VelocityPredictUp = arm.VelocityPredictDown = 0.0;
+		arm.UsePID_Up_Only = false;
+		arm.PulseBurstRange = 0.0;
+		arm.PulseBurstTimeMs = 0.0;
+		m_RotaryProps = props;
+	}
+	Rotary_Properties(const char EntityName[], double Mass, double Dimension,
+		double MAX_SPEED, double ACCEL, double BRAKE, double MaxAccelForward, double MaxAccelReverse,
+		//Ship_Type ShipType = Ship_1D_Props::eDefault,
+		bool UsingRange = false, double MinRange = 0.0, double MaxRange = 0.0,
+		bool IsAngular = false) : Ship_1D_Properties(EntityName, Mass, Dimension, MAX_SPEED, ACCEL, BRAKE, MaxAccelForward,
+			MaxAccelReverse, //ShipType, 
+			UsingRange, MinRange, MaxRange, IsAngular) {
+		Init();
+	}
+
+	Rotary_Properties() { Init(); }
+	//virtual void LoadFromScript(Scripting::Script& script, bool NoDefaults = false);
+	const Rotary_Props &GetRotaryProps() const { return m_RotaryProps; }
+	//Get and Set the properties
+	Rotary_Props &RotaryProps() { return m_RotaryProps; }
+protected:
+	Rotary_Props m_RotaryProps;
+private:
+};
+#pragma endregion
+#pragma region _Rotary_Pot_Props_
+		struct COMMON_API Rotary_Pot_Props
+		{
+			//These are addition attributes for any generic potentiometer  (This implies used only for position control)
+
+			using PolynomialEquation_forth_Props = Framework::Base::PolynomialEquation_forth_Props;
+			// init to some meaning data
+			Rotary_Pot_Props() : IsFlipped(false), PotMaxValue(1000.0), PotMinValue(0.0), PotentiometerOffset(0.0) {}
+			bool IsFlipped;  // is the range flipped
+			double PotMaxValue;  //highest you want the potentiometer to read (add some padding)
+			double PotMinValue;
+			//This allows adjustment of the potentiometer in software to avoid manual recalibration.
+			double PotentiometerOffset;
+			double PotLimitTolerance;  //Specify extra padding to avoid accidental trigger of the safety
+			PolynomialEquation_forth_Props PotPolyTerms; //in some environments the potentiometer is not linear
+		};
+#pragma endregion
+#pragma region _Rotary_Pot_Properties_
+		class COMMON_API Rotary_Pot_Properties : public Rotary_Properties
+		{
+		public:
+			void Pot_Init() { m_RotaryPotProps.PotPolyTerms.Init(); }
+			Rotary_Pot_Properties(const char EntityName[], double Mass, double Dimension,
+				double MAX_SPEED, double ACCEL, double BRAKE, double MaxAccelForward, double MaxAccelReverse,
+				//Ship_Type ShipType = Ship_1D_Props::eDefault, 
+				bool UsingRange = false, double MinRange = 0.0, double MaxRange = 0.0,
+				bool IsAngular = false) : Rotary_Properties(EntityName, Mass, Dimension, MAX_SPEED, ACCEL, BRAKE, MaxAccelForward,
+					MaxAccelReverse,
+					//ShipType, 
+					UsingRange, MinRange, MaxRange, IsAngular) {
+				Pot_Init();
+			}
+			Rotary_Pot_Properties() { Pot_Init(); }
+			//virtual void LoadFromScript(Scripting::Script& script, bool NoDefaults = false);
+			const Rotary_Pot_Props &GetRotary_Pot_Properties() const { return m_RotaryPotProps; }
+		protected:
+			Rotary_Pot_Props m_RotaryPotProps;
+		private:
+		};
+#pragma endregion
+#pragma endregion
+
 #pragma region _Entity1D_
 class COMMON_API Entity1D
 {
@@ -62,7 +368,16 @@ public:
 		ResetPos();
 	}
 	//This allows the game client to setup the ship's characteristics
-	//virtual void Initialize(Base::EventMap& em, const Entity1D_Properties *props = NULL);
+	virtual void Initialize(const Entity1D_Properties *props = NULL)
+	{
+		if (props)
+		{
+			m_Dimension = props->m_Dimension;
+			GetPhysics().SetMass(props->m_Mass);
+			m_IsAngular = props->m_IsAngular;
+			m_StartingPosition = props->m_StartingPosition;
+		}
+	}
 	virtual ~Entity1D()
 	{
 		//Game Client will be nuking this pointer
@@ -115,35 +430,6 @@ public:
 };
 #pragma endregion
 #pragma region _Ship_1D_
-
-struct COMMON_API Ship_1D_Props
-{
-	//void SetFromShip_Properties(const Ship_Props & NewValue);
-
-	//Note there may be a difference between MAX_SPEED and MaxSpeed_Forward/MaxSpeed_Reverse, where MAX_SPEED represents the fastest speed something is capable of traveling, while
-	// MaxSpeed_Forward/MaxSpeed_Reverse is the fastest desired speed the controller will want to manage this becomes more important in robotics where the gearing has some rotary
-	// systems have a much faster max speed than what the desired speed would want to be.  These are also handy for button controlled operations to operate at a certain desired
-	// max speed when held down
-	double MAX_SPEED;
-	double MaxSpeed_Forward, MaxSpeed_Reverse;
-	double ACCEL, BRAKE;
-
-	double MaxAccelForward, MaxAccelReverse;
-	double MinRange, MaxRange;
-	//This is used to avoid overshoot when trying to rotate to a heading
-	double DistanceDegradeScalar;
-
-	//TODO these are somewhat specific, we may want to move subclass them or have more generic meaning
-	enum Ship_Type
-	{
-		eDefault,
-		eRobotArm,
-		eSimpleMotor,
-		eSwivel,
-	};
-	Ship_Type ShipType;
-	bool UsingRange;
-};
 
 ///This is really stripped down from the Ship_2D.  Not only is their one dimension (given), but there is also no controller.  This class is intended
 ///To be controlled directly from a parent class which has controller support.
@@ -410,7 +696,33 @@ public:
 	{
 		m_Ship_1D_Props = props;
 	}
-	//virtual void Initialize(Base::EventMap& em, const Entity1D_Properties *props = NULL);
+	virtual void Initialize(const Entity1D_Properties *props = NULL)
+	{
+		__super::Initialize(props);
+		const Ship_1D_Properties *ship_props = dynamic_cast<const Ship_1D_Properties *>(props);
+		if (ship_props)
+		{
+			//UpdateShip1DProperties(ship_props->GetShip_1D_Props());  depreciated
+			m_Ship_1D_Props = ship_props->GetShip_1D_Props();  //if we support it
+		}
+		else
+		{
+			Ship_1D_Props &_ = m_Ship_1D_Props;
+			_.MAX_SPEED = 1.0;
+			_.ACCEL = 1.0;
+			_.BRAKE = 1.0;
+
+			_.MaxAccelForward = 1.0;
+			_.MaxAccelReverse = 1.0;
+			_.UsingRange = false;
+			_.MinRange = _.MaxRange = 0;
+			m_IsAngular = false;
+		}
+		m_Mass = m_Physics.GetMass();
+
+		m_IntendedPosition = 0.0;
+		m_IntendedPositionPhysics.SetMass(m_Mass);
+	}
 	virtual ~Ship_1D()
 	{
 	}
@@ -558,83 +870,8 @@ public:
 };
 
 #pragma endregion
-#pragma region _Rotory_System_
-struct Rotary_Props
-{
-	using PolynomialEquation_forth_Props = Framework::Base::PolynomialEquation_forth_Props;
-	double VoltageScalar;		//Used to handle reversed voltage wiring
-	//Note: EncoderToRS_Ratio is a place holder property that is implemented in the robot control
-	//interface as needed for that control... it is not used in the rotary system code
-	//The gear reduction used when multiplied by the encoder RPS will equal the *Rotary System's* RPS
-	//This is typically the motor speed since this solves to apply voltage to it
-	double EncoderToRS_Ratio;
-	//Very similar to EncoderToRS_Ratio and is also a placeholder implemented in the robot control
-	 //to initialize the pulse count on the encoders (0 default implies 360)
-	//While it ultimately solves the "gear reduction" it allows the script to specify the encoders specifications of the pulse count
-	//while the EncoderToRS_Ratio can represent the actual gear reduction
-	double EncoderPulsesPerRevolution;
-	double PID[3]; //p,i,d
-	double PrecisionTolerance;  //Used to manage voltage override and avoid oscillation
-	//Currently supporting 4 terms in polynomial equation
-	PolynomialEquation_forth_Props Voltage_Terms;  //Here is the curve fitting terms where 0th element is C, 1 = Cx^1, 2 = Cx^2, 3 = Cx^3 and so on...
-	//This may be computed from stall torque and then torque at wheel (does not factor in traction) to linear in reciprocal form to avoid division
-	//or alternatively solved empirically.  Using zero disables this feature
-	double InverseMaxAccel;  //This is used to solve voltage at the acceleration level where the acceleration / max acceleration gets scaled down to voltage
-	double InverseMaxDecel;  //used for deceleration case
-	double Positive_DeadZone;
-	double Negative_DeadZone;  //These must be in negative form
-	double MinLimitRange, MaxLimitRange; //for position control these are the angles reset to when limit switches are triggered (only works for open loop)
+#pragma region _Rotary_System_
 
-	size_t Feedback_DiplayRow;  //Choose a row for display -1 for none (Only active if __DebugLUA__ is defined)
-	enum LoopStates
-	{
-		eNone, //Will never read them (ideal for systems that do not have any encoders)
-		eOpen,  //Will read them but never alter velocities
-		eClosed, //Will attempt to match predicted velocity to actual velocity
-		eClosed_ManualAssist //For position control this mode is also closed during manual assist
-	} LoopState; //This should always be false once control is fully functional
-	bool PID_Console_Dump;  //This will dump the console PID info (Only active if __DebugLUA__ is defined)
-
-	//Only supported in Rotary_Velocity_Control
-	bool UseAggressiveStop;  //If true, will use adverse force to assist in stopping.
-	//Very similar to EncoderToRS_Ratio and is also a placeholder implemented in the robot control
-	//This too is a method provided at startup to keep numbers positive
-	bool EncoderReversed_Wheel;
-
-	//Only supported in Rotary_Position_Control
-	struct Rotary_Arm_GainAssist_Props
-	{
-		double PID_Up[3]; //p,i,d
-		double PID_Down[3]; //p,i,d
-
-		double InverseMaxAccel_Up;
-		double InverseMaxDecel_Up;
-
-		double InverseMaxAccel_Down;
-		double InverseMaxDecel_Down;
-
-		double SlowVelocityVoltage;  //Empirically solved as the max voltage to keep load just above steady state for worst case scenario
-		double SlowVelocity;  //Rate at which the gain assist voltage gets blended out; This may be a bit more than the slow velocity used for SlowVelocityVoltage
-		double GainAssistAngleScalar;  //Convert gear ratio into the readable ratio for cos() (i.e. GearToArmRatio)
-		double ToleranceConsecutiveCount;
-		//In milliseconds predict what the position will be by using the potentiometers velocity to help compensate for lag
-		double VelocityPredictUp;
-		double VelocityPredictDown;
-
-		double PulseBurstTimeMs;  //Time in milliseconds for how long to enable pulse burst  (if zero this is disabled)
-		double PulseBurstRange;  //Extended tolerance time to activate pulse burst
-		bool UsePID_Up_Only;
-	} ArmGainAssist;
-
-	struct Voltage_Stall_Safety
-	{
-		//Note the on/off times will be shared resources of the gain assist
-		double ErrorThreshold;  //solved by observing a run without obstacle and run with obstacle finding a level as close with some room for error
-		double OnBurstLevel;  //the voltage level of the pulse
-		size_t PulseBurstTimeOut; //specify the max number of pulses before it disengages the lock
-		size_t StallCounterThreshold;  //specify the point when to activate pulse by counting stall time cycles
-	} VoltageStallSafety;
-};
 class Rotary_Control_Interface
 {
 public:
@@ -668,11 +905,10 @@ protected:
 	PolynomialEquation_forth m_VoltagePoly;
 public:
 	Rotary_System(const char EntityName[]) : Ship_1D(EntityName), m_UsingRange_props(false) {}
-	//virtual void Initialize(Base::EventMap& em, const Entity1D_Properties *props = NULL)
-	virtual void Initialize()
+	virtual void Initialize(const Entity1D_Properties *props = NULL)
 	{
 		//Cache the m_UsingRange props so that we can know what to set back to
-		//__super::Initialize(em, props);  //must call predecessor first!
+		__super::Initialize(props);  //must call predecessor first!
 		m_UsingRange_props = m_Ship_1D_Props.UsingRange;
 	}
 	bool GetUsingRange_Props() const 
@@ -804,9 +1040,55 @@ public:
 	{
 		//Note members will be overridden in properties
 	}
-	//IEvent::HandlerList ehl;
-	//The parent needs to call initialize
-	//virtual void Initialize(Base::EventMap& em, const Entity1D_Properties *props = NULL);
+	virtual void Initialize(const Entity1D_Properties *props = NULL)
+	{
+		//The parent needs to call initialize
+		if (m_PotentiometerState != eNoPot)
+			m_LastPosition = m_RobotControl->GetRotaryCurrentPorV(m_InstanceIndex);
+		__super::Initialize(props);
+		const Rotary_Properties *Props = dynamic_cast<const Rotary_Properties *>(props);
+		assert(Props);
+		m_VoltagePoly.Initialize(&Props->GetRotaryProps().Voltage_Terms);
+		//This will copy all the props
+		m_Rotary_Props = Props->GetRotaryProps();
+		m_PIDControllerUp.SetPID(m_Rotary_Props.ArmGainAssist.PID_Up[0], m_Rotary_Props.ArmGainAssist.PID_Up[1], m_Rotary_Props.ArmGainAssist.PID_Up[2]);
+		m_PIDControllerDown.SetPID(m_Rotary_Props.ArmGainAssist.PID_Down[0], m_Rotary_Props.ArmGainAssist.PID_Down[1], m_Rotary_Props.ArmGainAssist.PID_Down[2]);
+
+		const double MaxSpeedReference = Props->GetMaxSpeed();
+		m_PIDControllerUp.SetInputRange(-MaxSpeedReference, MaxSpeedReference);
+		m_PIDControllerDown.SetInputRange(-MaxSpeedReference, MaxSpeedReference);
+		double tolerance = 0.99; //we must be less than one (on the positive range) to avoid lockup
+		m_PIDControllerUp.SetOutputRange(-MaxSpeedReference * tolerance, MaxSpeedReference*tolerance);
+		m_PIDControllerDown.SetOutputRange(-MaxSpeedReference * tolerance, MaxSpeedReference*tolerance);
+		//The idea here is that the arm may rest at a stop point that needs consistent voltage to keep steady
+		if (m_Rotary_Props.ArmGainAssist.SlowVelocityVoltage != 0.0)
+		{
+			m_PIDControllerUp.SetAutoResetI(false);
+			m_PIDControllerDown.SetAutoResetI(false);
+		}
+		m_PIDControllerUp.Enable();
+		m_PIDControllerDown.Enable();
+		m_ErrorOffset = 0.0;
+		switch (m_Rotary_Props.LoopState)
+		{
+		case Rotary_Props::eNone:
+			SetPotentiometerSafety(true);
+			break;
+		case Rotary_Props::eOpen:
+			m_PotentiometerState = ePassive;
+			break;
+		case Rotary_Props::eClosed:
+		case Rotary_Props::eClosed_ManualAssist:
+			m_PotentiometerState = eActive;
+			break;
+		}
+		//It is assumed that this property is constant throughout the whole session
+		if (m_Rotary_Props.PID_Console_Dump)
+		{
+			Ship_1D::InitNetworkProperties(Props->GetShip_1D_Props());
+			InitNetworkProperties(m_Rotary_Props, true);
+		}
+	}
 	virtual void ResetPosition(double Position)
 	{
 		__super::ResetPosition(Position);  //Let the super do it stuff first
@@ -1413,9 +1695,53 @@ public:
 		m_PIDController(0.0, 0.0, 0.0), //This will be overridden in properties
 		m_EncoderState(EncoderState)
 	{}
-	//IEvent::HandlerList ehl;
-	//The parent needs to call initialize
-	//virtual void Initialize(Base::EventMap& em, const Entity1D_Properties *props = NULL);
+	virtual void Initialize(const Entity1D_Properties *props = NULL)
+	{
+		//The parent needs to call initialize
+		if ((m_EncoderState == eActive) || (m_EncoderState == ePassive))
+			m_EncoderVelocity = m_RobotControl->GetRotaryCurrentPorV(m_InstanceIndex);
+		__super::Initialize(props);
+		const Rotary_Properties *Props = dynamic_cast<const Rotary_Properties *>(props);
+		assert(Props);
+		m_VoltagePoly.Initialize(&Props->GetRotaryProps().Voltage_Terms);
+		//This will copy all the props
+		m_Rotary_Props = Props->GetRotaryProps();
+		m_PIDController.SetPID(m_Rotary_Props.PID[0], m_Rotary_Props.PID[1], m_Rotary_Props.PID[2]);
+
+		//Note: for the drive we create a large enough number that can divide out the voltage and small enough to recover quickly,
+		//but this turned out to be problematic when using other angular rotary systems... therefore I am going to use the same computation
+		//I do for linear, where it allows as slow to max speed as possible.
+		//  [3/20/2012 Terminator]
+		const double MaxSpeed_Forward = m_Ship_1D_Props.MaxSpeed_Forward;
+		const double MaxSpeed_Reverse = m_Ship_1D_Props.MaxSpeed_Reverse;
+		m_PIDController.SetInputRange(MaxSpeed_Reverse, MaxSpeed_Forward);
+		double tolerance = 0.99; //we must be less than one (on the positive range) to avoid lockup
+		m_PIDController.SetOutputRange(MaxSpeed_Reverse*tolerance, MaxSpeed_Forward*tolerance);
+		m_PIDController.Enable();
+		m_CalibratedScaler = m_Ship_1D_Props.MAX_SPEED;
+		m_ErrorOffset = 0.0;
+
+		switch (m_Rotary_Props.LoopState)
+		{
+		case Rotary_Props::eNone:
+			SetEncoderSafety(true);
+			break;
+		case Rotary_Props::eOpen:
+			m_EncoderState = ePassive;
+			break;
+		case Rotary_Props::eClosed:
+			m_EncoderState = eActive;
+			break;
+		default:
+			assert(false);
+		}
+		//It is assumed that this property is constant throughout the whole session
+		if (m_Rotary_Props.PID_Console_Dump)
+		{
+			Ship_1D::InitNetworkProperties(Props->GetShip_1D_Props());
+			InitNetworkProperties(m_Rotary_Props);
+		}
+	}
 	virtual void ResetPos()
 	{
 		__super::ResetPos();  //Let the super do it stuff first
