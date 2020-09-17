@@ -49,6 +49,7 @@ public:
 	}
 	virtual ~Entity1D_Properties() {}
 	double GetMass() const { return m_Mass; }
+	Entity1D_Props &AsEntityProps() { return *this; }
 };
 #pragma endregion
 #pragma region _Ship_1D_Properties_
@@ -1790,7 +1791,8 @@ private:
 protected: //from Rotary_Control_Interface
 	virtual void Reset_Rotary(size_t index = 0)
 	{
-		Reset();
+		//TODO may need to provide reset to physical odometry
+		//potentiometers would not need this
 	}
 	virtual double GetRotaryCurrentPorV(size_t index = 0)
 	{
@@ -1803,12 +1805,25 @@ protected: //from Rotary_Control_Interface
 	}
 	#pragma endregion
 public:
-	void Init(size_t InstanceIndex)
+	void Init(size_t InstanceIndex, rotary_properties *props=nullptr)
 	{
 		//this is our wheel module weight and really does not count weight of robot or friction
 		m_bypass_physics.SetMass(2.0 * 0.453592);
 		if (m_rotary_legacy == nullptr)
-			m_rotary_legacy = std::make_unique<Rotary_Position_Control>("rotary",this,InstanceIndex);
+		{
+			m_rotary_legacy = std::make_unique<Rotary_Position_Control>("rotary_position", this, InstanceIndex);
+			//create a new rotary properties and init with it
+			Rotary_Properties legacy_props;
+			//if client has provided properties, update them
+			if (props)
+			{
+				//of each section
+				legacy_props.AsEntityProps() = props->entity_props;
+				legacy_props.GetShip_1D_Props_rw() = props->ship_props;
+				legacy_props.RotaryProps() = props->rotary_props;
+			}
+			m_rotary_legacy->Initialize(&legacy_props);
+		}
 	}
 	void ShutDown()
 	{}
@@ -1827,7 +1842,10 @@ public:
 		#endif
 	}
 	void Reset(double position = 0.0)
-	{}
+	{
+		m_Position = 0.0;
+		m_rotary_legacy->ResetPosition(position);
+	}
 	void Set_UpdateCurrentVoltage(std::function<void(double new_voltage)> callback)
 	{
 		m_VoltageCallback = callback;
@@ -1839,23 +1857,58 @@ public:
 };
 #pragma endregion
 #pragma region _RotaryVelocity_Internal_
-class RotaryVelocity_Internal
+class RotaryVelocity_Internal :public Rotary_Control_Interface
 {
 private:
+	#pragma region _members_
 	double m_Velocity = 0.0;
 	double m_maxspeed = Feet2Meters(12.0); //max velocity forward in meters per second
+	std::unique_ptr<Rotary_Velocity_Control> m_rotary_legacy;
 	std::function<void(double new_voltage)> m_VoltageCallback;
-public:
-	void Init(size_t InstanceIndex)
+	std::function<double()> m_OdometryCallack = nullptr;
+	#pragma endregion
+	#pragma region _Rotary_Control_Interface_
+protected: //from Rotary_Control_Interface
+	virtual void Reset_Rotary(size_t index = 0)
 	{
-		//TODO bind max speed to properties used in main assembly via external properties
-		//we'll have other properties, and we'll need to work out the common ones
+		//TODO may need to provide reset to physical odometry
+		//encoders have a reset in WPI but it shouldn't be needed for velocity
+	}
+	virtual double GetRotaryCurrentPorV(size_t index = 0)
+	{
+		const double velocity = m_OdometryCallack ? m_OdometryCallack() : m_Velocity;
+		return velocity;
+	}
+	virtual void UpdateRotaryVoltage(size_t index, double Voltage)
+	{
+		m_VoltageCallback(Voltage);
+	}
+	#pragma endregion
+public:
+	void Init(size_t InstanceIndex, rotary_properties *props=nullptr)
+	{
+		if (m_rotary_legacy == nullptr)
+		{
+			m_rotary_legacy = std::make_unique<Rotary_Velocity_Control>("rotary_velocity", this, InstanceIndex);
+			//create a new rotary properties and init with it
+			Rotary_Properties legacy_props;
+			//if client has provided properties, update them
+			if (props)
+			{
+				//of each section
+				legacy_props.AsEntityProps() = props->entity_props;
+				legacy_props.GetShip_1D_Props_rw() = props->ship_props;
+				legacy_props.RotaryProps() = props->rotary_props;
+			}
+			m_rotary_legacy->Initialize(&legacy_props);
+		}
 	}
 	void ShutDown()
 	{}
 	void SetVelocity(double rate)
 	{
 		m_Velocity = rate;
+		m_rotary_legacy->SetRequestedVelocity(rate);
 	}
 	void TimeSlice(double d_time_s)
 	{
@@ -1863,18 +1916,22 @@ public:
 		//voltage in the bypass case is a normalized velocity
 		m_VoltageCallback(m_Velocity/m_maxspeed);
 		#else
+		m_rotary_legacy->TimeChange(d_time_s);
 		#endif
 	}
 	void Reset(double position = 0.0)
 	{
 		m_Velocity = 0.0;
+		m_rotary_legacy->ResetPos();
 	}
 	void Set_UpdateCurrentVoltage(std::function<void(double new_voltage)> callback)
 	{
 		m_VoltageCallback = callback;
 	}
 	void SetOdometryCallback(std::function<double()> callback)
-	{}
+	{
+		m_OdometryCallack = callback;
+	}
 };
 #pragma endregion
 #pragma region _wrapper methods_
@@ -1885,7 +1942,7 @@ RotarySystem_Position::RotarySystem_Position()
 }
 void RotarySystem_Position::Init(size_t InstanceIndex, rotary_properties *props)
 {
-	m_rotary_system->Init(InstanceIndex);
+	m_rotary_system->Init(InstanceIndex,props);
 }
 void RotarySystem_Position::ShutDown()
 {
@@ -1919,7 +1976,7 @@ RotarySystem_Velocity::RotarySystem_Velocity()
 }
 void RotarySystem_Velocity::Init(size_t InstanceIndex, rotary_properties *props)
 {
-	m_rotary_system->Init(InstanceIndex);
+	m_rotary_system->Init(InstanceIndex,props);
 }
 void RotarySystem_Velocity::ShutDown()
 {

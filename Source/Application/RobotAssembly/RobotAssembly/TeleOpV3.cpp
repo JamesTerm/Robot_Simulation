@@ -253,10 +253,13 @@ public:
 		//this time... no skid
 		m_max_heading_rad = (2 * Feet2Meters(m_maxspeed) / wheel_dimensions.length()) * skid;
 
-		Reset();  //for entity variables
+		//Initialize these before calling reset (as the properties can dictate what to reset to)
+		//TODO provide properties method here and invoke it, init can have properties sent as a parameter here
 		m_robot.Init();
 		m_viewer.init();
 		m_RobotUI.Initialize();
+
+		Reset();  //for entity variables
 	}
 
 	void Start()
