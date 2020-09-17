@@ -247,6 +247,15 @@ public:
 	}
 	void Init()
 	{
+		//Provide rotary properties
+		rotary_properties props_rotary_drive, props_rotary_swivel;
+		//grab defaults
+		props_rotary_drive.Init();
+		props_rotary_swivel.Init();
+
+		//At some point we may want to callback here for external method to set properties
+		//if (!external_properties) defaults below
+		#pragma region _default properties_
 		//setup some robot properties
 		using properties = Swerve_Drive::properties;
 		//We'll make a square robot for ease to interpret angles
@@ -268,21 +277,56 @@ public:
 		wheel_dimensions[1] //Width between wheels
 		};
 		m_Entity_Input.SetProperties(inv_props);
-		//TODO set properties here
+		//Default rotary properties... use what we can from other systems to match these
+		//Since the drive rotary system is using linear velocity, we can pull the same characteristics
+		{
+			//Entity props
+			rotary_properties::Entity1D_Props &rw_drv_entity = props_rotary_drive.entity_props;
+			rotary_properties::Entity1D_Props &rw_swl_entity = props_rotary_swivel.entity_props;
+			rw_drv_entity.m_Mass = rw_swl_entity.m_Mass = 3.0 * 0.453592; //pounds to kilograms
+			rw_drv_entity.m_Dimension = rw_swl_entity.m_Dimension = Inches2Meters(6); //wheel diameter... used for RPS to linear conversions
+		}
+		{
+			rotary_properties::Ship_1D_Props &rw_drv_ship = props_rotary_drive.ship_props;
+			rotary_properties::Ship_1D_Props &rw_swl_ship = props_rotary_swivel.ship_props;
+			//make use of modern c++ way to populate them...
+			rw_swl_ship =
+			{
+				//double MAX_SPEED;
+				2,  //These match Curivator
+				//double MaxSpeed_Forward, MaxSpeed_Reverse;
+				2,2,
+				//double ACCEL, BRAKE;
+				10.0,10.0,
+				//double MaxAccelForward, MaxAccelReverse;
+				7.0,7.0 //These match Curivator
+			};
+			rw_drv_ship =
+			{
+				//double MAX_SPEED;
+				Feet2Meters(12),  //These match motion control
+				//double MaxSpeed_Forward, MaxSpeed_Reverse;
+				Feet2Meters(12),Feet2Meters(12),
+				//double ACCEL, BRAKE;
+				10.0,10.0,
+				//double MaxAccelForward, MaxAccelReverse;
+				5.0,5.0 //These match motion control
+			};
+		}
+		{
+			rotary_properties::Rotary_Props &rw_drv_rotary = props_rotary_drive.rotary_props;
+			rotary_properties::Rotary_Props &rw_swl_rotary = props_rotary_swivel.rotary_props;
+			rw_drv_rotary.UseAggressiveStop = rw_swl_rotary.UseAggressiveStop = true;
+		}
+
+		#pragma endregion
+		//all cases come here to init rotary systems with correct properties
 		for (size_t i = 0; i < 4; i++)
 		{
-			m_Drive[i].Init(i);
-			m_Swivel[i].Init(i+4);
+			m_Drive[i].Init(i,&props_rotary_drive);
+			m_Swivel[i].Init(i+4,&props_rotary_swivel);
 		}
 		Reset();
-	}
-	void SetLinearVelocity_local(double forward, double right)
-	{
-		m_MotionControl2D.SetLinearVelocity_local(forward, right);
-	}
-	void SetAngularVelocity(double clockwise)
-	{
-		m_MotionControl2D.SetAngularVelocity(clockwise);
 	}
 	void TimeSlice(double d_time_s)
 	{
@@ -338,6 +382,17 @@ public:
 			m_current_heading = NormalizeRotation2(m_current_heading);  //written out for ease of debugging
 		}
 	}
+	#pragma region _mutators_
+	void SetLinearVelocity_local(double forward, double right)
+	{
+		m_MotionControl2D.SetLinearVelocity_local(forward, right);
+	}
+	void SetAngularVelocity(double clockwise)
+	{
+		m_MotionControl2D.SetAngularVelocity(clockwise);
+	}
+	#pragma endregion
+	#pragma region _accessors_
 	//accessors
 	Vec2D GetCurrentPosition() const
 	{
@@ -353,6 +408,20 @@ public:
 		else
 			return m_current_heading;
 	}
+	const SwerveVelocities &GetCurrentVelocities() const
+	{
+		return m_Odometry.GetCurrentVelocities();
+	}
+	const SwerveVelocities &GetCurrentVoltages() const
+	{
+		return m_Voltage;
+	}
+	const SwerveVelocities &GetIntendedVelocities() const
+	{
+		return m_robot.GetIntendedVelocities();
+	}
+	#pragma endregion
+	#pragma region _callbacks_
 	void Set_UpdateGlobalVelocity(std::function<void(const Vec2D &new_velocity)> callback)
 	{
 		m_ExternSetVelocity = callback;
@@ -369,18 +438,7 @@ public:
 	{
 		m_ExternGetCurrentHeading = callback;
 	}
-	const SwerveVelocities &GetCurrentVelocities() const
-	{
-		return m_Odometry.GetCurrentVelocities();
-	}
-	const SwerveVelocities &GetCurrentVoltages() const
-	{
-		return m_Voltage;
-	}
-	const SwerveVelocities &GetIntendedVelocities() const
-	{
-		return m_robot.GetIntendedVelocities();
-	}
+	#pragma endregion
 };
 #pragma region _wrapper methods_
 SwerveRobot::SwerveRobot()

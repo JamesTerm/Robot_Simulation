@@ -65,7 +65,8 @@ public:
 	Ship_1D_Properties()
 	{
 		double Scale = 0.2;  //we must scale everything down to see on the view
-		m_Ship_1D_Props.MAX_SPEED = m_Ship_1D_Props.MaxSpeed_Forward = 400.0 * Scale;
+		m_Ship_1D_Props.MAX_SPEED = m_Ship_1D_Props.MaxSpeed_Forward =
+			m_Ship_1D_Props.MaxSpeed_Reverse = 400.0 * Scale;
 		m_Ship_1D_Props.MaxAccelReverse = -m_Ship_1D_Props.MAX_SPEED;
 		m_Ship_1D_Props.ACCEL = 60.0 * Scale;
 		m_Ship_1D_Props.BRAKE = 50.0 * Scale;
@@ -1422,140 +1423,6 @@ private:
 	double m_PreviousVelocity=0.0; //used to compute acceleration
 	#pragma endregion
 protected:
-	virtual void TimeChange(double dTime_s)
-	{
-		//Intercept the time change to obtain current height as well as sending out the desired velocity
-		const double CurrentVelocity = m_Physics.GetVelocity();
-		const double MaxSpeed = m_Ship_1D_Props.MAX_SPEED;
-
-		double Encoder_Velocity = 0.0;
-		if ((m_EncoderState == eActive) || (m_EncoderState == ePassive))
-		{
-			Encoder_Velocity = m_RobotControl->GetRotaryCurrentPorV(m_InstanceIndex);
-
-			//Unlike linear there is no displacement measurement therefore no need to check GetLockShipToPosition()
-			if (m_EncoderState == eActive)
-			{
-				if (!m_Rotary_Props.UseAggressiveStop)
-				{
-					double control = 0.0;
-					//only adjust calibration when both velocities are in the same direction, or in the case where the encoder is stopped which will
-					//allow the scaler to normalize if it need to start up again.
-					if (((CurrentVelocity * Encoder_Velocity) > 0.0) || IsZero(Encoder_Velocity))
-					{
-						control = -m_PIDController(fabs(CurrentVelocity), fabs(Encoder_Velocity), dTime_s);
-						m_CalibratedScaler = MaxSpeed + control;
-					}
-				}
-				else
-				{
-					m_ErrorOffset = m_PIDController(CurrentVelocity, Encoder_Velocity, dTime_s);
-					const double Acceleration = (CurrentVelocity - m_PreviousVelocity) / dTime_s;
-					const bool Decel = (Acceleration * CurrentVelocity < 0);
-					//normalize errors... these will not be reflected for I so it is safe to normalize here to avoid introducing oscillation from P
-					//Note: that it is important to bias towards deceleration this can help satisfy both requirements of avoiding oscillation as well
-					//As well as avoiding a potential overshoot when trying stop at a precise distance
-					m_ErrorOffset = Decel || fabs(m_ErrorOffset) > m_Rotary_Props.PrecisionTolerance ? m_ErrorOffset : 0.0;
-				}
-			}
-			else
-				m_RobotControl->GetRotaryCurrentPorV(m_InstanceIndex);  //For ease of debugging the controls (no harm to read)
-
-
-			m_EncoderVelocity = Encoder_Velocity;
-		}
-		__super::TimeChange(dTime_s);
-		const double Velocity = m_Physics.GetVelocity();
-		double Acceleration = (Velocity - m_PreviousVelocity) / dTime_s;
-		//CurrentVelocity is retained before the time change (for proper debugging of PID) we use the new velocity here for voltage
-		//Either error offset or calibrated scaler will be used depending on the aggressive stop property, we need not branch this as
-		//they both can be represented in the same equation
-		double Voltage = (Velocity + m_ErrorOffset) / m_CalibratedScaler;
-
-		bool IsAccel = (Acceleration * Velocity > 0);
-		//if we are coasting we must not apply reverse voltage when decelerating
-		if (!IsAccel && m_Rotary_Props.UseAggressiveStop == false)
-			Acceleration = 0.0;
-		Voltage += Acceleration * (IsAccel ? m_Rotary_Props.InverseMaxAccel : m_Rotary_Props.InverseMaxDecel);
-
-		//Keep track of previous velocity to compute acceleration
-		m_PreviousVelocity = Velocity;
-
-		//Apply the polynomial equation to the voltage to linearize the curve
-		Voltage = m_VoltagePoly(Voltage);
-
-		if ((IsZero(m_EncoderVelocity)) && IsAccel)
-			ComputeDeadZone(Voltage, m_Rotary_Props.Positive_DeadZone, m_Rotary_Props.Negative_DeadZone);
-
-		//Keep voltage override disabled for simulation to test precision stability
-		//if (!m_VoltageOverride)
-		if (true)
-		{
-			//Clamp range, PID (i.e. integral) controls may saturate the amount needed
-			if (Voltage > 0.0)
-			{
-				if (Voltage > 1.0)
-					Voltage = 1.0;
-			}
-			else if (Voltage < 0.0)
-			{
-				if (Voltage < -1.0)
-					Voltage = -1.0;
-			}
-			else
-				Voltage = 0.0;  //is nan case
-		}
-		else
-		{
-			Voltage = 0.0;
-			m_PIDController.ResetI(m_MaxSpeedReference * -0.99);  //clear error for I for better transition back
-		}
-
-		#if 0
-		Voltage *= Voltage;  //square them for more give
-		//restore the sign
-		if (CurrentVelocity < 0)
-			Voltage = -Voltage;
-		#endif
-
-		if (m_Rotary_Props.PID_Console_Dump)
-		{
-			NetworkEditProperties(m_Rotary_Props);
-			Ship_1D::NetworkEditProperties(m_Ship_1D_Props);
-			m_PIDController.SetPID(m_Rotary_Props.PID[0], m_Rotary_Props.PID[1], m_Rotary_Props.PID[2]);
-			switch (m_Rotary_Props.LoopState)
-			{
-			case Rotary_Props::eNone:
-				SetEncoderSafety(true);
-				break;
-			case Rotary_Props::eOpen:
-				m_EncoderState = ePassive;
-				break;
-			case Rotary_Props::eClosed:
-				m_EncoderState = eActive;
-				break;
-			default:
-				assert(false);
-			}
-
-			#ifdef __DebugLUA__
-			if (Encoder_Velocity != 0.0)
-			{
-				if (m_Rotary_Props.UseAggressiveStop)
-					printf("v=%.2f p=%.2f e=%.2f eo=%.2f\n", Voltage, CurrentVelocity, Encoder_Velocity, m_ErrorOffset);
-				else
-				{
-					if (m_PIDController.GetI() == 0.0)
-						printf("v=%.2f p=%.2f e=%.2f eo=%.2f cs=%.2f\n", Voltage, CurrentVelocity, Encoder_Velocity, m_ErrorOffset, m_CalibratedScaler / MaxSpeed);
-					else
-						printf("v=%.2f p=%.2f e=%.2f i=%.2f cs=%.2f\n", Voltage, CurrentVelocity, Encoder_Velocity, m_PIDController.GetTotalError(), m_CalibratedScaler / MaxSpeed);
-				}
-			}
-			#endif
-		}
-
-		m_RobotControl->UpdateRotaryVoltage(m_InstanceIndex, Voltage);
-	}
 	virtual void RequestedVelocityCallback(double VelocityToUse, double DeltaTime_s)
 	{
 		if ((m_EncoderState == eActive) || (m_EncoderState == ePassive))
@@ -1732,6 +1599,140 @@ public:
 	{ 
 		//Give client code ability to change rotary system to break or coast
 		m_Rotary_Props.UseAggressiveStop = UseAggresiveStop;
+	}
+	virtual void TimeChange(double dTime_s)
+	{
+		//Intercept the time change to obtain current height as well as sending out the desired velocity
+		const double CurrentVelocity = m_Physics.GetVelocity();
+		const double MaxSpeed = m_Ship_1D_Props.MAX_SPEED;
+
+		double Encoder_Velocity = 0.0;
+		if ((m_EncoderState == eActive) || (m_EncoderState == ePassive))
+		{
+			Encoder_Velocity = m_RobotControl->GetRotaryCurrentPorV(m_InstanceIndex);
+
+			//Unlike linear there is no displacement measurement therefore no need to check GetLockShipToPosition()
+			if (m_EncoderState == eActive)
+			{
+				if (!m_Rotary_Props.UseAggressiveStop)
+				{
+					double control = 0.0;
+					//only adjust calibration when both velocities are in the same direction, or in the case where the encoder is stopped which will
+					//allow the scaler to normalize if it need to start up again.
+					if (((CurrentVelocity * Encoder_Velocity) > 0.0) || IsZero(Encoder_Velocity))
+					{
+						control = -m_PIDController(fabs(CurrentVelocity), fabs(Encoder_Velocity), dTime_s);
+						m_CalibratedScaler = MaxSpeed + control;
+					}
+				}
+				else
+				{
+					m_ErrorOffset = m_PIDController(CurrentVelocity, Encoder_Velocity, dTime_s);
+					const double Acceleration = (CurrentVelocity - m_PreviousVelocity) / dTime_s;
+					const bool Decel = (Acceleration * CurrentVelocity < 0);
+					//normalize errors... these will not be reflected for I so it is safe to normalize here to avoid introducing oscillation from P
+					//Note: that it is important to bias towards deceleration this can help satisfy both requirements of avoiding oscillation as well
+					//As well as avoiding a potential overshoot when trying stop at a precise distance
+					m_ErrorOffset = Decel || fabs(m_ErrorOffset) > m_Rotary_Props.PrecisionTolerance ? m_ErrorOffset : 0.0;
+				}
+			}
+			else
+				m_RobotControl->GetRotaryCurrentPorV(m_InstanceIndex);  //For ease of debugging the controls (no harm to read)
+
+
+			m_EncoderVelocity = Encoder_Velocity;
+		}
+		__super::TimeChange(dTime_s);
+		const double Velocity = m_Physics.GetVelocity();
+		double Acceleration = (Velocity - m_PreviousVelocity) / dTime_s;
+		//CurrentVelocity is retained before the time change (for proper debugging of PID) we use the new velocity here for voltage
+		//Either error offset or calibrated scaler will be used depending on the aggressive stop property, we need not branch this as
+		//they both can be represented in the same equation
+		double Voltage = (Velocity + m_ErrorOffset) / m_CalibratedScaler;
+
+		bool IsAccel = (Acceleration * Velocity > 0);
+		//if we are coasting we must not apply reverse voltage when decelerating
+		if (!IsAccel && m_Rotary_Props.UseAggressiveStop == false)
+			Acceleration = 0.0;
+		Voltage += Acceleration * (IsAccel ? m_Rotary_Props.InverseMaxAccel : m_Rotary_Props.InverseMaxDecel);
+
+		//Keep track of previous velocity to compute acceleration
+		m_PreviousVelocity = Velocity;
+
+		//Apply the polynomial equation to the voltage to linearize the curve
+		Voltage = m_VoltagePoly(Voltage);
+
+		if ((IsZero(m_EncoderVelocity)) && IsAccel)
+			ComputeDeadZone(Voltage, m_Rotary_Props.Positive_DeadZone, m_Rotary_Props.Negative_DeadZone);
+
+		//Keep voltage override disabled for simulation to test precision stability
+		//if (!m_VoltageOverride)
+		if (true)
+		{
+			//Clamp range, PID (i.e. integral) controls may saturate the amount needed
+			if (Voltage > 0.0)
+			{
+				if (Voltage > 1.0)
+					Voltage = 1.0;
+			}
+			else if (Voltage < 0.0)
+			{
+				if (Voltage < -1.0)
+					Voltage = -1.0;
+			}
+			else
+				Voltage = 0.0;  //is nan case
+		}
+		else
+		{
+			Voltage = 0.0;
+			m_PIDController.ResetI(m_MaxSpeedReference * -0.99);  //clear error for I for better transition back
+		}
+
+		#if 0
+		Voltage *= Voltage;  //square them for more give
+		//restore the sign
+		if (CurrentVelocity < 0)
+			Voltage = -Voltage;
+		#endif
+
+		if (m_Rotary_Props.PID_Console_Dump)
+		{
+			NetworkEditProperties(m_Rotary_Props);
+			Ship_1D::NetworkEditProperties(m_Ship_1D_Props);
+			m_PIDController.SetPID(m_Rotary_Props.PID[0], m_Rotary_Props.PID[1], m_Rotary_Props.PID[2]);
+			switch (m_Rotary_Props.LoopState)
+			{
+			case Rotary_Props::eNone:
+				SetEncoderSafety(true);
+				break;
+			case Rotary_Props::eOpen:
+				m_EncoderState = ePassive;
+				break;
+			case Rotary_Props::eClosed:
+				m_EncoderState = eActive;
+				break;
+			default:
+				assert(false);
+			}
+
+			#ifdef __DebugLUA__
+			if (Encoder_Velocity != 0.0)
+			{
+				if (m_Rotary_Props.UseAggressiveStop)
+					printf("v=%.2f p=%.2f e=%.2f eo=%.2f\n", Voltage, CurrentVelocity, Encoder_Velocity, m_ErrorOffset);
+				else
+				{
+					if (m_PIDController.GetI() == 0.0)
+						printf("v=%.2f p=%.2f e=%.2f eo=%.2f cs=%.2f\n", Voltage, CurrentVelocity, Encoder_Velocity, m_ErrorOffset, m_CalibratedScaler / MaxSpeed);
+					else
+						printf("v=%.2f p=%.2f e=%.2f i=%.2f cs=%.2f\n", Voltage, CurrentVelocity, Encoder_Velocity, m_PIDController.GetTotalError(), m_CalibratedScaler / MaxSpeed);
+				}
+			}
+			#endif
+		}
+
+		m_RobotControl->UpdateRotaryVoltage(m_InstanceIndex, Voltage);
 	}
 };
 
@@ -1935,6 +1936,15 @@ public:
 };
 #pragma endregion
 #pragma region _wrapper methods_
+void rotary_properties::Init()
+{
+	//create a new rotary properties and init with it
+	Rotary_Properties legacy_props;  //this will take care defaults
+	//now to update each section
+	entity_props = legacy_props.AsEntityProps();
+	ship_props = legacy_props.GetShip_1D_Props();
+	rotary_props = legacy_props.GetRotaryProps();
+}
 #pragma region _Rotary Position_
 RotarySystem_Position::RotarySystem_Position()
 {

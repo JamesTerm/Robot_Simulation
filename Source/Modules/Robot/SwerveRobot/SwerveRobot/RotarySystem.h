@@ -16,12 +16,15 @@ class RotaryPosition_Internal;
 
 struct rotary_properties
 {
+	//Optional: can provide good defaults to help client code to avoid managing all of them
+	void Init();
+
 	struct Entity1D_Props
 	{
 		//Stuff needed for physics
 		double m_StartingPosition;  //the position used when reset position is called
 		double m_Mass;
-		//This is never used but left in for completion
+		//This can be used for the wheel diameter to work with RPS to linear conversions
 		double m_Dimension; //Dimension- Length for linear and diameter for angular
 		bool m_IsAngular;
 	} entity_props;
