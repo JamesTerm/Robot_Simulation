@@ -27,12 +27,20 @@ private:
 	std::function<SwerveVelocities()> m_VoltageCallback;
 	double m_maxspeed = Feet2Meters(12.0); //max velocity forward in meters per second
 	double m_current_position[4] = {};  //keep track of the pot's position of each angle
+	SimulatedOdometry::properties m_properties;
 public:
-	void Init()
+	void Init(const SimulatedOdometry::properties *props)
 	{
-		//reserved
-		//TODO bind properties used in main assembly via external properties
-		//we'll have other properties, and we'll need to work out the common ones
+		//Since we define these props as we need them the client code will not need default ones
+		if (!props)
+		{
+			m_properties.swivel_max_speed[0] =
+				m_properties.swivel_max_speed[1] =
+				m_properties.swivel_max_speed[2] =
+				m_properties.swivel_max_speed[3] = 8.0;
+		}
+		else
+			m_properties = *props;
 	}
 	void ShutDown()
 	{
@@ -64,8 +72,7 @@ public:
 		{
 			//go ahead and apply the voltage to the position... this is over-simplified but effective for a bypass
 			//from the voltage determine the velocity delta
-			const double max_speed = 8;
-			const double velocity_delta = m_CurrentVelocities.Velocity.AsArray[i + 4] * max_speed;
+			const double velocity_delta = m_CurrentVelocities.Velocity.AsArray[i + 4] * m_properties.swivel_max_speed[i];
 			m_current_position[i] += velocity_delta * d_time_s;
 			m_CurrentVelocities.Velocity.AsArray[i+4] = m_current_position[i];
 		}
@@ -86,9 +93,9 @@ SimulatedOdometry::SimulatedOdometry()
 {
 	m_simulator = std::make_shared<SimulatedOdometry_Internal>();
 }
-void SimulatedOdometry::Init()
+void SimulatedOdometry::Init(const properties *props)
 {
-	m_simulator->Init();
+	m_simulator->Init(props);
 }
 void SimulatedOdometry::Shutdown()
 {

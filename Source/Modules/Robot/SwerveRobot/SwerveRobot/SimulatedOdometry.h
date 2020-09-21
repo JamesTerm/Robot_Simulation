@@ -14,8 +14,13 @@ class SimulatedOdometry_Internal;
 class SimulatedOdometry
 {
 public:
+	struct properties
+	{
+		double swivel_max_speed[4];
+	};
+
 	SimulatedOdometry();
-	void Init();
+	void Init(const properties *props=nullptr);
 	void Shutdown();
 	//Input: for simulation only, grab the voltages from each rotary system
 	void SetVoltageCallback(std::function<SwerveVelocities ()> callback);

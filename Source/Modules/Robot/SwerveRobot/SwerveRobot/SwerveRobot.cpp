@@ -295,7 +295,7 @@ public:
 				//double MAX_SPEED;
 				2,  //These match Curivator
 				//double MaxSpeed_Forward, MaxSpeed_Reverse;
-				2,2,
+				2,-2,
 				//double ACCEL, BRAKE;
 				10.0,10.0,
 				//double MaxAccelForward, MaxAccelReverse;
@@ -306,7 +306,7 @@ public:
 				//double MAX_SPEED;
 				Feet2Meters(12),  //These match motion control
 				//double MaxSpeed_Forward, MaxSpeed_Reverse;
-				Feet2Meters(12),Feet2Meters(12),
+				Feet2Meters(12),-Feet2Meters(12),
 				//double ACCEL, BRAKE;
 				10.0,10.0,
 				//double MaxAccelForward, MaxAccelReverse;
@@ -326,6 +326,17 @@ public:
 			m_Drive[i].Init(i,&props_rotary_drive);
 			m_Swivel[i].Init(i+4,&props_rotary_swivel);
 		}
+		//only disable when rotary is in bypass
+		#if 0
+		SimulatedOdometry::properties sim_props;
+		sim_props.swivel_max_speed[0] = 
+			sim_props.swivel_max_speed[1] =
+			sim_props.swivel_max_speed[2] = 
+			sim_props.swivel_max_speed[3] = 2.0;
+		m_Simulation.Init(&sim_props);
+		#else
+		m_Simulation.Init(nullptr);
+		#endif
 		Reset();
 	}
 	void TimeSlice(double d_time_s)
