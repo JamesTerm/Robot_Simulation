@@ -293,9 +293,10 @@ public:
 			rw_swl_ship =
 			{
 				//double MAX_SPEED;
-				2,  //These match Curivator
+				//2,  //These match Curivator
 				//double MaxSpeed_Forward, MaxSpeed_Reverse;
-				2,-2,
+				//2,-2,
+				8,8,-8,  //used in bypass
 				//double ACCEL, BRAKE;
 				10.0,10.0,
 				//double MaxAccelForward, MaxAccelReverse;
@@ -340,7 +341,7 @@ public:
 		sim_props.swivel_max_speed[0] = 
 			sim_props.swivel_max_speed[1] =
 			sim_props.swivel_max_speed[2] = 
-			sim_props.swivel_max_speed[3] = 2.0;
+			sim_props.swivel_max_speed[3] = 8.0;
 		m_Simulation.Init(&sim_props);
 		#else
 		m_Simulation.Init(nullptr);
