@@ -299,7 +299,15 @@ public:
 				//double ACCEL, BRAKE;
 				10.0,10.0,
 				//double MaxAccelForward, MaxAccelReverse;
-				7.0,7.0 //These match Curivator
+				//7.0,7.0, //These match Curivator
+				38.0,38.0, //used in bypass
+				//double MinRange, MaxRange;
+				0.0,0.0,
+				//This is used to avoid overshoot when trying to rotate to a heading
+				//double DistanceDegradeScalar;
+				1.0,
+				//bool UsingRange;
+				false
 			};
 			rw_drv_ship =
 			{
@@ -327,7 +335,7 @@ public:
 			m_Swivel[i].Init(i+4,&props_rotary_swivel);
 		}
 		//only disable when rotary is in bypass
-		#if 0
+		#if 1
 		SimulatedOdometry::properties sim_props;
 		sim_props.swivel_max_speed[0] = 
 			sim_props.swivel_max_speed[1] =

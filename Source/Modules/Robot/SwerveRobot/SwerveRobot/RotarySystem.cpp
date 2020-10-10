@@ -16,7 +16,7 @@
 #include "../../DriveKinematics/DriveKinematics/Vehicle_Drive.h"
 #include "RotarySystem.h"
 //Useful for diagnostics
-#define __UseBypass__
+//#define __UseBypass__
 #pragma endregion
 namespace Module {
 	namespace Robot {
