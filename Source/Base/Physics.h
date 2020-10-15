@@ -267,6 +267,15 @@ public:
 		//if (AccelerationDelta[1]!=0)
 		//	DebugOutput("Acc%f Vel%f\n",AccelerationDelta[1],m_Velocity[1]);
 	}
+	__inline double GetMomentofInertia(double RadialArmDistance)
+	{
+		//Doing it this way keeps the value of torque down to a reasonable level
+		double RadiusRatio(m_RadiusOfConcentratedMass * m_RadiusOfConcentratedMass / RadialArmDistance);
+		assert(RadiusRatio != 0);  //no-one should be using a zero sized radius!
+		double ret = (m_AngularInertiaCoefficient * m_EntityMass * RadiusRatio);
+		return ret;
+	}
+
 	inline double GetAngularAccelerationDelta(double torque, double RadialArmDistance = 1.0)
 	{
 		//This will give the acceleration delta given the torque which is: torque / AngularInertiaCoefficient * Mass
@@ -284,9 +293,11 @@ public:
 		if (RadialArmDistance != 0)
 		{
 			//Doing it this way keeps the value of torque down to a reasonable level
-			double RadiusRatio(m_RadiusOfConcentratedMass*m_RadiusOfConcentratedMass / RadialArmDistance);
-			assert(RadiusRatio != 0);  //no-one should be using a zero sized radius!
-			AngularAcceleration = (torque / (m_AngularInertiaCoefficient*m_EntityMass*RadiusRatio));
+			//double RadiusRatio(m_RadiusOfConcentratedMass*m_RadiusOfConcentratedMass / RadialArmDistance);
+			//assert(RadiusRatio != 0);  //no-one should be using a zero sized radius!
+			//AngularAcceleration = (torque / (m_AngularInertiaCoefficient*m_EntityMass*RadiusRatio));
+
+			AngularAcceleration = (torque / GetMomentofInertia(RadialArmDistance));
 			//This is another way to view it
 			//AngularAcceleration=((RadialArmDistance*torque)/(m_AngularInertiaCoefficient*m_EntityMass*m_RadiusOfConcentratedMass*m_RadiusOfConcentratedMass));
 		}
