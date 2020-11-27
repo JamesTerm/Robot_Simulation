@@ -173,3 +173,6 @@ bin/
 *.ipdb
 *.exp
 
+# Miscellaneous
+*.recipe
+

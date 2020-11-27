@@ -1,0 +1,83 @@
+:root {
+    --primary-color: cyan;
+    --background-color: black;
+    --text-color: #F9C7A2;
+}
+  
+  body {
+    background-color: var(--background-color);
+    color: var(--text-color);
+  }
+
+  .markdown-body {
+    background-color: var(--background-color);
+    color: var(--text-color);
+  }
+
+  pre {
+    background-color: black;
+    overflow: auto;
+    font-family: 'Monaco', monospace;
+    padding: 0 1em;
+  }
+
+  pre .markdown-body {
+    background-color: var(--background-color);
+    color: var(--text-color);
+  }
+
+  a {
+    color: var(--text-color);
+    background-color: var(--background-color);
+  }
+  h1 {
+    color: blue;
+  }
+  h2 {
+    color: red;
+  }
+  h3 {
+    color: darkred;
+  }
+  h4 {
+    color: darkblue;
+  }
+
+  ol {
+    color: yellow;
+    background-color: var(--background-color);
+  }
+
+  p {
+    color:var(--text-color);
+    background-color: var(--background-color);
+  }
+  main {
+    background-color: var(--background-color);
+    color: var(--text-color);
+  }
+  
+  .card {
+    background-color: var(--primary-color);
+    color: var(--text-color);
+  }
+  
+  .header {
+    display: block;
+    padding: 1rem;
+    background-color: var(--primary-color);
+    color: var(--text-color);
+  }
+    
+  code {
+      font-family: Monaco, monospace;
+      background-color: black;
+      color: yellow;
+      word-break: normal;
+    }
+  
+  pre code {
+      border: none;
+      background-color: black;
+      color: yellow;
+    }
