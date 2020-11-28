@@ -34,21 +34,55 @@ int main()
 	using namespace Module::Robot;
 	SwerveRobot _robot;
 	_robot.Init();
-	_robot.SetAngularVelocity(Pi2);
-	for (size_t i = 0; i < 8; i++)
-	{
-		_robot.SetAngularVelocity(Pi2);
-		_robot.TimeSlice(0.033); //update a time slice
-		printf("heading=%.2f\n", RAD_2_DEG( _robot.GetCurrentHeading()));
-	}
 
+	#if 1
 	_robot.SetAngularVelocity(0.0);
-	
+
+	for (size_t i = 0; i < 32; i++)
+	{
+		_robot.SetLinearVelocity_local(-1.0, 0.0);  //simple move forward
+		_robot.TimeSlice(0.010); //update a time slice
+		printf("angle=%.2f,position y=%.2f\n", RAD_2_DEG(_robot.GetCurrentVelocities().Velocity.AsArray[4]), Meters2Feet(_robot.GetCurrentPosition().y()));
+	}
+	printf("------------------------------------------------------\n");
+
 	for (size_t i = 0; i < 16; i++)
 	{
 		_robot.SetLinearVelocity_local(1.0, 0.0);  //simple move forward
 		_robot.TimeSlice(0.010); //update a time slice
-		printf("position=%.2f, x=%.2f\n", Meters2Feet( _robot.GetCurrentPosition().y()), Meters2Feet( _robot.GetCurrentPosition().x()));
+		//printf("position=%.2f, x=%.2f\n", Meters2Feet( _robot.GetCurrentPosition().y()), Meters2Feet( _robot.GetCurrentPosition().x()));
+		printf("angle=%.2f,position y=%.2f\n", RAD_2_DEG(_robot.GetCurrentVelocities().Velocity.AsArray[4]), Meters2Feet(_robot.GetCurrentPosition().y()));
 	}
+	printf("------------------------------------------------------\n");
+	#endif
+	#if 1
+	//Test strafing back and forth, test with simple motion control and bypass rotary system to debug swerve management
+
+	for (size_t i = 0; i < 32; i++)
+	{
+		_robot.SetLinearVelocity_local(0.0, 1.0);  //simple move left
+		_robot.TimeSlice(0.010); //update a time slice
+		printf("angle=%.2f,position x=%.2f\n", RAD_2_DEG(_robot.GetCurrentVelocities().Velocity.AsArray[4]), Meters2Feet(_robot.GetCurrentPosition().x()));
+	}
+	printf("------------------------------------------------------\n");
+	for (size_t i = 0; i < 16; i++)
+	{
+		_robot.SetLinearVelocity_local(0.0, -1.0);  //simple move right
+		_robot.TimeSlice(0.010); //update a time slice
+		printf("angle=%.2f,position x=%.2f\n", RAD_2_DEG(_robot.GetCurrentVelocities().Velocity.AsArray[4]), Meters2Feet(_robot.GetCurrentPosition().x()));
+	}
+	printf("------------------------------------------------------\n");
+	#endif
+	#if 1
+	_robot.SetAngularVelocity(Pi2);
+	for (size_t i = 0; i < 16; i++)
+	{
+		_robot.SetAngularVelocity(Pi2);
+		_robot.TimeSlice(0.033); //update a time slice
+		//printf("heading=%.2f\n", RAD_2_DEG( _robot.GetCurrentHeading()));
+		printf("angle=%.2f,heading =%.2f\n", RAD_2_DEG(_robot.GetCurrentVelocities().Velocity.AsArray[4]), RAD_2_DEG(_robot.GetCurrentHeading()));
+	}
+	printf("------------------------------------------------------\n");
+	#endif
 	_robot.Reset();
 }
