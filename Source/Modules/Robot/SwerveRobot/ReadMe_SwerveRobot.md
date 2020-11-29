@@ -7,6 +7,7 @@
 - Simulated Odometry
 - Rotary System
 - Inverse Kinematics
+- Swerve Robot testing
 
 Swerve Robot connects various modules together to form a super module which essentially is the heart of the Robot module.  This document covers more detail on these sub-modules in more detail to understand their roles as well as some insight on how to diagnose and maintain.
 
@@ -67,3 +68,9 @@ Similar to motion control, this does add a new layer of complexity so there is a
 ## Inverse Kinematics
 
 This piece reads from the odometry manager to simply return the velocity of position and rotation.  Entity 2D can then keep track of this for its localization.  Since I haven't worked with vision yet in this code it is possible that it link to Entity 2D instead of the odometry manager, but in either case has impact on how this works like with kinematics it is simple and should never need to change.  It could be thought as part of the odometry manager, but then the idea is to not tightly couple this object with it so it can be used elsewhere.  I say all this now in case vision integration needs to be re-evaluated on how it works with the design.
+
+## Swerve Robot testing
+
+Unlike before with legacy code the testing we can do here makes it possible to setup a sequence of controls quickly to introduce stress tests, and we can quickly setup break points or watch a particular set of variables.  I've setup some stress cases and commented details on them.  This can be thought as a form of unit testing, but requires visual confirmation on the numbers.  One thing to mention is that time itself is precomputed in each iterative time slice, so you needn't really wait for the iterations to play out.  This makes it possible to come back to a particular stress case that could be 100's or 1000's of iterations to reproduce but takes only a split second to come back to.  This should be the first stop to track down a problem that has been spotted from the assembly testing.  As we find stresses we keep them available for future testing.
+
+One other form of testing is to run these tests and compare them against the bypass modes of the rotary system, and the simple motion.  The numbers will look different and the bypass can give a template of the ideal responses, this may be possible to test for real world robot or bench testing, or even some preliminary calibration, but hopefully all the virtual tests can help avoid the need to take this approach.
