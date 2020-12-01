@@ -107,12 +107,12 @@ public:
 			else
 			{
 				//Using the legacy logic best suited for North South
-				if (fabs(SwivelDirection) > PI_2)
+				if (fabs(LastSwivelDirection) > PI_2)
 				{
-					const double TestOtherDirection = NormalizeRotation_HalfPi(SwivelDirection);
-					if (fabs(TestOtherDirection) < fabs(SwivelDirection))
+					const double TestOtherDirection = NormalizeRotation_HalfPi(LastSwivelDirection);
+					if (fabs(TestOtherDirection) < fabs(LastSwivelDirection))
 					{
-						SwivelDirection = TestOtherDirection;
+						SwivelDirection = NormalizeRotation_HalfPi(SwivelDirection);
 						DirectionMultiplier = -1;
 					}
 				}
