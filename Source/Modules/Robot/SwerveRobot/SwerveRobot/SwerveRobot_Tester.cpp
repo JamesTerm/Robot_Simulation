@@ -53,7 +53,7 @@ void up_down_test(Module::Robot::SwerveRobot& robot)
 {
 	for (size_t i = 0; i < 32; i++)
 	{
-		robot.SetLinearVelocity_local(-1.0, 0.0);  //simple move forward
+		robot.SetLinearVelocity_local(-1.0, 0.0);  //simple move down reverse
 		robot.TimeSlice(0.010); //update a time slice
 		printf("angle=%.2f,position y=%.2f\n", RAD_2_DEG(robot.GetCurrentVelocities().Velocity.AsArray[4]), Meters2Feet(robot.GetCurrentPosition().y()));
 	}
@@ -61,7 +61,7 @@ void up_down_test(Module::Robot::SwerveRobot& robot)
 
 	for (size_t i = 0; i < 16; i++)
 	{
-		robot.SetLinearVelocity_local(1.0, 0.0);  //simple move forward
+		robot.SetLinearVelocity_local(1.0, 0.0);  //simple move up forward
 		robot.TimeSlice(0.010); //update a time slice
 		//printf("position=%.2f, x=%.2f\n", Meters2Feet( _robot.GetCurrentPosition().y()), Meters2Feet( _robot.GetCurrentPosition().x()));
 		printf("angle=%.2f,position y=%.2f\n", RAD_2_DEG(robot.GetCurrentVelocities().Velocity.AsArray[4]), Meters2Feet(robot.GetCurrentPosition().y()));

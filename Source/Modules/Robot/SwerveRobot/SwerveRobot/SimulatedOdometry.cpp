@@ -28,6 +28,18 @@ private:
 	double m_maxspeed = Feet2Meters(12.0); //max velocity forward in meters per second
 	double m_current_position[4] = {};  //keep track of the pot's position of each angle
 	SimulatedOdometry::properties m_properties;
+
+	inline double NormalizeRotation2(double Rotation)
+	{
+		const double Pi2 = M_PI * 2.0;
+		//Normalize the rotation
+		if (Rotation > M_PI)
+			Rotation -= Pi2;
+		else if (Rotation < -M_PI)
+			Rotation += Pi2;
+		return Rotation;
+	}
+
 public:
 	void Init(const SimulatedOdometry::properties *props)
 	{
@@ -73,7 +85,7 @@ public:
 			//go ahead and apply the voltage to the position... this is over-simplified but effective for a bypass
 			//from the voltage determine the velocity delta
 			const double velocity_delta = m_CurrentVelocities.Velocity.AsArray[i + 4] * m_properties.swivel_max_speed[i];
-			m_current_position[i] += velocity_delta * d_time_s;
+			m_current_position[i] = NormalizeRotation2( m_current_position[i] + velocity_delta * d_time_s);
 			m_CurrentVelocities.Velocity.AsArray[i+4] = m_current_position[i];
 		}
 		#else

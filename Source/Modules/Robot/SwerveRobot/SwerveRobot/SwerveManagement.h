@@ -85,37 +85,17 @@ public:
 			double DirectionMultiplier=1.0; //changes to -1 when reversed
 
 
-			//Anything above 90 might need to be flipped favorably to the least traveled angle
-			const double test_forward = fabs(NormalizeRotation2(SwivelDirection - LastSwivelDirection));
-			const double test_reverse = fabs(NormalizeRotation2(SwivelDirection + Pi - LastSwivelDirection));
+			//To avoid gimbal lock work with range from 0 to 2Pi (360)
+			const double lsd_360 = NormalizeRotation2(LastSwivelDirection) + Pi;
+			const double sd_360 = NormalizeRotation2(SwivelDirection) + Pi;
+			const double test_forward = (NormalizeRotation2(sd_360 - lsd_360));
+			const double test_reverse = (NormalizeRotation2(NormalizeRotation2(sd_360 + Pi) - lsd_360));
 
-			//This test identifies when the directions are north and south (0 and 180)
-			//Where we have a significant amount of difference between the directions (less north and south)
-			if (fabs(test_reverse - test_forward) > DEG_2_RAD(5.0))
+			if (test_reverse < test_forward)
 			{
-				//We will not have gimbal lock issues with this logic, works great for east west
-				if (test_forward > PI_2)
-				{
-					if (test_reverse < test_forward)
-					{
-						const double OtherDirection = NormalizeRotation2(SwivelDirection + Pi);
-						SwivelDirection = OtherDirection;
-						DirectionMultiplier = -1;
-					}
-				}
-			}
-			else
-			{
-				//Using the legacy logic best suited for North South
-				if (fabs(LastSwivelDirection) > PI_2)
-				{
-					const double TestOtherDirection = NormalizeRotation_HalfPi(LastSwivelDirection);
-					if (fabs(TestOtherDirection) < fabs(LastSwivelDirection))
-					{
-						SwivelDirection = NormalizeRotation_HalfPi(SwivelDirection);
-						DirectionMultiplier = -1;
-					}
-				}
+				const double OtherDirection = NormalizeRotation2(SwivelDirection + Pi);
+				SwivelDirection = OtherDirection;
+				DirectionMultiplier = -1;
 			}
 
 			//if we are using range... clip to the max range available
