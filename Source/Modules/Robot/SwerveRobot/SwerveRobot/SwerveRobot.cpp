@@ -326,6 +326,12 @@ public:
 			rotary_properties::Rotary_Props &rw_drv_rotary = props_rotary_drive.rotary_props;
 			rotary_properties::Rotary_Props &rw_swl_rotary = props_rotary_swivel.rotary_props;
 			rw_drv_rotary.UseAggressiveStop = rw_swl_rotary.UseAggressiveStop = true;
+			//Go ahead an close the loop with a default 100 0 25
+			//Even for best case simulation this is needed when using the reset button
+			//(While wheel angles could be reset as well, it is better they remain compatible to physical case)
+			rw_swl_rotary.LoopState = rotary_properties::Rotary_Props::eClosed;
+			rw_swl_rotary.PID[0] = 100.0;
+			rw_swl_rotary.PID[2] = 25.0;
 		}
 
 		#pragma endregion
