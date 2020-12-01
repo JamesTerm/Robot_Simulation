@@ -88,8 +88,8 @@ public:
 			//To avoid gimbal lock work with range from 0 to 2Pi (360)
 			const double lsd_360 = NormalizeRotation2(LastSwivelDirection) + Pi;
 			const double sd_360 = NormalizeRotation2(SwivelDirection) + Pi;
-			const double test_forward = (NormalizeRotation2(sd_360 - lsd_360));
-			const double test_reverse = (NormalizeRotation2(NormalizeRotation2(sd_360 + Pi) - lsd_360));
+			const double test_forward = fabs(NormalizeRotation2(sd_360 - lsd_360));
+			const double test_reverse = fabs(NormalizeRotation2(NormalizeRotation2(sd_360 + Pi) - lsd_360));
 
 			if (test_reverse < test_forward)
 			{
