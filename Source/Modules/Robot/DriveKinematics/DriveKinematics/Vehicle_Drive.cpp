@@ -99,29 +99,40 @@ void Swerve_Drive::UpdateVelocities(double FWD, double STR, double RCW)
 	//Allow around 2-3 degrees of freedom for rotation.  While manual control worked fine without it, it is needed for
 	//targeting goals (e.g. follow ship)
 
-	double RPS=RCW / Pi2;
-	RCW=RPS * (Pi * R);  //R is really diameter
+	double RPS = RCW / Pi2;
+	RCW = RPS * (Pi * R);  //R is really diameter
 
-	const double A = STR - RCW*(L/R);
-	const double B = STR + RCW*(L/R);
-	const double C = FWD - RCW*(W/R);
-	const double D = FWD + RCW*(W/R);
-	SwerveVelocities::uVelocity::Explicit &_=m_Velocities.Velocity.Named;
+	const double A = STR - RCW * (L / R);
+	const double B = STR + RCW * (L / R);
+	const double C = FWD - RCW * (W / R);
+	const double D = FWD + RCW * (W / R);
+	SwerveVelocities::uVelocity::Explicit& _ = m_Velocities.Velocity.Named;
 
-	_.sFL = sqrt((B*B)+(D*D)); _.aFL = atan2(B,D);
-	_.sFR = sqrt((B*B)+(C*C)); _.aFR = atan2(B,C);
-	_.sRL = sqrt((A*A)+(D*D)); _.aRL = atan2(A,D);
-	_.sRR = sqrt((A*A)+(C*C)); _.aRR = atan2(A,C);
+	_.sFL = sqrt((B * B) + (D * D));
+	_.sFR = sqrt((B * B) + (C * C));
+	_.sRL = sqrt((A * A) + (D * D));
+	_.sRR = sqrt((A * A) + (C * C));
 
-	//the angle velocities can be sensitive so if the RCW is zero then we should have a zero tolerance test
-	if (RCW==0.0)
+	//Now to update the angles, only if they are known... if they are all zero,
+	//we cannot compute the trajectory and should not update them, this will avoid
+	//unwanted changes when stick is idle and robot should coast
+
+	if (!IsZero(FWD + STR + RCW))
 	{
-		_.aFL=IsZero(_.aFL)?0.0:_.aFL;
-		_.aFR=IsZero(_.aFR)?0.0:_.aFR;
-		_.aRL=IsZero(_.aRL)?0.0:_.aRL;
-		_.aRR=IsZero(_.aRR)?0.0:_.aRR;
-	}
+		_.aFL = atan2(B, D);
+		_.aFR = atan2(B, C);
+		_.aRL = atan2(A, D);
+		_.aRR = atan2(A, C);
 
+		//the angle velocities can be sensitive so if the RCW is zero then we should have a zero tolerance test
+		if (RCW == 0.0)
+		{
+			_.aFL = IsZero(_.aFL) ? 0.0 : _.aFL;
+			_.aFR = IsZero(_.aFR) ? 0.0 : _.aFR;
+			_.aRL = IsZero(_.aRL) ? 0.0 : _.aRL;
+			_.aRR = IsZero(_.aRR) ? 0.0 : _.aRR;
+		}
+	}
 	#if 0
 	DOUT2("%f %f %f",FWD,STR,RCW);
 	DOUT4("%f %f %f %f",_.sFL,_.sFR,_.sRL,_.sRR);

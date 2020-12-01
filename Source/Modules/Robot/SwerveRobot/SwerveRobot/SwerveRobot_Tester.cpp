@@ -81,6 +81,18 @@ void stop_test(Module::Robot::SwerveRobot& robot, size_t eoi)
 	printf("------------------------------------------------------ stop\n");
 }
 
+void diagonal_test(Module::Robot::SwerveRobot& robot, double forward, double right, size_t eoi)
+{
+	for (size_t i = 0; i < eoi; i++)
+	{
+		robot.SetLinearVelocity_local(forward, right);  //diagonally
+		robot.TimeSlice(0.010); //update a time slice
+		printf("angle=%.2f,position x=%.2f  y=%.2f\n", RAD_2_DEG(robot.GetCurrentVelocities().Velocity.AsArray[4]),
+			Meters2Feet(robot.GetCurrentPosition().x()), Meters2Feet(robot.GetCurrentPosition().y()));
+	}
+	printf("------------------------------------------------------ stop\n");
+}
+
 void strafe_box_test(Module::Robot::SwerveRobot& robot, bool reverse_x=false)
 {
 	const size_t eoi = 128;
@@ -139,9 +151,15 @@ int main()
 	}
 	printf("------------------------------------------------------\n");
 	#endif
+	#if 1
 	strafe_box_test(_robot);
 	strafe_box_test(_robot);
 	strafe_box_test(_robot,true);
 	strafe_box_test(_robot,true);
+	#endif
+	#if 1
+	diagonal_test(_robot,1.6,1.0, 32);
+	stop_test(_robot, 32);
+	#endif
 	_robot.Reset();
 }
