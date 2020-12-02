@@ -84,7 +84,15 @@ private:
 		//for swerve the direction of travel is not necessarily the heading, so we show this as well as heading
 		SmartDashboard::PutNumber("Travel_Heading", RAD_2_DEG(atan2(velocity_normalized[0], velocity_normalized[1])));
 		//This is temporary and handy for now, will change once we get AI started
-		m_current_state.bits.IntendedOrientation = atan2(velocity_normalized[0], velocity_normalized[1]);
+		//Like with the kinematics if we are not moving we do not update the intended orientation (using this)
+		//This is just cosmetic, but may be handy to keep for teleop
+		if (!IsZero(linear_velocity.x + linear_velocity.y, 0.02))
+			m_current_state.bits.IntendedOrientation = atan2(velocity_normalized[0], velocity_normalized[1]);
+		else if (!IsZero(entity.GetCurrentAngularVelocity()))
+		{
+			//point forward locally when rotating in place
+			m_current_state.bits.IntendedOrientation = entity.GetCurrentHeading(); 
+		}
 		SmartDashboard::PutNumber("Heading", RAD_2_DEG(entity.GetCurrentHeading()));
 		m_current_state.bits.Att_r = entity.GetCurrentHeading();
 		//To make this interesting, we keep the SmartDashboard to show the intended velocities...
