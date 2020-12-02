@@ -285,6 +285,8 @@ public:
 			rotary_properties::Entity1D_Props &rw_swl_entity = props_rotary_swivel.entity_props;
 			rw_drv_entity.m_Mass = rw_swl_entity.m_Mass = 3.0 * 0.453592; //pounds to kilograms
 			rw_drv_entity.m_Dimension = rw_swl_entity.m_Dimension = Inches2Meters(6); //wheel diameter... used for RPS to linear conversions
+			//Note: for legacy rotary system position control, GetVelocityFromDistance_Angular() is called if m_IsAngular is true
+			rw_swl_entity.m_IsAngular = true; //must have for rotary system to properly implement swerve management direction
 		}
 		{
 			rotary_properties::Ship_1D_Props &rw_drv_ship = props_rotary_drive.ship_props;
