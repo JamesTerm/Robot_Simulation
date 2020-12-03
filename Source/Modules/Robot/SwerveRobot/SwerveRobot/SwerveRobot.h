@@ -23,6 +23,20 @@ public:
 	void SetLinearVelocity_local(double forward, double right);
 	//Note: 0 north, pi/2 east, pi south, pi+pi/2 west, so positive gives clockwise direction
 	void SetAngularVelocity(double clockwise);
+
+	//AI methods: ---------------------------------------------------------------------------
+	//This allows setting the desired heading directly either relative to the current heading or absolute
+	//If relative positive is a clockwise offset from where it is; otherwise the direction is
+	//like written before where 0 is north, pi/2 east, etc.
+	void SetIntendedOrientation(double intended_orientation, bool absolute = true);
+	//Drives to a location at given by coordinates at max speed given
+	//It can either stop at location or continue to drive past it once it hits (allows for path driving)
+	//max speed is optional where 0.0 means the max speed in properties
+	//if can strafe is true caller manages its own orientation as it deems fit; otherwise if it can't strafe
+	//it must manage the orientation to always drive forward in the direction toward the way point
+	void DriveToLocation(double north, double east, bool stop_at_destination = true, double max_speed = 0.0, bool can_strafe = true);
+
+
 	//Give entity a time slice to update its position
 	void TimeSlice(double d_time_s);
 	//allows entity to be stopped and reset to a position and heading

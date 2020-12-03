@@ -419,6 +419,15 @@ public:
 	{
 		m_MotionControl2D.SetAngularVelocity(clockwise);
 	}
+
+	void SetIntendedOrientation(double intended_orientation, bool absolute = true)
+	{
+		m_MotionControl2D.SetIntendedOrientation(intended_orientation, absolute);
+	}
+	void DriveToLocation(double north, double east, bool stop_at_destination = true, double max_speed = 0.0, bool can_strafe = true)
+	{
+		m_MotionControl2D.DriveToLocation(north, east, stop_at_destination, max_speed, can_strafe);
+	}
 	#pragma endregion
 	#pragma region _accessors_
 	//accessors
@@ -488,6 +497,14 @@ void SwerveRobot::SetLinearVelocity_local(double forward, double right)
 void SwerveRobot::SetAngularVelocity(double clockwise)
 {
 	m_SwerveRobot->SetAngularVelocity(clockwise);
+}
+void SwerveRobot::SetIntendedOrientation(double intended_orientation, bool absolute)
+{
+	m_SwerveRobot->SetIntendedOrientation(intended_orientation, absolute);
+}
+void SwerveRobot::DriveToLocation(double north, double east, bool stop_at_destination, double max_speed, bool can_strafe)
+{
+	m_SwerveRobot->DriveToLocation(north, east, stop_at_destination, max_speed, can_strafe);
 }
 void SwerveRobot::TimeSlice(double d_time_s)
 {

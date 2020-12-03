@@ -721,6 +721,8 @@ public:
 
 		m_IntendedOrientation = GetAtt_r();
 		m_IntendedOrientationPhysics.SetMass(25);
+		//Use m_current_heading since we no longer inject this from the entity
+		m_Physics.SetHeadingToUse(&m_current_heading);
 	}
 	void TimeChange(double dTime_s)
 	{

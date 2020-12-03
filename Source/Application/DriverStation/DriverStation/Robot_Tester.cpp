@@ -4,6 +4,7 @@
 #include "../../RobotAssembly/RobotAssembly/TeleOpV1.h"
 #include "../../RobotAssembly/RobotAssembly/TeleOpV2.h"
 #include "../../RobotAssembly/RobotAssembly/TeleOpV3.h"
+#include "../../RobotAssembly/RobotAssembly/TeleAutonV1.h"
 
 
 //I'm leaving it able to test older versions.
@@ -14,7 +15,8 @@ class RobotTester_Internal
 {
 private:
 	//Application::TeleOp_V1 m_tele;
-	Application::TeleOp_V3 m_tele;
+	//Application::TeleOp_V3 m_tele;
+	Application::TeleAuton_V1 m_tele;
 public:
 	RobotTester_Internal()
 	{
@@ -38,6 +40,16 @@ public:
 	{
 		m_tele.Stop();
 	}
+	void SetGameMode(int mode)
+	{
+		//Note: previous versions do not support this method
+		m_tele.SetGameMode(mode);
+	}
+	void Test(int test)
+	{
+		//Note: previous versions do not support this method but should
+		m_tele.Test(test);
+	}
 };
 
 
@@ -59,11 +71,14 @@ void RobotTester::Shutdown()
 
 void RobotTester::Test(int test)
 {
+	//Driver station can't really call this directly,  however the start with test mode could have a method for a test number
+	//(e.g. SmartDashboard) and then call the tester's method, while the console can obtain a test number by command line
+	m_p_RobotTester->Test(test);
 }
 
 void RobotTester::SetGameMode(int mode)
 {
-	//m_p_RobotTester->SetGameMode(mode);
+	m_p_RobotTester->SetGameMode(mode);
 }
 
 void RobotTester::StartStreaming()
