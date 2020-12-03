@@ -457,6 +457,19 @@ public:
 	{
 		return m_robot.GetIntendedVelocities();
 	}
+	bool GetIsDrivenLinear() const
+	{
+		return m_MotionControl2D.GetIsDrivenLinear();
+	}
+	bool GetIsDrivenAngular() const
+	{
+		return m_MotionControl2D.GetIsDrivenAngular();
+	}
+	double Get_IntendedOrientation() const
+	{
+		return m_MotionControl2D.Get_IntendedOrientation();
+	}
+
 	#pragma endregion
 	#pragma region _callbacks_
 	void Set_UpdateGlobalVelocity(std::function<void(const Vec2D &new_velocity)> callback)
@@ -549,6 +562,18 @@ const SwerveVelocities &SwerveRobot::GetCurrentVoltages() const
 const SwerveVelocities &SwerveRobot::GetIntendedVelocities() const
 {
 	return m_SwerveRobot->GetIntendedVelocities();
+}
+bool SwerveRobot::GetIsDrivenLinear() const
+{
+	return m_SwerveRobot->GetIsDrivenLinear();
+}
+bool SwerveRobot::GetIsDrivenAngular() const
+{
+	return m_SwerveRobot->GetIsDrivenAngular();
+}
+double SwerveRobot::Get_IntendedOrientation() const
+{
+	return m_SwerveRobot->Get_IntendedOrientation();
 }
 
 #pragma endregion

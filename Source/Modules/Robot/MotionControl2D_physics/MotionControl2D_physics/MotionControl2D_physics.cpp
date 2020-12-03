@@ -688,8 +688,8 @@ public:
 		gMaxTorqueYaw * 0.78,gMaxTorqueYaw * 5.0,
 		//double MaxTorqueYaw_SetPoint, MaxTorqueYaw_SetPoint_High;
 		gMaxTorqueYaw * 2,gMaxTorqueYaw * 10,
-		//double Rotation_Tolerance;
-		DEG_2_RAD(2),
+		//double Rotation_Tolerance;  since this is a edge compare we'll need half the total... so 1.5 is really 3 degrees
+		DEG_2_RAD(1.5),
 		//double Rotation_ToleranceConsecutiveCount;
 		0.0,  //disabled by default using  0.0
 		//double Rotation_TargetDistanceScalar;
@@ -722,7 +722,11 @@ public:
 		m_IntendedOrientation = GetAtt_r();
 		m_IntendedOrientationPhysics.SetMass(25);
 		//Use m_current_heading since we no longer inject this from the entity
-		m_Physics.SetHeadingToUse(&m_current_heading);
+		m_Physics.SetHeadingToUse([&]()
+			{
+				return GetAtt_r();
+			}
+		);
 	}
 	void TimeChange(double dTime_s)
 	{
@@ -811,7 +815,10 @@ public:
 				//SmartDashboard::PutBoolean("Test m_rotDisplacement_rad",m_rotDisplacement_rad==0.0);
 
 				if ((m_RotationToleranceCounter > 0.0) && (m_RotationToleranceCounter >= props.Rotation_ToleranceConsecutiveCount))
+				{
+					m_RotationToleranceCounter = 0;
 					m_LockShipHeadingToOrientation = true;
+				}
 			}
 			//SmartDashboard::PutBoolean("m_LockShipHeadingToOrientation",m_LockShipHeadingToOrientation);
 			#endif

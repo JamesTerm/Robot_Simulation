@@ -975,12 +975,14 @@ private:
 	double G_Dampener;
 	double m_DefaultHeading;
 	// I'll try to keep this read only, so that client who own their own Heading can use this code, without worrying about the Heading being changed
-	const double *m_HeadingToUse;
+	std::function <double()> m_HeadingToUse=nullptr;
+	const double* m_HeadingToUse_legacy;
 	//This keeps track of the current rate of acceleration.  These are in local orientation.
 	Vec2D m_CurrentAcceleration, m_TargetAcceleration;
 	LinearAccelerationRates m_LinearAccelerationRates;
 	//Some objects may not need to use this (by default they will not)
 	bool m_UsingAccelerationRate;
+	bool m_UseDefaultHeading = true;
 	#pragma endregion
 public:
 	void init()
@@ -996,25 +998,43 @@ public:
 		StructuralDmgGLimit = 10.0;
 		G_Dampener = 1.0;
 	}
-	FlightDynamics_2D() : m_HeadingToUse(&m_DefaultHeading)
+	FlightDynamics_2D()
 	{
 		init();
+		m_HeadingToUse = [&]()
+		{
+			return m_DefaultHeading;
+		};
 	}
-	FlightDynamics_2D(const double *HeadingToUse) : m_HeadingToUse(HeadingToUse)
+	FlightDynamics_2D(const double *HeadingToUse) : m_HeadingToUse_legacy(HeadingToUse)
 	{
 		init();
+		m_HeadingToUse = [&]()
+		{
+			return *m_HeadingToUse_legacy;
+		};
+		m_UseDefaultHeading = false;
 	}
-	FlightDynamics_2D(const double &HeadingToUse) : m_HeadingToUse(&HeadingToUse)
+	FlightDynamics_2D(const double &HeadingToUse) : m_HeadingToUse_legacy(&HeadingToUse)
 	{
 		init();
+		m_HeadingToUse = [&]()
+		{
+			return *m_HeadingToUse_legacy;
+		};
+		m_UseDefaultHeading = false;
 	}
 	virtual ~FlightDynamics_2D() {}
 	//Allow late binding of heading to use (client code should set this once as soon as possible)
-	void SetHeadingToUse(const double *HeadingToUse) {m_HeadingToUse=HeadingToUse;}
+	void SetHeadingToUse(std::function <double()> callback) 
+	{
+		m_HeadingToUse= callback;
+		m_UseDefaultHeading = false;
+	}
 	virtual void ResetVectors()
 	{
 		__super::ResetVectors();
-		if (m_HeadingToUse == &m_DefaultHeading)
+		if (m_UseDefaultHeading)
 			m_DefaultHeading = 0.0;
 		m_CurrentAcceleration = m_TargetAcceleration = Vec2D(0.0, 0.0);
 	}
@@ -1031,23 +1051,23 @@ public:
 	double ComputeAngularDistance(const Vec2D &lookDir)
 	{
 		double lookDir_radians = atan2(lookDir[0], lookDir[1]);
-		double distance = *m_HeadingToUse - lookDir_radians;
+		double distance = m_HeadingToUse() - lookDir_radians;
 		return shortest_angle(distance);
 	}
 	double ComputeAngularDistance(double Orientation)
 	{
 		/// \param Orientation this will break down the quat into its lookDir and UpDir for you
-		double DistanceDirection = *m_HeadingToUse - Orientation;
+		double DistanceDirection = m_HeadingToUse() - Orientation;
 		return shortest_angle(DistanceDirection);
 	}
-	const double &GetHeading() 
+	const double GetHeading() 
 	{
-		return *m_HeadingToUse;
+		return m_HeadingToUse();
 	}
 	virtual void TimeChangeUpdate(double DeltaTime_s, Vec2D &PositionDisplacement, double &RotationDisplacement)
 	{
 		__super::TimeChangeUpdate(DeltaTime_s, PositionDisplacement, RotationDisplacement);
-		if (m_HeadingToUse == &m_DefaultHeading)
+		if (m_UseDefaultHeading)
 			m_DefaultHeading += RotationDisplacement;
 	}
 
@@ -1141,7 +1161,7 @@ public:
 		{
 			Vec2D Zerod = Vec2D(0.0, 0.0);
 			Vec2D Acceleration = Zerod;
-			Vec2D HeadingToUse_NV = Vec2D(sin(*m_HeadingToUse), cos(*m_HeadingToUse));
+			Vec2D HeadingToUse_NV = Vec2D(sin(m_HeadingToUse()), cos(m_HeadingToUse()));
 			const Vec2D DeltaVelocity = (vDesiredVelocity - GetLinearVelocity());
 			//compute the maximum deceleration speed, since we need to reach 0 by the time we reach our desired velocity
 			//Note: these are in local orientation so they need to be converted to global
@@ -1176,9 +1196,9 @@ public:
 		{
 			ret = __super::GetVelocityFromDistance_Linear(Distance, ForceRestraintPositive, ForceRestraintNegative, DeltaTime_s, matchVel);
 			#if 0
-			if (m_HeadingToUse)
+			assert(m_HeadingToUse!=nullptr);
 			{
-				Vec2D LocalVelocity = GlobalToLocal(*m_HeadingToUse, m_LinearVelocity);
+				Vec2D LocalVelocity = GlobalToLocal(m_HeadingToUse(), m_LinearVelocity);
 				if (fabs(m_LinearVelocity[1]) > 0.0)
 					printf("y=%.2f p=%.2f e=%.2f cs=0\n", Distance[1], ret[1], m_LinearVelocity[1]);
 			}
