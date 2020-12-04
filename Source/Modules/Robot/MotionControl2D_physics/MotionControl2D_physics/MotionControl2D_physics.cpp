@@ -5,7 +5,7 @@
 #include "../../../../Base/Vec2D.h"
 #include "../../../../Base/Misc.h"
 #include "../../../../Base/Physics.h"
-
+#include "../../../../Base/Goal.h"
 // Standard C++ support
 #include <vector>
 #include <queue>
@@ -26,59 +26,6 @@
 namespace Module {
 	namespace Robot	{
 		namespace Physics {
-
-#pragma region _Goal_
-//TODO move this to a hpp file
-class Goal
-{
-public:
-	enum Goal_Status
-	{
-		eInactive,  //The goal is waiting to be activated
-		eActive,    //The goal has been activated and will be processed each update step
-		eCompleted, //The goal has completed and will be removed on the next update
-		eFailed     //The goal has failed and will either re-plan or be removed on the next update
-	};
-protected:
-	Goal_Status m_Status;
-	//TODO see if Owner and Type are necessary
-public:
-	virtual ~Goal() {}
-	///This contains initialization logic and represents the planning phase of the goal.  A Goal is able to call its activate method
-	///any number of times to re-plan if the situation demands.
-	virtual void Activate() = 0;
-
-	//TODO we may want to pass in the delta time slice here
-	/// This is executed during the update step
-	virtual Goal_Status Process(double dTime_s) = 0;
-	/// This undertakes any necessary tidying up before a goal is exited and is called just before a goal is destroyed.
-	virtual void Terminate() = 0;
-	//bool HandleMessage()  //TODO get event equivalent
-	//TODO see if AddSubgoal really needs to be at this level 
-	Goal_Status GetStatus() const { return m_Status; }
-	//Here is a very common call to do in the first line of a process update
-	inline void ActivateIfInactive() { if (m_Status == eInactive) Activate(); }
-	inline void ReActivateIfFailed() { if (m_Status == eFailed) Activate(); }
-
-	// This ensures that Composite Goals can safely allocate atomic goals and let the base implementation delete them
-	static void* operator new (const size_t size)
-	{
-		return malloc(size);
-	}
-	static void  operator delete (void* ptr)
-	{
-		free(ptr);
-	}
-	static void* operator new[](const size_t size)
-	{
-		return malloc(size);
-	}
-	static void  operator delete[](void* ptr) 
-	{	
-		free(ptr);
-	}
-};
-#pragma endregion
 
 #pragma region _helper functions_
 //This is really Local to Global for just the Y Component
@@ -180,6 +127,10 @@ public:
 		// Watch for no changes
 		//if (ts == m_thrustState) return m_thrustState;
 		return m_thrustState;
+	}
+	double GetMass() const
+	{
+		return m_Physics.GetMass();
 	}
 private:
 	#pragma region _members
@@ -307,7 +258,7 @@ private:
 	{
 	protected:
 		friend class Ship_Tester;
-		Goal *m_Goal; //Dynamically set a goal for this controller
+		Framework::Base::Goal *m_Goal; //Dynamically set a goal for this controller
 	private:
 		//TODO determine way to properly introduce UI_Controls here	
 		Ship_2D &m_ship;
@@ -319,20 +270,16 @@ private:
 		{
 		}
 		virtual ~AI_Base_Controller() {}
-
 		///This is the single update point to all controlling of the ship.  The base class contains no goal arbitration, but does implement
 		///Whatever goal is passed into it if the UI controller is off line
 		virtual void UpdateController(double dTime_s)
 		{
-
 		}
-
 		//This is mostly for pass-thru since the timing of this is in alignment during a ship att-pos update
 		void UpdateUI(double dTime_s)
 		{
 
 		}
-
 		/// I put the word try, as there may be some extra logic to determine if it has permission
 		/// This is a bit different than viewing an AI with no controls, where it simply does not
 		/// Allow a connection
@@ -354,6 +301,142 @@ private:
 		/// Otherwise, use the velocity of the ship you are targeting or following to keep up with it
 		void DriveToLocation(Vec2D TrajectoryPoint, Vec2D PositionPoint, double power, double dTime_s, Vec2D* matchVel, bool LockOrientation = false)
 		{
+			//Supposedly in some compilers _isnan should be available, but isn't defined in math.h... Oh well I don't need this overhead anyhow
+			#ifdef WIN32
+			if (_isnan(TrajectoryPoint[0]) ||
+				_isnan(TrajectoryPoint[1]) ||
+				_isnan(PositionPoint[0]) ||
+				_isnan(PositionPoint[1]) ||
+				_isnan(power) ||
+				_isnan(dTime_s) ||
+				(matchVel && (
+					_isnan((*matchVel)[0]) ||
+					_isnan((*matchVel)[1]))))
+			{
+				printf("TrajectoryPoint = (%f,%f)\n", TrajectoryPoint[0], TrajectoryPoint[1]);
+				printf("PositionPoint = (%f,%f)\n", PositionPoint[0], PositionPoint[1]);
+				if (matchVel)
+					printf("matchVel = (%f,%f)\n", (*matchVel)[0], (*matchVel)[1]);
+				printf("dTime_s = %f, power = %f\n", dTime_s, power);
+				assert(false);
+			}
+			#endif
+			const double Mass = m_ship.GetMass();
+			Vec2D VectorOffset = TrajectoryPoint - m_ship.GetPos_m();
+
+			if (!LockOrientation)
+			{
+				//I have kept the older method for reference... both will work identical, but the later avoids duplicate distance work
+				#if 0
+				double AngularDistance = m_ship.m_IntendedOrientationPhysics.ComputeAngularDistance(VectorOffset);
+				//printf("\r %f          ",RAD_2_DEG(AngularDistance));
+				m_ship.SetCurrentAngularAcceleration(-AngularDistance, false);
+				#else
+				double lookDir_radians = atan2(VectorOffset[0], VectorOffset[1]);
+
+				//if (!m_ship.CanStrafe())
+				//{
+				//	SmartDashboard::PutNumber("TestDirection",RAD_2_DEG(lookDir_radians));
+				//	SmartDashboard::PutNumber("TestDirection_HalfPi",RAD_2_DEG(NormalizeRotation_HalfPi(lookDir_radians)));
+				//	const double PositionDistance=(PositionPoint-m_ship.GetPos_m()).length();
+				//	SmartDashboard::PutNumber("TestDistance",Meters2Feet(PositionDistance));
+				//}
+
+				if (m_ship.CanStrafe())
+					m_ship.SetIntendedOrientation(lookDir_radians);
+				else
+				{
+					//evaluate delta offset to see if we want to use the reverse absolute position
+					double OrientationDelta;
+					{
+						using namespace std;
+						const double current_Att_ABS = m_ship.GetAtt_r() + Pi;
+						const double intended_Att_ABS = lookDir_radians + Pi;
+						const double Begin = min(current_Att_ABS, intended_Att_ABS);
+						const double End = max(current_Att_ABS, intended_Att_ABS);
+						const double NormalDelta = End - Begin;			//normal range  -------BxxxxxE-------
+						const double InvertedDelta = Begin + (Pi2 - End);	//inverted range  xxxxB---------Exxxx
+						OrientationDelta = min(NormalDelta, InvertedDelta);
+					}
+					double orientation_to_use = lookDir_radians;
+					//Note the condition to flip has a little bit of extra tolerance to avoid a excessive flipping back and forth
+					//We simply multiply the half pi by a scalar
+					if (fabs(OrientationDelta) > (PI_2 * 1.2))
+						orientation_to_use = NormalizeRotation2(lookDir_radians + Pi);
+					m_ship.SetIntendedOrientation(orientation_to_use);
+				}
+				#endif
+			}
+
+			//first negotiate the max speed given the power
+			double MaxSpeed = m_ship.GetShipProperties().GetEngagedMaxSpeed();
+			const Ship_Props& ShipProps = m_ship.GetShipProperties().GetShipProps();
+			double ScaledSpeed = MaxSpeed;
+			{
+				if ((power >= 0.0) && (power <= 1.0))
+				{
+					//Now to compute the speed based on MAX (Note it is up to the designer to make the power smaller in tight turns
+					ScaledSpeed = MaxSpeed * power;
+					//DEBUG_AUTO_PILOT_SPEED("\rRamora Speeds: Max=%4.1f, Power = %3.1f, Curr = %3.1f",MaxSpeed, power, m_ship.m_Physics.GetLinearVelocity().length());
+				}
+				else if (power > 1.0)
+					SetShipVelocity(MIN(power, MaxSpeed));
+			}
+
+			if (matchVel)
+			{
+				VectorOffset = PositionPoint - m_ship.GetPos_m();
+				//Vec2D LocalVectorOffset(m_ship.GetAtt_quat().conj() * VectorOffset);
+				Vec2D LocalVectorOffset = GlobalToLocal(m_ship.GetAtt_r(), VectorOffset);
+				//Vec2D LocalMatchVel(m_ship.GetAtt_quat().conj() * (*matchVel));
+				Vec2D LocalMatchVel = GlobalToLocal(m_ship.GetAtt_r(), *matchVel);
+
+				const Vec2D ForceDegradeScalar = m_ship.Get_DriveTo_ForceDegradeScalar();
+				Vec2D ForceRestraintPositive(ShipProps.MaxAccelRight * Mass * ForceDegradeScalar[0], ShipProps.MaxAccelForward_High * Mass * ForceDegradeScalar[1]);
+				Vec2D ForceRestraintNegative(ShipProps.MaxAccelLeft * Mass * ForceDegradeScalar[0], ShipProps.MaxAccelReverse_High * Mass * ForceDegradeScalar[1]);
+				//Note: it is possible to overflow in extreme distances, if we challenge this then I should have an overflow check in physics
+				Vec2D LocalVelocity = m_ship.m_Physics.GetVelocityFromDistance_Linear(LocalVectorOffset, ForceRestraintPositive, ForceRestraintNegative, dTime_s, LocalMatchVel);
+
+				//The logic here should make use of making coordinated turns anytime the forward/reverse velocity has a greater distance than the sides or up/down.
+				//Usually if the trajectory point is the same as the position point it will perform coordinated turns most of the time while the nose is pointing
+				//towards its goal.  If the nose trajectory is different it may well indeed use the strafing technique more so.
+
+				if (!m_ship.CanStrafe() || (fabs(LocalVelocity[0]) < fabs(LocalVelocity[1])))
+				{
+					//This first technique only works with the forward and partial reverse thrusters (may be useful for some ships)
+					//Note: Even though this controls forward and reverse thrusters, the strafe thrusters are still working implicitly to correct turn velocity
+
+					//Now we simply use the positive forward thruster 
+					if (LocalVelocity[1] > 0.0)  //only forward not reverse...
+						SetShipVelocity(MIN(LocalVelocity[1], ScaledSpeed));
+					else
+						SetShipVelocity(MAX(LocalVelocity[1], -ScaledSpeed));  //Fortunately the ships do not go in reverse that much  :)
+				}
+
+				else
+				{  //This technique makes use of strafe thrusters.  (Currently we can do coordinated turns with this)
+					//It is useful for certain situations.  One thing is for sure, it can get the ship
+					//to a point more efficiently than the above method, which may be useful for an advanced tactic.
+					//Vec2D GlobalVelocity(m_ship.GetAtt_quat() * LocalVelocity); 
+					Vec2D GlobalVelocity = LocalToGlobal(m_ship.GetAtt_r(), LocalVelocity);
+					//now to cap off the velocity speeds
+					for (size_t i = 0; i < 2; i++)
+					{
+						if (GlobalVelocity[i] > ScaledSpeed)
+							GlobalVelocity[i] = ScaledSpeed;
+						else if (GlobalVelocity[i] < -ScaledSpeed)
+							GlobalVelocity[i] = -ScaledSpeed;
+					}
+					//Ideally GetForceFromVelocity could work with local orientation for FlightDynmic types, but for now we convert
+					Vec2D GlobalForce(m_ship.m_Physics.GetForceFromVelocity(GlobalVelocity, dTime_s));
+					//Vec2D LocalForce(m_ship.GetAtt_quat().conj() * GlobalForce);
+					Vec2D LocalForce = GlobalToLocal(m_ship.GetAtt_r(), GlobalForce); //First get the local force
+					//Now to fire all the thrusters given the acceleration
+					m_ship.SetCurrentLinearAcceleration(LocalForce / Mass);
+				}
+			}
+			else
+				SetShipVelocity(ScaledSpeed);
 		}
 		void SetIntendedOrientation(double IntendedOrientation) { m_ship.SetIntendedOrientation(IntendedOrientation); }
 
