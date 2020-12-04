@@ -158,18 +158,24 @@ private:
 		}
 		if (m_game_mode==game_mode::eTele)
 		{
+			//Check if we are being driven by some AI method, we override it if we have any angular velocity (i.e. some teleop interaction)
+			const double AngularVelocity = (AnalogConversion(joyinfo.lZ, m_joystick_options) + m_Keyboard.GetState().bits.m_Z) * m_max_heading_rad;
+			if (!IsZero(AngularVelocity) || (m_robot.GetIsDrivenAngular()==false))
+				m_robot.SetAngularVelocity(AngularVelocity);
+
 			//Get an input from the controllers to feed in... we'll hard code the x and y axis from both joy and keyboard
 			//we simply combine them so they can work inter-changeably (e.g. keyboard for strafing, joy for turning)
-			m_robot.SetAngularVelocity((AnalogConversion(joyinfo.lZ, m_joystick_options) + m_Keyboard.GetState().bits.m_Z) * m_max_heading_rad);
-			m_robot.SetLinearVelocity_local(
-				Feet2Meters(m_maxspeed*(AnalogConversion(joyinfo.lY, m_joystick_options) + m_Keyboard.GetState().bits.m_Y)*-1.0), 
-				Feet2Meters(m_maxspeed*(AnalogConversion(joyinfo.lX, m_joystick_options) + m_Keyboard.GetState().bits.m_X)));
+			const double Forward = Feet2Meters(m_maxspeed * (AnalogConversion(joyinfo.lY, m_joystick_options) + m_Keyboard.GetState().bits.m_Y) * -1.0);
+			const double Right = Feet2Meters(m_maxspeed * (AnalogConversion(joyinfo.lX, m_joystick_options) + m_Keyboard.GetState().bits.m_X));
+
+			//Check if we are being driven by some AI method, we override it if we have any linear velocity (i.e. some teleop interaction)
+			if (!IsZero(Forward + Right) || (m_robot.GetIsDrivenLinear() == false))
+				m_robot.SetLinearVelocity_local(Forward, Right);
 		}
-		//This comes in handy for testing
+		//TODO autonomous and goals here
+		//This comes in handy for testing, but could be good to stop robot if autonomous needs to stop
 		if (joyinfo.ButtonBank[0] == 1)
 			Reset();
-
-		//TODO auton and goals here
 	}
 
 	void TimeSliceLoop(double dTime_s)
