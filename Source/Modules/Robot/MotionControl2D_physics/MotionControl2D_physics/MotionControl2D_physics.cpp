@@ -253,54 +253,38 @@ private:
 		//const LUA_ShipControls_Properties &Get_ShipControls() const { return m_ShipControls; }
 	};
 	#pragma endregion
-	#pragma region _AI Base Controller_
-	class AI_Base_Controller
+	#pragma region _Drive To Controller_
+	class DriveTo_Controller
 	{
-	protected:
-		friend class Ship_Tester;
-		Framework::Base::Goal *m_Goal; //Dynamically set a goal for this controller
+		#pragma region _Description_
+		//This was formally known as AI Base controller, the idea at the time was for the game where it had everything it needed to drive the ships
+		//Overtime it never had gotten developed because we delegated away to goals once we learned about them, except for the drive to location
+		//The hard decision for me now is to split out where the AI should go and it being different than the DriveTo, and the result is that
+		//DriveTo is really a fundamental primitive method the ship should be able to do (in this case robot), and the goal's be managed
+		//As part of the AI input, that is separate from this.  A part of this decision rest in that the ship can already be set to a setpoint
+		//orientation, so it stands to reason to have location work in the same manner.
+
+		//One interesting note about these kinds of operations is that they both depend on localization, the ship and it's physics now delegate their
+		//methods out to essentially the odometry, so it's not quite obvious this access has reached here.  To keep the design simple the motion control
+		//is shown to be dependent on the odometry but what really happens is that it gets delegated out to swerve robot, which then will ultimately
+		//obtain the position and orientation from the Entity 2D (The same place the AI is to get its updates), but since Entity get's its updates from
+		//the odometry it was easier to simplify the design.
+		#pragma endregion
 	private:
-		//TODO determine way to properly introduce UI_Controls here	
 		Ship_2D &m_ship;
-
-		//friend class UI_Controller;
-		//UI_Controller *m_UI_Controller;
-	public:
-		AI_Base_Controller(Ship_2D &ship) : m_ship(ship)
-		{
-		}
-		virtual ~AI_Base_Controller() {}
-		///This is the single update point to all controlling of the ship.  The base class contains no goal arbitration, but does implement
-		///Whatever goal is passed into it if the UI controller is off line
-		virtual void UpdateController(double dTime_s)
-		{
-		}
-		//This is mostly for pass-thru since the timing of this is in alignment during a ship att-pos update
-		void UpdateUI(double dTime_s)
-		{
-
-		}
-		/// I put the word try, as there may be some extra logic to determine if it has permission
-		/// This is a bit different than viewing an AI with no controls, where it simply does not
-		/// Allow a connection
-		/// \return true if it was allowed to bind
-		//virtual bool Try_SetUIController(UI_Controller *controller);
-		virtual void ResetPos() {}
-
-		bool HasAutoPilotRoute() { return true; }
-		bool GetCanUserPilot() { return true; }
-
+		bool m_IsDriven = false;
+		//TODO set this in a way that does not trigger the driven status to false (e.g. called from controller parameter)
 		void SetShipVelocity(double velocity_mps) { m_ship.SetRequestedVelocity(velocity_mps); }
-
-		/// \param TrajectoryPoint- This is the point that your nose of your ship will orient to from its current position (usually the same as PositionPoint)
-		/// \param PositionPoint- This is the point where your ship will be to position to (Usually the same as TrajectoryPoint)
-		/// \power- The scaled value multiplied to the ships max speed.  If > 1 it can be interpreted as explicit meters per second speed
-		/// \matchVel- You can make it so the velocity of the ship when it reaches the point.  
-		/// Use NULL when flying through way-points
-		/// Use (0,0) if you want to come to a stop, like at the end of a way-point series
-		/// Otherwise, use the velocity of the ship you are targeting or following to keep up with it
 		void DriveToLocation(Vec2D TrajectoryPoint, Vec2D PositionPoint, double power, double dTime_s, Vec2D* matchVel, bool LockOrientation = false)
 		{
+			/// \param TrajectoryPoint- This is the point that your nose of your ship will orient to from its current position (usually the same as PositionPoint)
+			/// \param PositionPoint- This is the point where your ship will be to position to (Usually the same as TrajectoryPoint)
+			/// \power- The scaled value multiplied to the ships max speed.  If > 1 it can be interpreted as explicit meters per second speed
+			/// \matchVel- You can make it so the velocity of the ship when it reaches the point.  
+			/// Use NULL when flying through way-points
+			/// Use (0,0) if you want to come to a stop, like at the end of a way-point series
+			/// Otherwise, use the velocity of the ship you are targeting or following to keep up with it
+
 			//Supposedly in some compilers _isnan should be available, but isn't defined in math.h... Oh well I don't need this overhead anyhow
 			#ifdef WIN32
 			if (_isnan(TrajectoryPoint[0]) ||
@@ -438,16 +422,43 @@ private:
 			else
 				SetShipVelocity(ScaledSpeed);
 		}
-		void SetIntendedOrientation(double IntendedOrientation) { m_ship.SetIntendedOrientation(IntendedOrientation); }
+	public:
+		DriveTo_Controller(Ship_2D &ship) : m_ship(ship)
+		{
+		}
+		void SetIsDriven(bool IsDriven)
+		{
+			m_IsDriven = IsDriven;
+		}
+		bool GetIsDriven() const
+		{
+			return m_IsDriven;
+		}
+		void DriveToLocation(double north, double east, bool stop_at_destination, double max_speed, bool can_strafe)
+		{
+			//Drives to a location at given by coordinates at max speed given
+			//It can either stop at location or continue to drive past it once it hits (allows for path driving)
+			//max speed is optional where 0.0 means the max speed in properties
+			//if can strafe is true caller manages its own orientation as it deems fit; otherwise if it can't strafe
+			//it must manage the orientation to always drive forward in the direction toward the way point
 
-		Ship_2D &GetShip() { return m_ship; }
-		//const UI_Controller *GetUIController() const { return m_UI_Controller; }
-		//I want it to be clear when we intend to write
-		//UI_Controller *GetUIController_RW() { return m_UI_Controller; }
-	};
+			//Unlike before this is a sticky call where it switches to a driven state, (process slice calls the legacy method for updates)
+			//stays in driven state until either an override of manual velocity methods from ship (which sets IsDriven to false) or
+			//if stop at destination is true will auto switch out
+
+			SetIsDriven(true);
+		}
+		void ProcessSlice(double dTime_s)
+		{
+			//TODO
+			//if (m_IsDriven)
+			//{
+			//	DriveToLocation();
+			//}
+		}
+	} m_controller=*this;
 	#pragma endregion
 
-	AI_Base_Controller* m_controller=nullptr;
 	Ship_Properties m_ShipProperties;
 
 	double m_RadialArmDefault; //cache the radius of concentrated mass square, which will allow us to apply torque in a r = 1 case
@@ -576,7 +587,7 @@ protected:
 	void TestPosAtt_Delta(const Vec2D pos_m, double att, double dTime_s)
 	{
 		#if 0
-		if (m_controller->IsUIControlled())
+		if (m_controller.IsUIControlled())
 			DOUT1("%f %f %f %f", dTime_s, pos_m[0], pos_m[1], pos_m[2]);
 		#endif
 	}
@@ -584,12 +595,6 @@ protected:
 	{ 
 		// Watch for being made the controlled ship
 		return true;
-	}
-	AI_Base_Controller *Create_Controller()
-	{
-		//TODO this is no longer necessary (but still works)
-		//Override with the controller to be used with ship.  Specific ships have specific type of controllers.
-		return new AI_Base_Controller(*this);
 	}
 	void RequestedVelocityCallback(double VelocityToUse, double DeltaTime_s) 
 	{
@@ -646,14 +651,9 @@ protected:
 		//TODO this was already all disabled we can omit
 		// Turn off all thruster controls
 		//__super::CancelAllControls();
-		//if (m_controller )
-		//	m_controller->CancelAllControls();
+		//m_controller.CancelAllControls();
 	}
 
-	AI_Base_Controller *GetController() const
-	{
-		return m_controller;
-	}
 	bool GetStabilizeRotation() const
 	{
 		return m_StabilizeRotation;
@@ -736,8 +736,6 @@ public:
 		//TODO see if we really need to initialize
 		m_Physics.SetMass(120.0 / 2.205); //the typical weight of the robot
 		//virtual void Initialize(Entity2D_Kind::EventMap& em, const Entity_Properties *props = NULL);
-		if (!m_controller)
-			m_controller = Create_Controller();
 		//These default values are pulled from 2014 robot (perhaps the best tuned robot for driver)
 		const double g_wheel_diameter_in = 4;
 		const double Inches2Meters = 0.0254;
@@ -815,7 +813,7 @@ public:
 	{
 		const double Mass = m_Physics.GetMass();
 		// Update my controller
-		m_controller->UpdateController(dTime_s);
+		m_controller.ProcessSlice(dTime_s);
 
 		// Find the current velocity and use to determine the flight characteristics we will WANT to us
 		//Vec3d LocalVelocity(GetAtt_quat().conj() * m_Physics.GetLinearVelocity());
@@ -832,7 +830,7 @@ public:
 		#if 0
 		{
 			Vec3d Velocity = m_Physics.GetLinearVelocity();
-			if (m_controller->IsUIControlled())
+			if (m_controller.IsUIControlled())
 				printf("\r%s %f mps               ", GetID().c_str(), m_Physics.GetSpeed(Velocity));
 			//printf("\r%f mph               ",m_Physics.GetSpeed(Velocity)*2.237);  //here's a cool quick conversion to get mph http://www.chrismanual.com/Intro/convfact.htm
 		}
@@ -912,7 +910,7 @@ public:
 		}
 
 		// apply restraints based off if we are driving or if it is being auto piloted... for auto pilot it should not blend the max force high
-		//bool AutoPilot = m_controller->GetUIController() ? m_controller->GetUIController()->GetAutoPilot() : true;
+		//bool AutoPilot = m_controller.GetUIController() ? m_controller.GetUIController()->GetAutoPilot() : true;
 		const bool AutoPilot = false;
 		//Apply the restraints now... for now the lock ship member is a good way to know if it is being driven or autonomous, but we wouldn't want
 		//to do this in the game
@@ -1169,8 +1167,7 @@ public:
 		// Now to run the time updates (displacement plus application of it)
 		//GetPhysics().G_Dampener = G_Dampener;
 		//__super::TimeChange(dTime_s);
-
-		m_controller->UpdateUI(dTime_s);
+		//m_controller.UpdateUI(dTime_s);
 
 		#ifdef _TestNoIndendedDirction_properties__
 		if (m_LockShipHeadingToOrientation)
@@ -1190,11 +1187,9 @@ public:
 		m_current_heading += m_Physics.GetAngularVelocity()*dTime_s;
 		m_current_position += m_Physics.GetLinearVelocity() * dTime_s;
 	}
-	~Ship_2D()
-	{
-		delete m_controller;
-		m_controller = NULL;
-	}
+	//~Ship_2D()
+	//{
+	//}
 	void Stop() 
 	{ 
 		///This implicitly will place back in auto mode with a speed of zero
