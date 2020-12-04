@@ -326,14 +326,25 @@ public:
 	}
 	void test(int test)
 	{
-		if (test == 1)
+		switch (test)
 		{
+		case 1:
 			printf("Testing rotate 90\n");
 			m_robot.SetIntendedOrientation(PI_2, false);
 			//m_robot.SetIntendedOrientation(PI_2, true);
-		}
-		else
+			break;
+		case 2:
+			m_robot.DriveToLocation(0.0, 0.0);  //simple drive home without managing orientation
+			break;
+		case 3:
+			m_robot.DriveToLocation(0.0, 0.0, true, 0.0, false);  //drive facing robot in the direction
+			break;
+		case 4:
+			m_robot.DriveToLocation(0.0, 0.0, false);  //hit home at full speed (see if it oscillates)
+			break;
+		default:
 			printf("Test %d\n", test);
+		}
 	}
 	~Test_Swerve_TeleAuton()
 	{

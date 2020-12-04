@@ -253,6 +253,43 @@ private:
 		//const LUA_ShipControls_Properties &Get_ShipControls() const { return m_ShipControls; }
 	};
 	#pragma endregion
+
+	Ship_Properties m_ShipProperties;
+
+	double m_RadialArmDefault; //cache the radius of concentrated mass square, which will allow us to apply torque in a r = 1 case
+
+	//Stuff needed for physics
+	double Camera_Restraint;
+	double G_Dampener;
+
+	//Use this technique when m_AlterTrajectory is true
+	Vec2D m_RequestedVelocity;
+	double m_AutoLevelDelay; ///< The potential Gimbal lock, and user rolling will trigger a delay for the auto-level (when enabled)
+	double m_HeadingSpeedScale; //used by auto pilot control to have slower turn speeds for way points
+	double m_rotAccel_rad_s;
+
+	//All input for turn pitch and roll apply to this, both the camera and ship need to align to it
+	double m_IntendedOrientation;
+	//We need the m_IntendedOrientation quaternion to work with its own physics
+	FlightDynamics_2D m_IntendedOrientationPhysics;
+
+	//For slide mode all strafe is applied here
+	Vec2D m_currAccel;  //This is the immediate request for thruster levels
+
+	///Typically this contains the distance of the intended direction from the actual direction.  This is the only variable responsible for
+	///changing the ship's orientation
+	double m_rotDisplacement_rad;
+
+	bool m_SimFlightMode;  ///< If true auto strafing will occur to keep ship in line with its position
+	bool m_StabilizeRotation=true;  ///< If true (should always be true) this will fire reverse thrusters to stabilize rotation when idle
+	bool m_CoordinateTurns=true;   ///< Most of the time this is true, but in some cases (e.g. Joystick w/rudder pedals) it may be false
+
+	Threshold_Averager<eThrustState, 5> m_thrustState_Average;
+	eThrustState m_thrustState;
+	//double m_Last_AccDel;  ///< This monitors a previous AccDec session to determine when to reset the speed
+	Vec2D m_Last_RequestedVelocity;  ///< This monitors the last caught requested velocity from a speed delta change
+	FlightDynamics_2D m_Physics;
+protected:
 	#pragma region _Drive To Controller_
 	class DriveTo_Controller
 	{
@@ -459,42 +496,6 @@ private:
 	} m_controller=*this;
 	#pragma endregion
 
-	Ship_Properties m_ShipProperties;
-
-	double m_RadialArmDefault; //cache the radius of concentrated mass square, which will allow us to apply torque in a r = 1 case
-
-	//Stuff needed for physics
-	double Camera_Restraint;
-	double G_Dampener;
-
-	//Use this technique when m_AlterTrajectory is true
-	Vec2D m_RequestedVelocity;
-	double m_AutoLevelDelay; ///< The potential Gimbal lock, and user rolling will trigger a delay for the auto-level (when enabled)
-	double m_HeadingSpeedScale; //used by auto pilot control to have slower turn speeds for way points
-	double m_rotAccel_rad_s;
-
-	//All input for turn pitch and roll apply to this, both the camera and ship need to align to it
-	double m_IntendedOrientation;
-	//We need the m_IntendedOrientation quaternion to work with its own physics
-	FlightDynamics_2D m_IntendedOrientationPhysics;
-
-	//For slide mode all strafe is applied here
-	Vec2D m_currAccel;  //This is the immediate request for thruster levels
-
-	///Typically this contains the distance of the intended direction from the actual direction.  This is the only variable responsible for
-	///changing the ship's orientation
-	double m_rotDisplacement_rad;
-
-	bool m_SimFlightMode;  ///< If true auto strafing will occur to keep ship in line with its position
-	bool m_StabilizeRotation=true;  ///< If true (should always be true) this will fire reverse thrusters to stabilize rotation when idle
-	bool m_CoordinateTurns=true;   ///< Most of the time this is true, but in some cases (e.g. Joystick w/rudder pedals) it may be false
-
-	Threshold_Averager<eThrustState, 5> m_thrustState_Average;
-	eThrustState m_thrustState;
-	//double m_Last_AccDel;  ///< This monitors a previous AccDec session to determine when to reset the speed
-	Vec2D m_Last_RequestedVelocity;  ///< This monitors the last caught requested velocity from a speed delta change
-	FlightDynamics_2D m_Physics;
-protected:
 	//A counter to count how many times the predicted position and intended position are withing tolerance consecutively
 	size_t m_RotationToleranceCounter;
 	bool m_LockShipHeadingToOrientation; ///< Locks the ship and intended orientation (Joystick and Keyboard controls use this)
@@ -1187,9 +1188,6 @@ public:
 		m_current_heading += m_Physics.GetAngularVelocity()*dTime_s;
 		m_current_position += m_Physics.GetLinearVelocity() * dTime_s;
 	}
-	//~Ship_2D()
-	//{
-	//}
 	void Stop() 
 	{ 
 		///This implicitly will place back in auto mode with a speed of zero
@@ -1746,6 +1744,7 @@ public:
 	}
 	void SetLinearVelocity_local(double forward, double right)
 	{
+		m_controller.SetIsDriven(false);
 		//Note: SetRequestedVelocity is local
 		SetRequestedVelocity(Vec2D(right, forward));
 	}
@@ -1755,12 +1754,11 @@ public:
 	}
 	void DriveToLocation(double north, double east, bool stop_at_destination, double max_speed, bool can_strafe)
 	{
-		//TODO route to controller
+		m_controller.DriveToLocation(north, east, stop_at_destination, max_speed, can_strafe);
 	}
 	bool GetIsDrivenLinear() const
 	{
-		//Note: auto pilot was managed in the UI controller, so we'll have to work out how to manage here
-		return false;
+		return m_controller.GetIsDriven();
 	}
 	bool GetIsDrivenAngular() const
 	{
