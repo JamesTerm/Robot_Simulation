@@ -313,12 +313,22 @@ protected:
 		Vec2D m_TrajectoryPoint, m_PositionPoint;
 		Vec2D m_MatchVel = Vec2D(0.0,0.0); //explicit to show it is zero'd
 		double m_Power=1.0;
-		double m_safestop_tolerance = 0.03;
+		double m_safestop_tolerance = Feet2Meters(1.0); //about 1 foot away
 		bool m_stop_at_destination=true;
-		bool m_can_strafe=true;
+		bool m_want_strafe=true;
 		bool m_use_safe_stop_tolerance = true;
-		//TODO set this in a way that does not trigger the driven status to false (e.g. called from controller parameter)
-		void SetShipVelocity(double velocity_mps) { m_ship.SetRequestedVelocity(velocity_mps); }
+		bool m_LastSimFlightMode = true;
+		
+		void SetShipVelocity(double velocity_mps) 
+		{
+			//Note: calling this does not trigger the driven status to false
+			m_ship.SetRequestedVelocity(velocity_mps); 
+		}
+		bool CanStrafe() const
+		{
+			//If we can and we want it... it will be true
+			return m_ship.CanStrafe() && m_want_strafe;
+		}
 		void DriveToLocation(Vec2D TrajectoryPoint, Vec2D PositionPoint, double power, double dTime_s, Vec2D* matchVel, bool LockOrientation = false)
 		{
 			/// \param TrajectoryPoint- This is the point that your nose of your ship will orient to from its current position (usually the same as PositionPoint)
@@ -328,6 +338,8 @@ protected:
 			/// Use NULL when flying through way-points
 			/// Use (0,0) if you want to come to a stop, like at the end of a way-point series
 			/// Otherwise, use the velocity of the ship you are targeting or following to keep up with it
+			/// \param LockOrientation if true, will rely on strafing to get to position without altering the orientation; this gives client
+			/// ability to manage the orientation (e.g. locked camera onto a visual target)
 
 			//Supposedly in some compilers _isnan should be available, but isn't defined in math.h... Oh well I don't need this overhead anyhow
 			#ifdef WIN32
@@ -351,8 +363,8 @@ protected:
 			#endif
 			const double Mass = m_ship.GetMass();
 			Vec2D VectorOffset = TrajectoryPoint - m_ship.GetPos_m();
-
-			if (!LockOrientation)
+			//if ship can't strafe we must alter the orientation
+			if ((!LockOrientation)||(!m_ship.CanStrafe()))
 			{
 				//I have kept the older method for reference... both will work identical, but the later avoids duplicate distance work
 				#if 0
@@ -362,7 +374,7 @@ protected:
 				#else
 				double lookDir_radians = atan2(VectorOffset[0], VectorOffset[1]);
 
-				//if (!m_ship.CanStrafe())
+				//if (!CanStrafe())
 				//{
 				//	SmartDashboard::PutNumber("TestDirection",RAD_2_DEG(lookDir_radians));
 				//	SmartDashboard::PutNumber("TestDirection_HalfPi",RAD_2_DEG(NormalizeRotation_HalfPi(lookDir_radians)));
@@ -370,7 +382,7 @@ protected:
 				//	SmartDashboard::PutNumber("TestDistance",Meters2Feet(PositionDistance));
 				//}
 
-				if (m_ship.CanStrafe())
+				if (CanStrafe())
 					m_ship.SetIntendedOrientation(lookDir_radians);
 				else
 				{
@@ -410,7 +422,7 @@ protected:
 				else if (power > 1.0)
 					SetShipVelocity(MIN(power, MaxSpeed));
 			}
-
+			//TODO we need strafe ability to hit point without stopping
 			if (matchVel)
 			{
 				VectorOffset = PositionPoint - m_ship.GetPos_m();
@@ -429,11 +441,14 @@ protected:
 				//Usually if the trajectory point is the same as the position point it will perform coordinated turns most of the time while the nose is pointing
 				//towards its goal.  If the nose trajectory is different it may well indeed use the strafing technique more so.
 
-				if (!m_ship.CanStrafe() || (fabs(LocalVelocity[0]) < fabs(LocalVelocity[1])))
+				//Note: if the orientation is locked, always use the strafing technique
+				//if (!CanStrafe() || ((!LockOrientation)&& (fabs(LocalVelocity[0]) < fabs(LocalVelocity[1]))))
+				//This technique really should only be used for tank, my assessment before was faulty because the speed control didn't work correctly
+				if (!m_ship.CanStrafe())
 				{
 					//This first technique only works with the forward and partial reverse thrusters (may be useful for some ships)
 					//Note: Even though this controls forward and reverse thrusters, the strafe thrusters are still working implicitly to correct turn velocity
-
+					m_ship.SetSimFlightMode(true); //ensure we are not in slide mode
 					//Now we simply use the positive forward thruster 
 					if (LocalVelocity[1] > 0.0)  //only forward not reverse...
 						SetShipVelocity(MIN(LocalVelocity[1], ScaledSpeed));
@@ -459,6 +474,7 @@ protected:
 					Vec2D GlobalForce(m_ship.m_Physics.GetForceFromVelocity(GlobalVelocity, dTime_s));
 					//Vec2D LocalForce(m_ship.GetAtt_quat().conj() * GlobalForce);
 					Vec2D LocalForce = GlobalToLocal(m_ship.GetAtt_r(), GlobalForce); //First get the local force
+					m_ship.SetSimFlightMode(false); //enable slide mode
 					//Now to fire all the thrusters given the acceleration
 					m_ship.SetCurrentLinearAcceleration(LocalForce / Mass);
 				}
@@ -509,8 +525,9 @@ protected:
 			//if stop at destination is true will auto switch out
 
 			SetIsDriven(true);
+			m_LastSimFlightMode = m_ship.GetSimFlightMode(); // put the slide mode back to this when we are done
 			m_stop_at_destination = stop_at_destination;
-			m_can_strafe = can_strafe;
+			m_want_strafe = can_strafe;
 			m_Power = max_speed == 0.0 ? 1.0 : max_speed / m_ship.GetShipProperties().GetEngagedMaxSpeed();
 			//This part is like the activate on the legacy ship goals
 			if (absolute)
@@ -536,12 +553,13 @@ protected:
 			if (m_IsDriven)
 			{
 				if (!HitWayPoint() || !m_stop_at_destination)
-					DriveToLocation(m_TrajectoryPoint,m_PositionPoint,m_Power,dTime_s,m_stop_at_destination? &m_MatchVel : nullptr,!m_can_strafe);
+					DriveToLocation(m_TrajectoryPoint,m_PositionPoint,m_Power,dTime_s,m_stop_at_destination? &m_MatchVel : nullptr,m_want_strafe);
 				else
 				{
 					//stop and turn driven off
 					SetShipVelocity(0.0);
 					m_IsDriven = false;
+					m_ship.SetSimFlightMode(m_LastSimFlightMode);  //restore slide mode back to what it was before
 				}
 			}
 		}
@@ -735,6 +753,7 @@ protected:
 	bool CanStrafe() const
 	{
 		//Override if the ship is not able to strafe... used for DriveToLocation()
+		//for tank drive this should be false
 		return true;
 	}
 	double GetMaxSpeed() const
@@ -1084,7 +1103,10 @@ public:
 		}
 		else   //Manual mode
 		{
-			#ifndef __DisableSpeedControl__
+			//#ifndef __DisableSpeedControl__
+			//TODO this probably works in typical slide mode teleop, but is broken for strafe driving to way-point
+			//will need to evaluate if it really is still needed
+			#if 0
 			{
 				//TODO we may want to compute the fractional forces to fill in the final room left, but before that the engine ramp up would need to
 				//be taken into consideration as it currently causes it to slightly go beyond the boundary
@@ -1369,6 +1391,10 @@ public:
 	const Ship_Properties &GetShipProperties() const
 	{ 
 		return m_ShipProperties;
+	}
+	bool GetSimFlightMode() const
+	{
+		return m_SimFlightMode;
 	}
 	#pragma endregion
 	#pragma endregion
@@ -1797,6 +1823,7 @@ public:
 	void SetLinearVelocity_local(double forward, double right)
 	{
 		m_controller.SetIsDriven(false);
+		SetSimFlightMode(true);  //for now never go into slide mode, we can change this later
 		//Note: SetRequestedVelocity is local
 		SetRequestedVelocity(Vec2D(right, forward));
 	}
