@@ -414,7 +414,7 @@ void MotionControl2D::SetIntendedOrientation(double intended_orientation, bool a
 {
 	m_MotionControl2D->SetIntendedOrientation(intended_orientation, absolute);
 }
-void MotionControl2D::DriveToLocation(double north, double east, bool stop_at_destination, double max_speed, bool can_strafe)
+void MotionControl2D::DriveToLocation(double north, double east, bool absolute, bool stop_at_destination, double max_speed, bool can_strafe)
 {
 	m_MotionControl2D->DriveToLocation(north, east, stop_at_destination, max_speed, can_strafe);
 }

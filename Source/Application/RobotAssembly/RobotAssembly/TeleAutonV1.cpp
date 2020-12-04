@@ -337,10 +337,13 @@ public:
 			m_robot.DriveToLocation(0.0, 0.0);  //simple drive home without managing orientation
 			break;
 		case 3:
-			m_robot.DriveToLocation(0.0, 0.0, true, 0.0, false);  //drive facing robot in the direction
+			m_robot.DriveToLocation(0.0, 0.0, true, true, 0.0, false);  //drive facing robot in the direction
 			break;
 		case 4:
-			m_robot.DriveToLocation(0.0, 0.0, false);  //hit home at full speed (see if it oscillates)
+			m_robot.DriveToLocation(0.0, 0.0, true, false);  //hit home at full speed (see if it oscillates)
+			break;
+		case 5:
+			m_robot.DriveToLocation(Feet2Meters(5.0), 0.0, false);  //move forward (whatever direction it is by 5 feet)
 			break;
 		default:
 			printf("Test %d\n", test);

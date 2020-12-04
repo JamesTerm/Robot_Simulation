@@ -310,6 +310,13 @@ protected:
 	private:
 		Ship_2D &m_ship;
 		bool m_IsDriven = false;
+		Vec2D m_TrajectoryPoint, m_PositionPoint;
+		Vec2D m_MatchVel = Vec2D(0.0,0.0); //explicit to show it is zero'd
+		double m_Power=1.0;
+		double m_safestop_tolerance = 0.03;
+		bool m_stop_at_destination=true;
+		bool m_can_strafe=true;
+		bool m_use_safe_stop_tolerance = true;
 		//TODO set this in a way that does not trigger the driven status to false (e.g. called from controller parameter)
 		void SetShipVelocity(double velocity_mps) { m_ship.SetRequestedVelocity(velocity_mps); }
 		void DriveToLocation(Vec2D TrajectoryPoint, Vec2D PositionPoint, double power, double dTime_s, Vec2D* matchVel, bool LockOrientation = false)
@@ -459,6 +466,24 @@ protected:
 			else
 				SetShipVelocity(ScaledSpeed);
 		}
+
+		bool HitWayPoint()
+		{
+			// Base a tolerance2 for how close we want to get to the way point based on the current velocity,
+			// within a second of reaching the way point, just move to the next one
+			//Note for FRC... moving at 2mps it will come within an inch of its point with this tolerance
+			const double tolerance2 = m_use_safe_stop_tolerance ? m_safestop_tolerance : (m_ship.GetPhysics().GetLinearVelocity().length() * 1.0) + 0.1; // (will keep it within one meter even if not moving)
+			const Vec2D currPos = m_ship.GetPos_m();
+			const double position_delta = (m_PositionPoint - currPos).length();
+			const bool ret = position_delta < tolerance2;
+			#if 0
+			printf("\r%f        ", position_delta);
+			if (ret)
+				printf("completed %f\n", position_delta);
+			#endif
+			return ret;
+		}
+
 	public:
 		DriveTo_Controller(Ship_2D &ship) : m_ship(ship)
 		{
@@ -471,7 +496,7 @@ protected:
 		{
 			return m_IsDriven;
 		}
-		void DriveToLocation(double north, double east, bool stop_at_destination, double max_speed, bool can_strafe)
+		void DriveToLocation(double north, double east, bool absolute, bool stop_at_destination, double max_speed, bool can_strafe)
 		{
 			//Drives to a location at given by coordinates at max speed given
 			//It can either stop at location or continue to drive past it once it hits (allows for path driving)
@@ -484,14 +509,41 @@ protected:
 			//if stop at destination is true will auto switch out
 
 			SetIsDriven(true);
+			m_stop_at_destination = stop_at_destination;
+			m_can_strafe = can_strafe;
+			m_Power = max_speed == 0.0 ? 1.0 : max_speed / m_ship.GetShipProperties().GetEngagedMaxSpeed();
+			//This part is like the activate on the legacy ship goals
+			if (absolute)
+			{
+				const Vec2D Global_GoalTarget = Vec2D(east, north);
+				m_TrajectoryPoint = m_PositionPoint = Global_GoalTarget;
+			}
+			else
+			{
+				const Vec2D& pos = m_ship.GetPos_m();
+				const Vec2D Local_GoalTarget = Vec2D(east, north);
+				const Vec2D Global_GoalTarget = LocalToGlobal(m_ship.GetAtt_r(), Local_GoalTarget);
+				m_PositionPoint = Global_GoalTarget + pos;
+				//set the trajectory point
+				double lookDir_radians = atan2(Local_GoalTarget[0], Local_GoalTarget[1]);
+				const Vec2D LocalTrajectoryOffset(sin(lookDir_radians), cos(lookDir_radians));
+				const Vec2D  GlobalTrajectoryOffset = LocalToGlobal(m_ship.GetAtt_r(), LocalTrajectoryOffset);
+				m_TrajectoryPoint=(m_PositionPoint + GlobalTrajectoryOffset);
+			}
 		}
 		void ProcessSlice(double dTime_s)
 		{
-			//TODO
-			//if (m_IsDriven)
-			//{
-			//	DriveToLocation();
-			//}
+			if (m_IsDriven)
+			{
+				if (!HitWayPoint() || !m_stop_at_destination)
+					DriveToLocation(m_TrajectoryPoint,m_PositionPoint,m_Power,dTime_s,m_stop_at_destination? &m_MatchVel : nullptr,!m_can_strafe);
+				else
+				{
+					//stop and turn driven off
+					SetShipVelocity(0.0);
+					m_IsDriven = false;
+				}
+			}
 		}
 	} m_controller=*this;
 	#pragma endregion
@@ -1657,7 +1709,7 @@ void MotionControl2D::SetIntendedOrientation(double intended_orientation, bool a
 {
 	m_MotionControl2D->SetIntendedOrientation(intended_orientation, absolute);
 }
-void MotionControl2D::DriveToLocation(double north, double east, bool stop_at_destination, double max_speed, bool can_strafe)
+void MotionControl2D::DriveToLocation(double north, double east, bool absolute, bool stop_at_destination, double max_speed, bool can_strafe)
 {
 	m_MotionControl2D->DriveToLocation(north, east, stop_at_destination, max_speed, can_strafe);
 }
@@ -1752,9 +1804,9 @@ public:
 	{
 		//TODO translate here
 	}
-	void DriveToLocation(double north, double east, bool stop_at_destination, double max_speed, bool can_strafe)
+	void DriveToLocation(double north, double east, bool absolute, bool stop_at_destination, double max_speed, bool can_strafe)
 	{
-		m_controller.DriveToLocation(north, east, stop_at_destination, max_speed, can_strafe);
+		m_controller.DriveToLocation(north, east, absolute, stop_at_destination, max_speed, can_strafe);
 	}
 	bool GetIsDrivenLinear() const
 	{
@@ -1848,9 +1900,9 @@ void MotionControl2D::SetIntendedOrientation(double intended_orientation, bool a
 {
 	m_MotionControl2D->SetIntendedOrientation(intended_orientation, absolute);
 }
-void MotionControl2D::DriveToLocation(double north, double east, bool stop_at_destination, double max_speed, bool can_strafe)
+void MotionControl2D::DriveToLocation(double north, double east,bool absolute, bool stop_at_destination, double max_speed, bool can_strafe)
 {
-	m_MotionControl2D->DriveToLocation(north, east, stop_at_destination, max_speed, can_strafe);
+	m_MotionControl2D->DriveToLocation(north, east, absolute, stop_at_destination, max_speed, can_strafe);
 }
 
 //Accessors:---------------------------------------------
