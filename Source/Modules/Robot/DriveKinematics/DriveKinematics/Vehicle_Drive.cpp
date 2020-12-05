@@ -116,8 +116,8 @@ void Swerve_Drive::UpdateVelocities(double FWD, double STR, double RCW)
 	//Now to update the angles, only if they are known... if they are all zero,
 	//we cannot compute the trajectory and should not update them, this will avoid
 	//unwanted changes when stick is idle and robot should coast
-
-	if (!IsZero(FWD + STR + RCW))
+	//Note: when adding together to check they must not be negative otherwise they could cancel each other out
+	if (!IsZero(fabs(FWD) + fabs(STR) + fabs(RCW)))
 	{
 		_.aFL = atan2(B, D);
 		_.aFR = atan2(B, C);

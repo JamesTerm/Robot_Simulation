@@ -308,6 +308,7 @@ protected:
 		//the odometry it was easier to simplify the design.
 		#pragma endregion
 	private:
+		#pragma region _members_
 		Ship_2D &m_ship;
 		bool m_IsDriven = false;
 		Vec2D m_TrajectoryPoint, m_PositionPoint;
@@ -318,7 +319,7 @@ protected:
 		bool m_want_strafe=true;
 		bool m_use_safe_stop_tolerance = true;
 		bool m_LastSimFlightMode = true;
-		
+		#pragma endregion
 		void SetShipVelocity(double velocity_mps) 
 		{
 			//Note: calling this does not trigger the driven status to false
@@ -431,7 +432,7 @@ protected:
 				Vec2D velocity_normalized = VectorOffset;
 				const double magnitude = velocity_normalized.normalize();
 				const Vec2D matchVel_ToUse = matchVel ? *matchVel : 
-					GlobalToLocal(atan2(velocity_normalized[0], velocity_normalized[1]),Vec2D(0.0, ScaledSpeed));
+					LocalToGlobal(atan2(velocity_normalized[0], velocity_normalized[1]),Vec2D(0.0, ScaledSpeed));
 				//Vec2D LocalMatchVel(m_ship.GetAtt_quat().conj() * (*matchVel));
 				Vec2D LocalMatchVel = GlobalToLocal(m_ship.GetAtt_r(), matchVel_ToUse);
 
@@ -439,7 +440,10 @@ protected:
 				Vec2D ForceRestraintPositive(ShipProps.MaxAccelRight * Mass * ForceDegradeScalar[0], ShipProps.MaxAccelForward_High * Mass * ForceDegradeScalar[1]);
 				Vec2D ForceRestraintNegative(ShipProps.MaxAccelLeft * Mass * ForceDegradeScalar[0], ShipProps.MaxAccelReverse_High * Mass * ForceDegradeScalar[1]);
 				//Note: it is possible to overflow in extreme distances, if we challenge this then I should have an overflow check in physics
-				Vec2D LocalVelocity = m_ship.m_Physics.GetVelocityFromDistance_Linear(LocalVectorOffset, ForceRestraintPositive, ForceRestraintNegative, dTime_s, LocalMatchVel);
+				//Note: version 1 is ideal for a direct route, and perfect for strafing, the other version isolates the components separately, and
+				//may have performed better because of the speed disabled... if I test again with tank drive I may try it and see if that
+				//is still true
+				Vec2D LocalVelocity = m_ship.m_Physics.GetVelocityFromDistance_Linear_v1(LocalVectorOffset, ForceRestraintPositive, ForceRestraintNegative, dTime_s, LocalMatchVel);
 
 				//The logic here should make use of making coordinated turns anytime the forward/reverse velocity has a greater distance than the sides or up/down.
 				//Usually if the trajectory point is the same as the position point it will perform coordinated turns most of the time while the nose is pointing
@@ -486,7 +490,6 @@ protected:
 			else
 				SetShipVelocity(ScaledSpeed);
 		}
-
 		bool HitWayPoint()
 		{
 			// Base a tolerance2 for how close we want to get to the way point based on the current velocity,
@@ -503,7 +506,6 @@ protected:
 			#endif
 			return ret;
 		}
-
 	public:
 		DriveTo_Controller(Ship_2D &ship) : m_ship(ship)
 		{
@@ -566,6 +568,17 @@ protected:
 					m_ship.SetSimFlightMode(m_LastSimFlightMode);  //restore slide mode back to what it was before
 				}
 			}
+		}
+		void Reset()
+		{
+			SetIsDriven(false);
+			m_TrajectoryPoint = m_PositionPoint = m_MatchVel = Vec2D(0.0, 0.0);
+			m_Power = 1.0;
+			m_safestop_tolerance = Feet2Meters(1.0);
+			m_stop_at_destination = true;
+			m_want_strafe = true;
+			m_use_safe_stop_tolerance = true;
+			m_LastSimFlightMode = true;
 		}
 	} m_controller=*this;
 	#pragma endregion
@@ -1292,6 +1305,7 @@ public:
 		//SetStabilizeRotation(false); //This is for testing
 		SetSimFlightMode(true);  //This one is a tough call... probably should do it on reset
 		m_RotationToleranceCounter = 0;
+		m_controller.Reset();
 	}
 	#pragma region _mutators_
 	void SetRequestedVelocity(double Velocity)

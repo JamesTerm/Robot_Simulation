@@ -169,7 +169,10 @@ private:
 			const double Right = Feet2Meters(m_maxspeed * (AnalogConversion(joyinfo.lX, m_joystick_options) + m_Keyboard.GetState().bits.m_X));
 
 			//Check if we are being driven by some AI method, we override it if we have any linear velocity (i.e. some teleop interaction)
-			if (!IsZero(Forward + Right) || (m_robot.GetIsDrivenLinear() == false))
+			//Note: this logic does not quite work right for keyboard if it uses the forward "sticky" button, but since this isn't a real
+			//input I am not going to filter it out, but could if needed.  Also the fabs() ensures the forward and right do not cancel
+			//each other out
+			if (!IsZero(fabs(Forward) + fabs(Right)) || (m_robot.GetIsDrivenLinear() == false))
 				m_robot.SetLinearVelocity_local(Forward, Right);
 		}
 		//TODO autonomous and goals here
