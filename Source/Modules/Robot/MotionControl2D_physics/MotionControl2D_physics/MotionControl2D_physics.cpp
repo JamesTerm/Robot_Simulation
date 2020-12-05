@@ -422,14 +422,18 @@ protected:
 				else if (power > 1.0)
 					SetShipVelocity(MIN(power, MaxSpeed));
 			}
-			//TODO we need strafe ability to hit point without stopping
-			if (matchVel)
+			//Note: if we can strafe and we are not stopping at stopping, we will use match velocity of the scaled speed
+			if ((matchVel)||(m_ship.CanStrafe()))
 			{
 				VectorOffset = PositionPoint - m_ship.GetPos_m();
 				//Vec2D LocalVectorOffset(m_ship.GetAtt_quat().conj() * VectorOffset);
-				Vec2D LocalVectorOffset = GlobalToLocal(m_ship.GetAtt_r(), VectorOffset);
+				const Vec2D LocalVectorOffset = GlobalToLocal(m_ship.GetAtt_r(), VectorOffset);
+				Vec2D velocity_normalized = VectorOffset;
+				const double magnitude = velocity_normalized.normalize();
+				const Vec2D matchVel_ToUse = matchVel ? *matchVel : 
+					GlobalToLocal(atan2(velocity_normalized[0], velocity_normalized[1]),Vec2D(0.0, ScaledSpeed));
 				//Vec2D LocalMatchVel(m_ship.GetAtt_quat().conj() * (*matchVel));
-				Vec2D LocalMatchVel = GlobalToLocal(m_ship.GetAtt_r(), *matchVel);
+				Vec2D LocalMatchVel = GlobalToLocal(m_ship.GetAtt_r(), matchVel_ToUse);
 
 				const Vec2D ForceDegradeScalar = m_ship.Get_DriveTo_ForceDegradeScalar();
 				Vec2D ForceRestraintPositive(ShipProps.MaxAccelRight * Mass * ForceDegradeScalar[0], ShipProps.MaxAccelForward_High * Mass * ForceDegradeScalar[1]);
