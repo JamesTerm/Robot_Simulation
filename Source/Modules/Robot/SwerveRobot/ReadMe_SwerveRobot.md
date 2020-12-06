@@ -27,7 +27,7 @@ And how Swerve Robot interacts with the external modules
 ```text
 
 Tele Op Input <--------Motion Control (Swerve Robot) <- Inverse
-AI Input-------<----/                                   Kinematics <--- Entity
+AI Input------->----/                                   Kinematics <--- Entity
      \--------------------------> for SLAM ---------------------------->--/
 ```
 

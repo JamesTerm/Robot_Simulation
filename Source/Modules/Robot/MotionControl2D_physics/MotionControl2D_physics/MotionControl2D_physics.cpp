@@ -303,9 +303,8 @@ protected:
 
 		//One interesting note about these kinds of operations is that they both depend on localization, the ship and it's physics now delegate their
 		//methods out to essentially the odometry, so it's not quite obvious this access has reached here.  To keep the design simple the motion control
-		//is shown to be dependent on the odometry but what really happens is that it gets delegated out to swerve robot, which then will ultimately
-		//obtain the position and orientation from the Entity 2D (The same place the AI is to get its updates), but since Entity get's its updates from
-		//the odometry it was easier to simplify the design.
+		//is shown to be independent but what really happens is that it gets delegated out to swerve robot, which then will ultimately
+		//obtain the position and orientation from the Entity 2D, which in turn get's its updates from the odometry
 		#pragma endregion
 	private:
 		#pragma region _members_
