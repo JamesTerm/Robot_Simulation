@@ -133,7 +133,7 @@ public:
 		return m_Physics.GetMass();
 	}
 private:
-	#pragma region _members
+	#pragma region _members_
 	using FlightDynamics_2D = Framework::Base::FlightDynamics_2D;
 	using PhysicsEntity_2D = Framework::Base::PhysicsEntity_2D;
 	#pragma region _Ship Properties_
@@ -596,7 +596,7 @@ protected:
 
 	#pragma endregion
 protected:
-	#pragma region _protected members_
+	#pragma region _protected methods_
 	const PhysicsEntity_2D &GetPhysics() const 
 	{ 
 		return m_Physics; 
@@ -803,7 +803,7 @@ protected:
 	#pragma endregion
 	#pragma endregion
 public:
-	#pragma region _public members_
+	#pragma region _public methods_
 	Ship_2D() : m_IntendedOrientationPhysics(m_IntendedOrientation)
 	{
 		m_HeadingSpeedScale = 1.0;
