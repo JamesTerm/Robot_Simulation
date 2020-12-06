@@ -18,11 +18,8 @@ I have also included the inverse kinematics here even though these pertain more 
 
 The swerve equations were given to me from Ether on CD back around December 2011, he also provided the inverse equations.  I've kept the code variable the names the same as they were presented to me.
 
----
+## SLAM *Simulateous Localization and Mapping*
 
-## SLAM
-
-*Simulateous Localization and Mapping*
 I'll expand more on this here.  The most important piece is the motion_control.  This is used for prediction as well as a trapezoidal motion profile.  AI can manipulate a 2D entity and it can then be used to drive to waypoints.  In addition the predicting of the motion profile is the essential ingredient for closed loop programming.  Closed loop feedback from sensors like encoders and vision can be used to calibrate the prediction to where it physically resides at that moment.  Motion 1D entities can be used in the same regard for manipulators, we can include them in this group even though they do not necessarily contribute to localization.  
 
 For now we needn't worry about mapping especially because it is hard to find a common ground between seasons, that said... we may wish to consider providing an automated way to plot waypoints onto a virtual field, which is easy because they give us the placement of field elements.  It's even possible to add path algorithms and run cycles from them... for that it could ideal for autonomous and if its possible to recognize robots in the way... we can consider object avoidance algorithms (Like what has been done with rim space / the fringe).
@@ -39,13 +36,11 @@ So now it will be easiest to keep driven methods (like driving to a way point) a
 
 ### A note about Motion control using physics-  
 
-One thing physics solves is to work out for Entity 2D position's velocity when the direction changes.  Say for example you go full speed and then do a sharp 90 degree turn.  While the kinematics ignore physics and make this possible it may wreck havoc on the robot's drive and may cause robot to tip over.  Using an motion with physics takes into consideration the mass's current momentum and the direction at any given moment, since it deals fundamentally with force and torque at the mass entity itself, it can ensure no excessive force will be applied.
+One thing physics solves is to work out for Entity 2D position's velocity when the direction changes.  Say for example you go full speed and then do a sharp 90 degree turn.  While the kinematics ignore physics, it also makes it possible to wreck havoc on the robot's drive or may cause robot to tip over.  Peter (one of SimBots MEs) would argue, that the robot should be mechanically designed to take on the worst-case stresses, but this would only address the internal gearing, not issues like skids (skids cause team to lose in a pushing match) tipping over, or damage to swerve swivel mounts.  Using motion control with physics takes into consideration the mass's current momentum and the direction at any given moment, since it deals fundamentally with force and torque at the mass entity itself, it can ensure no excessive force will be applied.  One more point to add to this is that a tank drive is more forgiving for excessive forces, where-as swerve drive is not.  I can say that the power house teams like 148 do not do these things and some reasoning may be that they are advanced concepts that students may not be prepared to handle, they would argue that they delegate the responsibility to the driver to practice, and while this can work I've witnessed the amount of stress this puts on the driver and I've seen past year's matches where the driver will inherently drive slower cycles to avoid potential damage.  With motion control it should be easy to drive the robot, and in 2014 was a proof of concept where this pays off for faster cycles.
 
 ### A word about the rotary system
 
 This is really a part of the robot and part localization (the part that provides encoder odometry).  In the legacy code it inherited from Ship 1D, and Ship 1D inherited from Entity 1D.  This time around I want to avoid inheritance and any object dependencies... so like with motion control... it will be able to run everything on its own.  Unlike Entity 2D, Entity 1D can handle change of direction properly, so for now I am going to leave it as-is.  I'll look into making a simple version first that integrates well with Entity 1D. Then afterwards I'll look into an advanced version that can use some voltage managing techniques needed for various tasks like reducing latency, or dealing with gravity in one direction.  Given this... I'll shoot for a rotary system (robot) and Entity 1D (localization).  If Entity 1D ever needs the motion control separated like it is for 2D we can always change later...  Rotary will have and output method for voltage to write, and an input method to receive encoder feedback these are optional callbacks both called on its time slice.  Doing this will make it easy to hook to a simulation.
-
----
 
 ## Robot properties
 
