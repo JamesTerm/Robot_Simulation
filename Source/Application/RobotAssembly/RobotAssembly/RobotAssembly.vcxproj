@@ -163,6 +163,8 @@
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\..\Modules\Input\AI_Input\AI_Input.cpp" />
+    <ClCompile Include="..\..\..\Modules\Input\AI_Input\AI_Input_Example.cpp" />
     <ClCompile Include="..\..\..\Modules\Input\dx_Joystick_Controller\dx_Joystick_Controller\dx_Joystick.cpp" />
     <ClCompile Include="..\..\..\Modules\Robot\DriveKinematics\DriveKinematics\Vehicle_Drive.cpp" />
     <ClCompile Include="..\..\..\Modules\Robot\Entity2D\Entity2D\Entity2D.cpp" />

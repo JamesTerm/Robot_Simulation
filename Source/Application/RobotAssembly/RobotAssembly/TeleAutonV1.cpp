@@ -14,10 +14,9 @@
 
 #include "../../../Modules/Input/dx_Joystick_Controller/dx_Joystick_Controller/dx_Joystick.h"
 #include "../../../Modules/Input/JoystickConverter.h"
-//#include "../../../Modules/Robot/DriveKinematics/DriveKinematics/Vehicle_Drive.h"
+#include "../../../Modules/Input/AI_Input/AI_Input_Example.h"
+
 #include "../../../Modules/Robot/Entity2D/Entity2D/Entity2D.h"
-//#include "../../../Modules/Robot/MotionControl2D_simple/MotionControl2D/MotionControl2D.h"
-//#include "../../../Modules/Robot/MotionControl2D_physics/MotionControl2D_physics/MotionControl2D.h"
 #include "../../../Modules/Robot/SwerveRobot/SwerveRobot/SwerveRobot.h"
 #include "../../../Modules/Output/OSG_Viewer/OSG_Viewer/OSG_Viewer.h"
 #include "../../../Modules/Output/OSG_Viewer/OSG_Viewer/SwerveRobot_UI.h"
@@ -53,6 +52,7 @@ private:
 	//between them remain (mostly) identical
 	Module::Input::dx_Joystick m_joystick;  //Note: always late binding, so we can aggregate direct easy here
 	Module::Input::Analog_EventEntry m_joystick_options;  //for now a simple one-stop option for all
+	Module::Input::AI_Example m_Goal;
 	Module::Robot::SwerveRobot m_robot;  //keep track of our intended velocities
 	
 	Module::Output::OSG_Viewer m_viewer;
@@ -71,6 +71,8 @@ private:
 		eTele,
 		eTest
 	} m_game_mode= game_mode::eTele;
+
+	bool m_IsStreaming = false;
 	#pragma endregion
 
 	void UpdateVariables()
@@ -142,7 +144,7 @@ private:
 		for (size_t i = 0; i < 8; i++)
 			m_current_state.bits.SwerveVelocitiesFromIndex[i] = cv.Velocity.AsArray[i];
 	}
-	void GetInputSlice()
+	void GetInputSlice(double dTime_s)
 	{
 		using namespace Module::Input;
 		using JoystickInfo = dx_Joystick::JoystickInfo;
@@ -175,6 +177,13 @@ private:
 			if (!IsZero(fabs(Forward) + fabs(Right)) || (m_robot.GetIsDrivenLinear() == false))
 				m_robot.SetLinearVelocity_local(Forward, Right);
 		}
+		else if (m_game_mode == game_mode::eAuton)
+		{
+			using namespace Framework::Base;
+			Goal& goal = m_Goal.GetGoal();
+			if (goal.GetStatus()==Goal::eActive)
+				goal.Process(dTime_s);
+		}
 		//TODO autonomous and goals here
 		//This comes in handy for testing, but could be good to stop robot if autonomous needs to stop
 		if (joyinfo.ButtonBank[0] == 1)
@@ -185,7 +194,7 @@ private:
 	{
 		m_dTime_s = dTime_s;
 		//Grab kinematic velocities from controller
-		GetInputSlice();
+		GetInputSlice(dTime_s);
 		//Update the predicted motion for this time slice
 		m_robot.TimeSlice(dTime_s);
 		m_Entity.TimeSlice(dTime_s);
@@ -197,6 +206,7 @@ private:
 		using namespace Module::Output;
 		if (enable)
 		{
+			#pragma region _UI Callbacks_
 			OSG_Viewer &viewer = m_viewer;
 			viewer.SetSceneCallback([&](void *rootNode, void *geode) { m_RobotUI.UpdateScene(geode, true); });
 			//Anytime robot needs updates link it to our current state
@@ -220,7 +230,8 @@ private:
 				if (key == ' ' && press == false)
 					Reset();
 			});
-
+			#pragma endregion
+			#pragma region _Robot Entity Linking_
 			//Now to link up the callbacks for the robot motion control:  Note we can link them up even if we are not using it
 			m_robot.Set_UpdateGlobalVelocity([&](const Vec2D &new_velocity)
 			{	m_Entity.SetLinearVelocity_global(new_velocity.y(), new_velocity.x());
@@ -239,6 +250,25 @@ private:
 			{
 				return m_Entity.GetCurrentHeading();
 			});
+			#pragma endregion
+			#pragma region _AI Input Robot linking_
+			m_Goal.Set_GetCurrentPosition([&]() -> Vec2D
+				{
+					return m_robot.GetCurrentPosition();
+				});
+			m_Goal.Set_GetCurrentHeading([&]() -> double
+				{
+					return m_robot.GetCurrentHeading();
+				});
+			m_Goal.Set_DriveToLocation([&](double north, double east, bool absolute, bool stop_at_destination, double max_speed, bool can_strafe)
+				{
+					m_robot.DriveToLocation(north, east, absolute, stop_at_destination, max_speed, can_strafe);
+				});
+			m_Goal.Set_SetIntendedOrientation([&](double intended_orientation, bool absolute)
+				{
+					m_robot.SetIntendedOrientation(intended_orientation, absolute);
+				});
+			#pragma endregion
 		}
 		else
 		{
@@ -298,23 +328,42 @@ public:
 
 	void Start()
 	{
-		m_viewer.StartStreaming();
-		//Give driver station a default testing method by invoking here if we are in test mode
-		if (m_game_mode == game_mode::eTest)
-			test(1);
+		if (!m_IsStreaming)
+		{
+			m_IsStreaming = true;
+			m_viewer.StartStreaming();
+			//Give driver station a default testing method by invoking here if we are in test mode
+			if (m_game_mode == game_mode::eTest)
+				test(1);
+			if (m_game_mode == game_mode::eAuton)
+				m_Goal.GetGoal().Activate();
+		}
 	}
 	void Stop()
 	{
-		m_viewer.StopStreaming();
+		if (m_IsStreaming)
+		{
+			m_IsStreaming = false;
+			if (m_game_mode == game_mode::eAuton)
+				m_Goal.GetGoal().Terminate();
+			m_viewer.StopStreaming();
+		}
 	}
 	void SetGameMode(int mode)
 	{
-		m_game_mode = (game_mode)mode;
+		//If we are leaving from autonomous while still streaming terminate the goal
+		if ((m_IsStreaming) && (m_game_mode == game_mode::eAuton) && (game_mode::eAuton != (game_mode)mode))
+			m_Goal.GetGoal().Terminate();
+
 		printf("SetGameMode to ");
-		switch (m_game_mode)
+		bool IsValid = true;
+		switch ((game_mode)mode)
 		{
 		case game_mode::eAuton:
 			printf("Auton \n");
+			//If we are entering into autonomous already streaming activate the goal
+			if ((m_IsStreaming) && (m_game_mode != game_mode::eAuton))
+				m_Goal.GetGoal().Activate();
 			break;
 		case game_mode::eTele:
 			printf("Tele \n");
@@ -324,8 +373,11 @@ public:
 			break;
 		default:
 			printf("Unknown \n");
+			IsValid = false;
 			break;
 		}
+		if (IsValid)
+			m_game_mode = (game_mode)mode;
 	}
 	void test(int test)
 	{

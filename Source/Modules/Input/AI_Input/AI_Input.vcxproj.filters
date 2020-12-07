@@ -38,5 +38,11 @@
     <ClInclude Include="AI_Input_Example.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="SmartDashboard_HelperFunctions.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="AI_BaseController_goals.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
