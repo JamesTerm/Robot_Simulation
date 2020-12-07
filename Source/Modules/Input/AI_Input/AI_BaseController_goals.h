@@ -103,7 +103,7 @@ class Goal_Ship_MoveToPosition : public AtomicGoal
 public:
 	/// \param double safestop_tolerance used to set safe stop tolerance, default is a little over an inch
 	Goal_Ship_MoveToPosition(Module::Input::AI_Input* controller, const WayPoint& waypoint, bool UseSafeStop = true,
-		bool LockOrientation = false, double safestop_tolerance = 0.03) : m_Point(waypoint), m_Controller(controller),
+		bool LockOrientation = true, double safestop_tolerance = Feet2Meters(1.0)) : m_Point(waypoint), m_Controller(controller),
 		m_SafeStopTolerance(safestop_tolerance), m_Terminate(false), m_UseSafeStop(UseSafeStop), m_LockOrientation(LockOrientation)
 	{
 		m_TrajectoryPoint = waypoint.Position;  //set it for default

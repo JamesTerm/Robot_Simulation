@@ -192,7 +192,7 @@ private:
 	static Goal* GiveRobotSquareWayPointGoal(AI_Input* Parent)
 	{
 		const char* const LengthSetting = "TestDistance_ft";
-		const double Length_m = Feet2Meters(Auton_Smart_GetSingleValue(LengthSetting, Feet2Meters(1)));
+		const double Length_m = Feet2Meters(Auton_Smart_GetSingleValue(LengthSetting, Feet2Meters(5)));
 
 		std::list <WayPoint> points;
 		struct Locations
@@ -211,7 +211,16 @@ private:
 			WayPoint wp;
 			wp.Position[0] = test[i].x;
 			wp.Position[1] = test[i].y;
-			wp.Power = 0.5;
+			//May want to test slower in real life
+			//wp.Power = 0.5;
+			//This gets you there but the accuracy is rounded to tolerance
+			//(because the swivel wheels are challenged more)
+			//wp.Power = 0.0;
+			//TODO for now the goals work in power, while the robot works with max speed
+			//I may change the interface to use power, but for now just use the speed for power
+			//In testing this speed does good enough and pretty quick 
+			//(may be different repsonse times once the swivel rates change for simulation or in real life)
+			wp.Power = 2.5;
 			points.push_back(wp);
 		}
 		//Now to setup the goal
