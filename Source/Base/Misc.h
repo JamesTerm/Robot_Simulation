@@ -225,6 +225,91 @@ class Priority_Averager
 	}
 };
 
+//The way this works is that we keep track of the sign of each entry and all numbers that go it are negative
+//This way the priority makes the sort in reverse and the top number ends up being the floor number
+//Since we have both number sets on the same side of zero the result of the sign is also averaged using a blend average
+//where the smoothing value is the reciprocal of the sample size 
+class Priority_Averager_floor
+{
+private:
+	// Priority queue using operator < for ordering
+	//std::priority_queue<double, vector<double>,std::less<double>> m_queue;
+	struct NumberSign
+	{
+		NumberSign(double number)
+		{
+			if (number > 0)
+			{
+				Number = number * -1.0;
+				sign = false;
+			}
+			else
+			{
+				Number = number;
+				sign = true;  //for zero we want this to be true as well
+			}
+		}
+		//This method is not needed, but kept here to illustrate how to obtain the numbers original value
+#if 0
+		double GetNumber()
+		{
+			if (sign)
+				return Number;
+			else
+				return Number * -1.0;
+		}
+#endif
+		double Number;
+		bool sign;
+		bool operator >  (const NumberSign& rhs) const { return Number > rhs.Number; }
+		bool operator <  (const NumberSign& rhs) const { return Number < rhs.Number; }
+		bool operator == (const NumberSign& rhs) const { return ((Number == rhs.Number) && (sign == rhs.sign)); }
+	};
+	std::priority_queue<NumberSign> m_queue;
+	const size_t m_SampleSize;
+	const double m_PurgePercent;
+
+	double m_CurrentBadApple_Percentage;
+	size_t m_Iteration_Counter;
+	void flush()
+	{
+		while (!m_queue.empty())
+			m_queue.pop();
+	}
+	Blend_Averager<double > m_SignInfluence;  //have some weight on which sign to use
+public:
+	Priority_Averager_floor(size_t SampleSize, double PurgePercent) : m_SampleSize(SampleSize), m_PurgePercent(PurgePercent),
+		m_CurrentBadApple_Percentage(0.0), m_Iteration_Counter(0), m_SignInfluence(1.0 / (double)SampleSize)
+	{
+	}
+	double operator()(double newItem)
+	{
+		m_queue.push(NumberSign(newItem));
+		//This is a bit convoluted... 
+		//The sign influence does a blend average of the sign of the new entry and depending on this result will impact the final sign of our answer
+		const double sign_influence = (m_SignInfluence((newItem > 0) ? 1.0 : -1.0) > 0) ? -1.0 : 1.0;
+		double ret = m_queue.top().Number * sign_influence;
+		if (m_queue.size() > m_SampleSize)
+			m_queue.pop();
+		//Now to manage when to purge the bad apples
+		m_Iteration_Counter++;
+		if ((m_Iteration_Counter % m_SampleSize) == 0)
+		{
+			m_CurrentBadApple_Percentage += m_PurgePercent;
+			//printf(" p=%.2f ",m_CurrentBadApple_Percentage);
+			if (m_CurrentBadApple_Percentage >= 1.0)
+			{
+				//Time to purge all the bad apples
+				flush();
+				m_queue.push(NumberSign(ret));  //put one good apple back in to start the cycle over
+				m_CurrentBadApple_Percentage -= 1.0;
+				//printf(" p=%.2f ",m_CurrentBadApple_Percentage);
+			}
+		}
+		return ret;
+	}
+};
+
 template<class T>
 __inline T Enum_GetValue(const char *value,const char * const Table[],size_t NoItems)
 {

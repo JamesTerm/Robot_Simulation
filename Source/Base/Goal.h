@@ -35,24 +35,6 @@ public:
 	//Here is a very common call to do in the first line of a process update
 	inline void ActivateIfInactive() { if (m_Status == eInactive) Activate(); }
 	inline void ReActivateIfFailed() { if (m_Status == eFailed) Activate(); }
-
-	// This ensures that Composite Goals can safely allocate atomic goals and let the base implementation delete them
-	static void* operator new (const size_t size)
-	{
-		return malloc(size);
-	}
-	static void  operator delete (void* ptr)
-	{
-		free(ptr);
-	}
-	static void* operator new[](const size_t size)
-	{
-		return malloc(size);
-	}
-	static void  operator delete[](void* ptr) 
-	{	
-		free(ptr);
-	}
 };
 
 	}
