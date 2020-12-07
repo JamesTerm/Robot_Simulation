@@ -192,7 +192,7 @@ private:
 	static Goal* GiveRobotSquareWayPointGoal(AI_Input* Parent)
 	{
 		const char* const LengthSetting = "TestDistance_ft";
-		const double Length_m = Feet2Meters(Auton_Smart_GetSingleValue(LengthSetting, Feet2Meters(5)));
+		const double Length_m = Feet2Meters(Auton_Smart_GetSingleValue(LengthSetting, 5.0));
 
 		std::list <WayPoint> points;
 		struct Locations
