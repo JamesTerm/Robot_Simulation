@@ -66,7 +66,7 @@ public:
 	#pragma endregion
 };
 
-#pragma region wrapper methods (partial)
+#pragma region wrapper methods
 
 AI_Input::AI_Input()
 {
