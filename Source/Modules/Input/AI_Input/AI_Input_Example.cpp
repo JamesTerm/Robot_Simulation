@@ -174,7 +174,7 @@ private:
 		{
 			double dNoIterations = 4.0;
 			double TestRotateDeg = 90.0;
-			double TestMoveFeet = 1.0;
+			double TestMoveFeet = 5.0;
 			const char* const SmartNames[] = { "TestMoveRotateIter","TestRotate","TestMove" };
 			double* const SmartVariables[] = { &dNoIterations,&TestRotateDeg,&TestMoveFeet };
 			Auton_Smart_GetMultiValue(3, SmartNames, SmartVariables);
