@@ -10,6 +10,7 @@
 #include "../../../Base/Base_Includes.h"
 #include "../../../Base/Vec2d.h"
 #include "../../../Base/Misc.h"
+#include "../../../Base/AssetManager.h"
 #include "../../../Libraries/SmartDashboard/SmartDashboard_Import.h"
 
 #include "../../../Modules/Input/dx_Joystick_Controller/dx_Joystick_Controller/dx_Joystick.h"
@@ -47,6 +48,7 @@ class Test_Swerve_TeleAuton
 {
 private:
 	#pragma region _member variables_
+	Framework::Base::asset_manager m_properties;
 	Module::Localization::Entity2D m_Entity;
 	//Here we can choose which motion control to use, this works because the interface
 	//between them remain (mostly) identical
@@ -319,7 +321,7 @@ public:
 
 		//Initialize these before calling reset (as the properties can dictate what to reset to)
 		//TODO provide properties method here and invoke it, init can have properties sent as a parameter here
-		m_robot.Init();
+		m_robot.Init(&m_properties);
 		m_viewer.init();
 		m_RobotUI.Initialize();
 

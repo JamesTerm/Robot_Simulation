@@ -245,8 +245,10 @@ public:
 		m_current_position = m_current_velocity = Vec2D(0.0,0.0);
 		m_current_heading = 0.0;
 	}
-	void Init()
+	void Init(const Framework::Base::asset_manager *asset_properties)
 	{
+		//Go ahead and grab all the default properties first, then if we have asset properties fill in the ones we have and pass
+		//the asset properties down to children
 		//Provide rotary properties
 		rotary_properties props_rotary_drive, props_rotary_swivel;
 		//grab defaults
@@ -495,9 +497,9 @@ SwerveRobot::SwerveRobot()
 {
 	m_SwerveRobot = std::make_shared<SwerveRobot_Internal>();
 }
-void SwerveRobot::Init()
+void SwerveRobot::Init(const Framework::Base::asset_manager* asset_properties)
 {
-	m_SwerveRobot->Init();
+	m_SwerveRobot->Init(asset_properties);
 }
 void SwerveRobot::Shutdown()
 {

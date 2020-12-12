@@ -5,6 +5,8 @@
 #include "../../../../Base/Vec2d.h"
 //need SwerveVelocities
 #include "../../DriveKinematics/DriveKinematics/Vehicle_Drive.h"
+//need asset manager for properties
+#include "../../../../Base/AssetManager.h"
 
 namespace Module {
 	namespace Robot {
@@ -17,7 +19,7 @@ class SwerveRobot
 public:
 	SwerveRobot();
 	//Handle property initialization
-	void Init();
+	void Init(const Framework::Base::asset_manager * asset_properties=nullptr);
 	void Shutdown(); //give ability to shut down early
 	//These are local to current orientation
 	void SetLinearVelocity_local(double forward, double right);

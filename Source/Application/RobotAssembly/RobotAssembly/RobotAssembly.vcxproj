@@ -180,6 +180,7 @@
     <ClCompile Include="TeleOpV3.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\..\Base\AssetManager.h" />
     <ClInclude Include="..\..\..\Base\Physics.h" />
     <ClInclude Include="..\..\..\Modules\Input\dx_Joystick_Controller\dx_Joystick_Controller\dx_Joystick.h" />
     <ClInclude Include="..\..\..\Modules\Input\JoystickConverter.h" />
