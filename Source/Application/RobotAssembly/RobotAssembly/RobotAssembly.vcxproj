@@ -173,6 +173,7 @@
     <ClCompile Include="..\..\..\Modules\Robot\SwerveRobot\SwerveRobot\RotarySystem.cpp" />
     <ClCompile Include="..\..\..\Modules\Robot\SwerveRobot\SwerveRobot\SimulatedOdometry.cpp" />
     <ClCompile Include="..\..\..\Modules\Robot\SwerveRobot\SwerveRobot\SwerveRobot.cpp" />
+    <ClCompile Include="..\..\..\Properties\script_loader_example.cpp" />
     <ClCompile Include="RobotAssembly.cpp" />
     <ClCompile Include="TeleAutonV1.cpp" />
     <ClCompile Include="TeleOpV1.cpp" />
@@ -194,6 +195,7 @@
     <ClInclude Include="..\..\..\Modules\Robot\MotionControl2D_simple\MotionControl2D\MotionControl2D.h" />
     <ClInclude Include="..\..\..\Modules\Robot\SwerveRobot\SwerveRobot\SwerveRobot.h" />
     <ClInclude Include="..\..\..\Properties\RegistryV1.h" />
+    <ClInclude Include="..\..\..\Properties\script_loader.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="TeleAutonV1.h" />
     <ClInclude Include="TeleOpV1.h" />

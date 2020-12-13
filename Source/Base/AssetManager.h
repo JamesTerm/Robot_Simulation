@@ -48,11 +48,10 @@ public:
 	bool get_bool_native(const char* keyName, bool& value) const
 	{
 		bool ret = false;
-		bool test = false;
 		auto element = m_bool_database.find(keyName);
 		if (element != m_bool_database.end())
 		{
-			test = (*element).second;
+			value = (*element).second;
 			ret = true;
 		}
 		return ret;
@@ -72,11 +71,10 @@ public:
 	bool get_number_native(const char* keyName, double& value) const
 	{
 		bool ret = false;
-		double test = false;
 		auto element = m_number_database.find(keyName);
 		if (element != m_number_database.end())
 		{
-			test = (*element).second;
+			value = (*element).second;
 			ret = true;
 		}
 		return ret;
