@@ -52,7 +52,7 @@ One may ask, couldn't all of these modules be projects in one solution where eac
 
 ## *Launcher*
 
-The launcher is the main code which is responsible for instantiating each module, and will need to link them together.  Hopefully the linking part should be abstract enough to where the properties can manage the details as needed.  The idea is that the linking involved should be able to not be robot specific at this level, and could last many seasons.
+The launcher is the main code responsible for instantiating each module, and links them together.  The idea is that the linking involved is not robot specific at this level, and it can pull the specifics from the properties, which makes the code able to be reusable for subsequent seasons.  See the **ReadMe_Application** for more details, there are various test assemblies and this readme covers the main tests and how they have progressed from one version to the next.  Because of the nature of tieing more modules together, the code grows.  When this happens, it may appear overwhelming to someone looking at the latest assembly for the first time.  To help understand the code before this point, it is recommended to start from the first version, understand how it works and then proceed to the next *(e.g. use diff app show differences between the versions)*.  These versions are laid out in such a way to explain the progression of development, as well as how the newer modules interact as we add newer pieces of complexity to the overall model.
 
 ## *Modules*
 
