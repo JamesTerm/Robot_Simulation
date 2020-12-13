@@ -19,6 +19,7 @@
 #include "SimulatedOdometry.h"
 #include "OdometryManager.h"
 #include "SwerveRobot.h"
+#include "../../../../Properties/RegistryV1.h"
 
 //#define __UseSimpleMotionControl__
 #pragma endregion
@@ -217,7 +218,39 @@ private:
 			Rotation += Pi2;
 		return Rotation;
 	}
+	void init_rotary_properties(const Framework::Base::asset_manager* asset_properties,
+		rotary_properties &update,size_t index,bool IsSwivel)
+	{
+		//Update the properties if we have asset properties, the updates will only update with explicit entries in the database
+		//by use of default value parameter
+		if (asset_properties)
+		{
+			//form our prefix, it will use the naming convention in Vehicle Drive.h
+			const char* const prefix_table[2][4] =
+			{
+				{"sFL_","sFR_","sRL_","sRR_"},
+				{"aFL_","aFR_","aRL_","aRR_"}
+			};
+			assert(index < 4);
+			const char* const prefix = prefix_table[IsSwivel ? 1 : 0][index];
+			std::string constructed_name;
+			//we'll go down the list
+			using namespace properties::registry_v1;
+			using namespace Framework::Base;
+			//entity 1D
+			rotary_properties::Entity1D_Props& e1d = update.entity_props;
+			constructed_name = prefix, constructed_name += csz_Entity1D_StartingPosition;
+			e1d.m_StartingPosition = asset_properties->get_number(constructed_name.c_str(), e1d.m_StartingPosition);
+			constructed_name = prefix, constructed_name += csz_Entity1D_Mass;
+			e1d.m_Mass = asset_properties->get_number(constructed_name.c_str(), e1d.m_Mass);
+			constructed_name = prefix, constructed_name += csz_Entity1D_Dimension;
+			e1d.m_Dimension = asset_properties->get_number(constructed_name.c_str(), e1d.m_Dimension);
+			constructed_name = prefix, constructed_name += csz_Entity1D_IsAngular;
+			e1d.m_IsAngular = asset_properties->get_bool(constructed_name.c_str(), e1d.m_IsAngular);
 
+			//TODO finish list
+		}
+	}
 public:
 	SwerveRobot_Internal()
 	{
@@ -342,7 +375,9 @@ public:
 		//all cases come here to init rotary systems with correct properties
 		for (size_t i = 0; i < 4; i++)
 		{
+			init_rotary_properties(asset_properties, props_rotary_drive, i, false);
 			m_Drive[i].Init(i,&props_rotary_drive);
+			init_rotary_properties(asset_properties, props_rotary_swivel, i, true);
 			m_Swivel[i].Init(i+4,&props_rotary_swivel);
 		}
 		//only disable when rotary is in bypass

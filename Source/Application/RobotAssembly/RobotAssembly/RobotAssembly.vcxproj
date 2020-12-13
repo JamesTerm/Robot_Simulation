@@ -193,6 +193,7 @@
     <ClInclude Include="..\..\..\Modules\Robot\MotionControl2D_physics\MotionControl2D_physics\MotionControl2D.h" />
     <ClInclude Include="..\..\..\Modules\Robot\MotionControl2D_simple\MotionControl2D\MotionControl2D.h" />
     <ClInclude Include="..\..\..\Modules\Robot\SwerveRobot\SwerveRobot\SwerveRobot.h" />
+    <ClInclude Include="..\..\..\Properties\RegistryV1.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="TeleAutonV1.h" />
     <ClInclude Include="TeleOpV1.h" />

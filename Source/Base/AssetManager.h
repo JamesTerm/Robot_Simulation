@@ -60,7 +60,7 @@ public:
 	bool get_bool(const char* keyName, bool default_value=false) const
 	{
 		bool test;
-		bool ret = get_bool_native(keyName , test)? test : default_value;
+		bool ret = get_bool_native(keyName , test) ? test : default_value;
 		return ret;
 	}
 	#pragma endregion
@@ -84,7 +84,7 @@ public:
 	double get_number(const char* keyName, double default_value = 0.0) const
 	{
 		double test;
-		bool ret = get_number_native(keyName, test) ? test : default_value;
+		double ret = get_number_native(keyName, test) ? test : default_value;
 		return ret;
 	}
 	#pragma region _other primative number types to cast_
