@@ -817,6 +817,10 @@ enum tests
 	eSwerveTest_Joy,
 	eSwerveTest_tank_steering,
 	eTeleV1,
+	eTeleV2,
+	eTeleV3,
+	eAutonV1,
+	eAutonV2,
 	eBypass
 };
 
@@ -830,6 +834,10 @@ void tester(const char *csz_test, DriverStation_Tester &RobotTester)
 		"swerve1",
 		"swerve2",
 		"tele01",
+		"tele02",
+		"tele03",
+		"auton01",
+		"auton02",
 		"bypass"
 	};
 
@@ -902,6 +910,22 @@ void tester(const char *csz_test, DriverStation_Tester &RobotTester)
 	case eTeleV1:
 		//just change the driver selector and away we go
 		RobotTester.SelectTester(DriverStation_Tester::eTeleOpV1);
+		RobotTester.Start();
+		break;
+	case eTeleV2:
+		RobotTester.SelectTester(DriverStation_Tester::eTeleOpV2);
+		RobotTester.Start();
+		break;
+	case eTeleV3:
+		RobotTester.SelectTester(DriverStation_Tester::eTeleOpV3);
+		RobotTester.Start();
+		break;
+	case eAutonV1:
+		RobotTester.SelectTester(DriverStation_Tester::eTeleAutonV1);
+		RobotTester.Start();
+		break;
+	case eAutonV2:
+		RobotTester.SelectTester(DriverStation_Tester::eTeleAutonV2);
 		RobotTester.Start();
 		break;
 	case eBypass:

@@ -10,7 +10,6 @@
 #include "../../../Base/Base_Includes.h"
 #include "../../../Base/Vec2d.h"
 #include "../../../Base/Misc.h"
-#include "../../../Base/AssetManager.h"
 #include "../../../Libraries/SmartDashboard/SmartDashboard_Import.h"
 
 #include "../../../Modules/Input/dx_Joystick_Controller/dx_Joystick_Controller/dx_Joystick.h"
@@ -22,7 +21,6 @@
 #include "../../../Modules/Output/OSG_Viewer/OSG_Viewer/OSG_Viewer.h"
 #include "../../../Modules/Output/OSG_Viewer/OSG_Viewer/SwerveRobot_UI.h"
 #include "../../../Modules/Output/OSG_Viewer/OSG_Viewer/Keyboard_State.h"
-#include "../../../Properties/script_loader.h"
 #include "TeleAutonV1.h"
 
 //We can specify the linking in code
@@ -49,8 +47,6 @@ class Test_Swerve_TeleAuton
 {
 private:
 	#pragma region _member variables_
-	Framework::Base::asset_manager m_properties;
-	properties::script_loader m_script_loader;
 	Module::Localization::Entity2D m_Entity;
 	//Here we can choose which motion control to use, this works because the interface
 	//between them remain (mostly) identical
@@ -322,13 +318,8 @@ public:
 		m_max_heading_rad = (2 * Feet2Meters(m_maxspeed) / wheel_dimensions.length()) * skid;
 
 		//Initialize these before calling reset (as the properties can dictate what to reset to)
-		//TODO: (Maybe) we may put this loading in Start() like before, but will need to ensure code can handle this stress... that is 
-		//optional to make life easier for scripting updates, but since the driver station can reset the robot code without rebooting 
-		//the firmware this should be an adequate work-flow.  However, I may still do this for partial support, it depends on how
-		//much tweaking is needed for PID type operations.
-		//populate properties method here and invoke it, init can have properties sent as a parameter here
-		m_script_loader.load_script(m_properties);
-		m_robot.Init(&m_properties);
+		//TODO provide properties method here and invoke it, init can have properties sent as a parameter here
+		m_robot.Init();
 		m_viewer.init();
 		m_RobotUI.Initialize();
 
