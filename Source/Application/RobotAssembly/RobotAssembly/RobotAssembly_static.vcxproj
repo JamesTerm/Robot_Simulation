@@ -159,7 +159,9 @@
     <ClCompile Include="..\..\..\Modules\Robot\SwerveRobot\SwerveRobot\RotarySystem.cpp" />
     <ClCompile Include="..\..\..\Modules\Robot\SwerveRobot\SwerveRobot\SimulatedOdometry.cpp" />
     <ClCompile Include="..\..\..\Modules\Robot\SwerveRobot\SwerveRobot\SwerveRobot.cpp" />
+    <ClCompile Include="..\..\..\Properties\script_loader_example.cpp" />
     <ClCompile Include="TeleAutonV1.cpp" />
+    <ClCompile Include="TeleAutonV2.cpp" />
     <ClCompile Include="TeleOpV1.cpp" />
     <ClCompile Include="TeleOpV2.cpp" />
     <ClCompile Include="TeleOpV3.cpp" />

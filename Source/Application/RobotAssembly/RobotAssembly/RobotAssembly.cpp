@@ -23,6 +23,7 @@
 #include "TeleOpV2.h"
 #include "TeleOpV3.h"
 #include "TeleAutonV1.h"
+#include "TeleAutonV2.h"
 //Note these are not needed for tests 1-4
 #include "../../../Modules/Robot/MotionControl2D_physics/MotionControl2D_physics/MotionControl2D.h"
 #include "../../../Modules/Robot/MotionControl2D_simple/MotionControl2D/MotionControl2D.h"
@@ -645,7 +646,8 @@ public:
 		eTeleOpV2,
 		eTeleOpV3,
 		eBypassKinematics,
-		eTeleAutonV1
+		eTeleAutonV1,
+		eTeleAutonV2
 	};
 private:
 	#pragma region _Test objects_
@@ -654,8 +656,9 @@ private:
 	Application::TeleOp_V3 m_RobotTester_V3;
 	Test05_Test_Bypass_with_OSG m_Entity_Bypass;
 	Application::TeleAuton_V1 m_RobotTester_V4;
+	Application::TeleAuton_V2 m_RobotTester_V5;
 	#pragma endregion
-	Testers m_Tester_Selection= eTeleAutonV1;
+	Testers m_Tester_Selection= eTeleAutonV2;
 	bool m_IsInit = false; //provide a valve at this level
 public:
 	//Call this before init
@@ -682,6 +685,9 @@ public:
 		case eTeleAutonV1:
 			m_RobotTester_V4.Reset();
 			break;
+		case eTeleAutonV2:
+			m_RobotTester_V5.Reset();
+			break;
 		}
 	}
 	void init()
@@ -694,6 +700,7 @@ public:
 			case eTeleOpV2:
 			case eTeleOpV3:
 			case eTeleAutonV1:
+			case eTeleAutonV2:
 				SmartDashboard::init();
 				break;
 			}
@@ -713,6 +720,9 @@ public:
 				break;
 			case eTeleAutonV1:
 				m_RobotTester_V4.init();
+				break;
+			case eTeleAutonV2:
+				m_RobotTester_V5.init();
 				break;
 			}
 			m_IsInit = true;
@@ -739,6 +749,9 @@ public:
 		case eTeleAutonV1:
 			m_RobotTester_V4.Start();
 			break;
+		case eTeleAutonV2:
+			m_RobotTester_V5.Start();
+			break;
 		}
 	}
 	void Stop()
@@ -760,21 +773,38 @@ public:
 		case eTeleAutonV1:
 			m_RobotTester_V4.Stop();
 			break;
+		case eTeleAutonV2:
+			m_RobotTester_V5.Stop();
+			break;
 		}
 	}
 	void Test(int test)
 	{
-		if (m_Tester_Selection == eTeleAutonV1)
+		switch (m_Tester_Selection)
+		{
+		case eTeleAutonV1:
 			m_RobotTester_V4.Test(test);
-		else
+			break;
+		case eTeleAutonV2:
+			m_RobotTester_V5.Test(test);
+			break;
+		default:
 			printf("Test not supported for this tester\n");
+		}
 	}
 	void SetGameMode(int mode)
 	{
-		if (m_Tester_Selection == eTeleAutonV1)
+		switch (m_Tester_Selection)
+		{
+		case eTeleAutonV1:
 			m_RobotTester_V4.SetGameMode(mode);
-		else
-			printf("SetGameMode %d <--DriverStation_Tester\n", mode);
+			break;
+		case eTeleAutonV2:
+			m_RobotTester_V5.SetGameMode(mode);
+			break;
+		default:
+			printf("Test not supported for this tester\n");
+		}
 	}
 };
 #pragma endregion

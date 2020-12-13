@@ -176,6 +176,7 @@
     <ClCompile Include="..\..\..\Properties\script_loader_example.cpp" />
     <ClCompile Include="RobotAssembly.cpp" />
     <ClCompile Include="TeleAutonV1.cpp" />
+    <ClCompile Include="TeleAutonV2.cpp" />
     <ClCompile Include="TeleOpV1.cpp" />
     <ClCompile Include="TeleOpV2.cpp" />
     <ClCompile Include="TeleOpV3.cpp" />
@@ -198,6 +199,7 @@
     <ClInclude Include="..\..\..\Properties\script_loader.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="TeleAutonV1.h" />
+    <ClInclude Include="TeleAutonV2.h" />
     <ClInclude Include="TeleOpV1.h" />
     <ClInclude Include="TeleOpV2.h" />
     <ClInclude Include="TeleOpV3.h" />

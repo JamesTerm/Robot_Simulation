@@ -63,6 +63,9 @@
     <ClCompile Include="..\..\..\Properties\script_loader_example.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="TeleAutonV2.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="stdafx.h">
@@ -123,6 +126,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\Properties\script_loader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="TeleAutonV2.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

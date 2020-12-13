@@ -57,5 +57,11 @@
     <ClCompile Include="..\..\..\Modules\Input\AI_Input\AI_Input_Example.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="TeleAutonV2.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\Properties\script_loader_example.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>
