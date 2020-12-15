@@ -1,4 +1,6 @@
 #pragma once
+#include "../../../../Base/Physics.h"
+#include "../../../../Base/Poly.h"
 
 namespace Module {
 	namespace Robot {

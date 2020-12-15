@@ -161,6 +161,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="OdometryManager.h" />
+    <ClInclude Include="RotaryProperties_Legacy.h" />
     <ClInclude Include="RotarySystem.h" />
     <ClInclude Include="Ship1D_Legacy.h" />
     <ClInclude Include="SimulatedOdometry.h" />
