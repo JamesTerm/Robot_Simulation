@@ -162,6 +162,7 @@
   <ItemGroup>
     <ClInclude Include="OdometryManager.h" />
     <ClInclude Include="RotarySystem.h" />
+    <ClInclude Include="Ship1D_Legacy.h" />
     <ClInclude Include="SimulatedOdometry.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="SwerveManagement.h" />

@@ -56,5 +56,8 @@
     <ClInclude Include="SimulatedOdometry.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Ship1D_Legacy.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
