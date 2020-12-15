@@ -17,12 +17,30 @@
 #include "RotaryProperties_Legacy.h"
 
 //Useful for diagnostics
+
+//A valve define needed for stage 1 and 2
+//Stage 1:  only bypass on until legacy simulation is working well
+//Stage 2:  Either on, while simulation replacement is being developed
+//   new code is the else case for legacy
+//Stage 3:  Take out valve check and turn both off
+
+//TODO
+//Get simulator 3 working
+//integrate properties in the SwerveRobotTester
+//Tweak properties for ideal ride in the example script
+
+//#define __UseLegacySimulation__
+#ifndef __UseLegacySimulation__
 #define __UseBypass__
+#endif
+
 #pragma endregion
 namespace Module {
 	namespace Robot {
 
 #pragma region _CalibrationTesting_
+//I do not want to use any legacy code for the new simulation
+#ifdef __UseLegacySimulation__
 namespace Legacy {
 //Note:  This section really belongs with the simulated odometry; however, given the legacy dependency on ship 1D and properties
 //it is cleaner to keep the code intact in the order of dependencies, and rewrite a better updated simulation there
@@ -1029,6 +1047,7 @@ public:
 };
 
 }
+#endif
 #pragma endregion
 
 #pragma region _Simulated Odometry Internal_
@@ -1039,7 +1058,16 @@ private:
 	std::function<SwerveVelocities()> m_VoltageCallback;
 	double m_maxspeed = Feet2Meters(12.0); //max velocity forward in meters per second
 	double m_current_position[4] = {};  //keep track of the pot's position of each angle
-	SimulatedOdometry::properties m_properties;
+	const Framework::Base::asset_manager *m_properties=nullptr;
+	struct properties
+	{
+		double swivel_max_speed[4];
+	} m_bypass_properties;
+	#ifdef __UseLegacySimulation__
+	Legacy::Potentiometer_Tester2 m_Potentiometers[4]; //simulate a real potentiometer for calibration testing
+	//TODO get simulator 3 working
+	Legacy::Encoder_Simulator2 m_Encoders[4];
+	#endif
 
 	inline double NormalizeRotation2(double Rotation)
 	{
@@ -1053,18 +1081,44 @@ private:
 	}
 
 public:
-	void Init(const SimulatedOdometry::properties *props)
+	void Init(const Framework::Base::asset_manager *props)
 	{
 		//Since we define these props as we need them the client code will not need default ones
-		if (!props)
+		m_bypass_properties.swivel_max_speed[0] =
+			m_bypass_properties.swivel_max_speed[1] =
+			m_bypass_properties.swivel_max_speed[2] =
+			m_bypass_properties.swivel_max_speed[3] = 8.0;
+
+		m_properties = props;
+		#ifdef __UseLegacySimulation__
+		//TODO enable once we have simulator 3 working
+		#if 0
+		using Encoder_Simulator3 = Legacy::Encoder_Simulator3;
+		m_Encoders[0].SetEncoderKind(Encoder_Simulator3::eRW_Left);
+		m_Encoders[1].SetEncoderKind(Encoder_Simulator3::eRW_Right);
+		m_Encoders[2].SetEncoderKind(Encoder_Simulator3::eReadOnlyLeft);
+		m_Encoders[3].SetEncoderKind(Encoder_Simulator3::eReadOnlyRight);
+		#endif
+		//TODO set up properties here from asset management
+		for (size_t i = 0; i < 4; i++)
 		{
-			m_properties.swivel_max_speed[0] =
-				m_properties.swivel_max_speed[1] =
-				m_properties.swivel_max_speed[2] =
-				m_properties.swivel_max_speed[3] = 8.0;
+			m_Encoders[i].Initialize();
+			m_Potentiometers[i].Initialize();
 		}
-		else
-			m_properties = *props;
+		#endif
+		ResetPos();
+	}
+	void ResetPos()
+	{
+		#ifdef __UseLegacySimulation__
+
+		for (size_t i = 0; i < 4; i++)
+		{
+			m_Encoders[i].ResetPos();
+			m_Potentiometers[i].ResetPos();
+		}
+		#else
+		#endif
 	}
 	void ShutDown()
 	{
@@ -1096,13 +1150,33 @@ public:
 		{
 			//go ahead and apply the voltage to the position... this is over-simplified but effective for a bypass
 			//from the voltage determine the velocity delta
-			const double velocity_delta = m_CurrentVelocities.Velocity.AsArray[i + 4] * m_properties.swivel_max_speed[i];
-			m_current_position[i] = NormalizeRotation2( m_current_position[i] + velocity_delta * d_time_s);
-			m_CurrentVelocities.Velocity.AsArray[i+4] = m_current_position[i];
+			const double velocity_delta = m_CurrentVelocities.Velocity.AsArray[i + 4] * m_bypass_properties.swivel_max_speed[i];
+			m_current_position[i] = NormalizeRotation2(m_current_position[i] + velocity_delta * d_time_s);
+			m_CurrentVelocities.Velocity.AsArray[i + 4] = m_current_position[i];
 		}
 		#else
+		#ifdef __UseLegacySimulation__
+		SwerveVelocities CurrentVoltage;
+		CurrentVoltage = m_VoltageCallback();
+
+		for (size_t i = 0; i < 4; i++)
+		{
+			//We'll put the pot update first in case the simulation factors in the direction (probably shouldn't matter though)
+			m_Potentiometers[i].SetTimeDelta(d_time_s);
+			m_Potentiometers[i].UpdatePotentiometerVoltage(CurrentVoltage.Velocity.AsArray[i + 4]);
+			m_Potentiometers[i].TimeChange();
+			m_current_position[i] = NormalizeRotation2(m_Potentiometers[i].GetPotentiometerCurrentPosition());
+			m_CurrentVelocities.Velocity.AsArray[i + 4] = m_current_position[i];
+
+			m_Encoders[i].SetTimeDelta(d_time_s);
+			m_Encoders[i].UpdateEncoderVoltage(CurrentVoltage.Velocity.AsArray[i]);
+			m_Encoders[i].TimeChange();
+			m_CurrentVelocities.Velocity.AsArray[i] = m_Encoders[i].GetEncoderVelocity();
+		}
+		#else
+		#endif
 		//TODO reserved
-		m_CurrentVelocities = m_VoltageCallback();
+		//m_CurrentVelocities = m_VoltageCallback();
 		#endif
 	}
 	const SwerveVelocities &GetCurrentVelocities() const
@@ -1117,9 +1191,13 @@ SimulatedOdometry::SimulatedOdometry()
 {
 	m_simulator = std::make_shared<SimulatedOdometry_Internal>();
 }
-void SimulatedOdometry::Init(const properties *props)
+void SimulatedOdometry::Init(const Framework::Base::asset_manager* props)
 {
 	m_simulator->Init(props);
+}
+void SimulatedOdometry::ResetPos()
+{
+	m_simulator->ResetPos();
 }
 void SimulatedOdometry::Shutdown()
 {

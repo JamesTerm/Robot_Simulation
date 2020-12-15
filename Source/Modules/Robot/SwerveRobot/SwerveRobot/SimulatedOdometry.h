@@ -3,6 +3,7 @@
 #include <functional>
 //need Vec2D
 #include "../../../../Base/Vec2d.h"
+#include "../../../../Base/AssetManager.h"
 //need SwerveVelocities
 #include "../../DriveKinematics/DriveKinematics/Vehicle_Drive.h"
 
@@ -14,13 +15,9 @@ class SimulatedOdometry_Internal;
 class SimulatedOdometry
 {
 public:
-	struct properties
-	{
-		double swivel_max_speed[4];
-	};
-
 	SimulatedOdometry();
-	void Init(const properties *props=nullptr);
+	void Init(const Framework::Base::asset_manager *props=nullptr);
+	void ResetPos();
 	void Shutdown();
 	//Input: for simulation only, grab the voltages from each rotary system
 	void SetVoltageCallback(std::function<SwerveVelocities ()> callback);

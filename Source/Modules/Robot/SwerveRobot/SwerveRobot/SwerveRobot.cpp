@@ -268,6 +268,7 @@ public:
 	{
 		m_MotionControl2D.Reset(X, Y, heading);
 		m_robot.ResetPos();
+		m_Simulation.ResetPos();
 		m_Entity_Input.ResetPos();
 		for (size_t i = 0; i < 4; i++)
 		{
@@ -380,17 +381,7 @@ public:
 			init_rotary_properties(asset_properties, props_rotary_swivel, i, true);
 			m_Swivel[i].Init(i+4,&props_rotary_swivel);
 		}
-		//only disable when rotary is in bypass
-		#if 1
-		SimulatedOdometry::properties sim_props;
-		sim_props.swivel_max_speed[0] = 
-			sim_props.swivel_max_speed[1] =
-			sim_props.swivel_max_speed[2] = 
-			sim_props.swivel_max_speed[3] = 8.0;
-		m_Simulation.Init(&sim_props);
-		#else
-		m_Simulation.Init(nullptr);
-		#endif
+		m_Simulation.Init(asset_properties);
 		Reset();
 	}
 	void TimeSlice(double d_time_s)
