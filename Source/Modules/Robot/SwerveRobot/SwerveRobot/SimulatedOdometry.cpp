@@ -13,26 +13,19 @@
 #include "../../../../Base/PIDController.h"
 
 #include "../../DriveKinematics/DriveKinematics/Vehicle_Drive.h"
+#include "../../../../Properties/RegistryV1.h"
 #include "SimulatedOdometry.h"
 #include "RotaryProperties_Legacy.h"
 
-//Useful for diagnostics
-
-//A valve define needed for stage 1 and 2
-//Stage 1:  only bypass on until legacy simulation is working well
-//Stage 2:  Either on, while simulation replacement is being developed
-//   new code is the else case for legacy
-//Stage 3:  Take out valve check and turn both off
+//Note __UseBypass__ is replaced by a properties driven asset
 
 //TODO
 //Get simulator 3 working
-//integrate properties in the SwerveRobotTester
 //Tweak properties for ideal ride in the example script
+//Ensure pot simulator is unlimited
 
-//#define __UseLegacySimulation__
-#ifndef __UseLegacySimulation__
-#define __UseBypass__
-#endif
+//Keep enabled until we have a better simulator
+#define __UseLegacySimulation__
 
 #pragma endregion
 namespace Module {
@@ -1058,7 +1051,7 @@ private:
 	std::function<SwerveVelocities()> m_VoltageCallback;
 	double m_maxspeed = Feet2Meters(12.0); //max velocity forward in meters per second
 	double m_current_position[4] = {};  //keep track of the pot's position of each angle
-	const Framework::Base::asset_manager *m_properties=nullptr;
+	//const Framework::Base::asset_manager *m_properties=nullptr;  <----reserved
 	struct properties
 	{
 		double swivel_max_speed[4];
@@ -1068,6 +1061,7 @@ private:
 	//TODO get simulator 3 working
 	Legacy::Encoder_Simulator2 m_Encoders[4];
 	#endif
+	bool m_UseBypass = true;
 
 	inline double NormalizeRotation2(double Rotation)
 	{
@@ -1083,13 +1077,15 @@ private:
 public:
 	void Init(const Framework::Base::asset_manager *props)
 	{
+		using namespace ::properties::registry_v1;
+		//m_properties = props;  <---- reserved... most likely should restrict properties here
+		m_UseBypass = props ? props->get_bool(csz_Build_bypass_simulation, m_UseBypass) : true;
 		//Since we define these props as we need them the client code will not need default ones
 		m_bypass_properties.swivel_max_speed[0] =
 			m_bypass_properties.swivel_max_speed[1] =
 			m_bypass_properties.swivel_max_speed[2] =
 			m_bypass_properties.swivel_max_speed[3] = 8.0;
 
-		m_properties = props;
 		#ifdef __UseLegacySimulation__
 		//TODO enable once we have simulator 3 working
 		#if 0
@@ -1136,48 +1132,51 @@ public:
 	//Run the simulation time-slice
 	void TimeSlice(double d_time_s)
 	{
-		#ifdef __UseBypass__
-		//If only life were this simple, but alas robots are not god-ships
-		m_CurrentVelocities = m_VoltageCallback();
-		//convert voltages back to velocities
-		//for drive this is easy
-		for (size_t i = 0; i < 4; i++)
+		if (m_UseBypass)
 		{
-			m_CurrentVelocities.Velocity.AsArray[i] *= m_maxspeed;
+			//If only life were this simple, but alas robots are not god-ships
+			m_CurrentVelocities = m_VoltageCallback();
+			//convert voltages back to velocities
+			//for drive this is easy
+			for (size_t i = 0; i < 4; i++)
+			{
+				m_CurrentVelocities.Velocity.AsArray[i] *= m_maxspeed;
+			}
+			//for position we have to track this ourselves
+			for (size_t i = 0; i < 4; i++)
+			{
+				//go ahead and apply the voltage to the position... this is over-simplified but effective for a bypass
+				//from the voltage determine the velocity delta
+				const double velocity_delta = m_CurrentVelocities.Velocity.AsArray[i + 4] * m_bypass_properties.swivel_max_speed[i];
+				m_current_position[i] = NormalizeRotation2(m_current_position[i] + velocity_delta * d_time_s);
+				m_CurrentVelocities.Velocity.AsArray[i + 4] = m_current_position[i];
+			}
 		}
-		//for position we have to track this ourselves
-		for (size_t i = 0; i < 4; i++)
+		else
 		{
-			//go ahead and apply the voltage to the position... this is over-simplified but effective for a bypass
-			//from the voltage determine the velocity delta
-			const double velocity_delta = m_CurrentVelocities.Velocity.AsArray[i + 4] * m_bypass_properties.swivel_max_speed[i];
-			m_current_position[i] = NormalizeRotation2(m_current_position[i] + velocity_delta * d_time_s);
-			m_CurrentVelocities.Velocity.AsArray[i + 4] = m_current_position[i];
-		}
-		#else
-		#ifdef __UseLegacySimulation__
-		SwerveVelocities CurrentVoltage;
-		CurrentVoltage = m_VoltageCallback();
+			#ifdef __UseLegacySimulation__
+			SwerveVelocities CurrentVoltage;
+			CurrentVoltage = m_VoltageCallback();
 
-		for (size_t i = 0; i < 4; i++)
-		{
-			//We'll put the pot update first in case the simulation factors in the direction (probably shouldn't matter though)
-			m_Potentiometers[i].SetTimeDelta(d_time_s);
-			m_Potentiometers[i].UpdatePotentiometerVoltage(CurrentVoltage.Velocity.AsArray[i + 4]);
-			m_Potentiometers[i].TimeChange();
-			m_current_position[i] = NormalizeRotation2(m_Potentiometers[i].GetPotentiometerCurrentPosition());
-			m_CurrentVelocities.Velocity.AsArray[i + 4] = m_current_position[i];
+			for (size_t i = 0; i < 4; i++)
+			{
+				//We'll put the pot update first in case the simulation factors in the direction (probably shouldn't matter though)
+				m_Potentiometers[i].SetTimeDelta(d_time_s);
+				m_Potentiometers[i].UpdatePotentiometerVoltage(CurrentVoltage.Velocity.AsArray[i + 4]);
+				m_Potentiometers[i].TimeChange();
+				m_current_position[i] = NormalizeRotation2(m_Potentiometers[i].GetPotentiometerCurrentPosition());
+				m_CurrentVelocities.Velocity.AsArray[i + 4] = m_current_position[i];
 
-			m_Encoders[i].SetTimeDelta(d_time_s);
-			m_Encoders[i].UpdateEncoderVoltage(CurrentVoltage.Velocity.AsArray[i]);
-			m_Encoders[i].TimeChange();
-			m_CurrentVelocities.Velocity.AsArray[i] = m_Encoders[i].GetEncoderVelocity();
+				m_Encoders[i].SetTimeDelta(d_time_s);
+				m_Encoders[i].UpdateEncoderVoltage(CurrentVoltage.Velocity.AsArray[i]);
+				m_Encoders[i].TimeChange();
+				m_CurrentVelocities.Velocity.AsArray[i] = m_Encoders[i].GetEncoderVelocity();
+			}
+			#else
+			//TODO reserved
+			//m_CurrentVelocities = m_VoltageCallback();
+			#endif
 		}
-		#else
-		#endif
-		//TODO reserved
-		//m_CurrentVelocities = m_VoltageCallback();
-		#endif
 	}
 	const SwerveVelocities &GetCurrentVelocities() const
 	{

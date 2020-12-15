@@ -151,6 +151,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\..\..\Properties\script_loader_example.cpp" />
     <ClCompile Include="..\..\DriveKinematics\DriveKinematics\Vehicle_Drive.cpp" />
     <ClCompile Include="..\..\MotionControl2D_physics\MotionControl2D_physics\MotionControl2D_physics.cpp" />
     <ClCompile Include="..\..\MotionControl2D_simple\MotionControl2D\MotionControl2D.cpp" />
@@ -160,6 +161,7 @@
     <ClCompile Include="SwerveRobot_Tester.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\..\..\Properties\RegistryV1.h" />
     <ClInclude Include="OdometryManager.h" />
     <ClInclude Include="RotaryProperties_Legacy.h" />
     <ClInclude Include="RotarySystem.h" />

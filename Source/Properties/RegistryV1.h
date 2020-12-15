@@ -15,6 +15,8 @@ namespace registry_v1
 //put a csz (Const String Zero terminated) prefix as a constant char * variable for asset key names
 #define Rg_(x) const char * const csz_##x = #x;
 
+Rg_(Build_bypass_simulation)
+
 //instance named prefix for each wheel front, and rear... of left and right, left is port side, right starboard
 //or from top view with front facing up
 Rg_(FL_)  //front left

@@ -10,6 +10,13 @@ class script_loader_impl
 public:
 	void load_script(Framework::Base::asset_manager& assets)
 	{
+		using namespace properties::registry_v1;
+		#if 0
+		assets.put_bool(csz_Build_bypass_simulation, false);
+		#else
+		assets.put_bool(csz_Build_bypass_simulation, true);
+		#endif
+
 		//In this simple example we will simply hard code some of the assets in the registry
 		//TODO Add properties that will help test various pieces of code
 		// 1. add tweaking of controllers
@@ -27,7 +34,6 @@ public:
 			const char* const prefix = prefix_table[0][i];
 			std::string constructed_name;
 			//we'll go down the list
-			using namespace properties::registry_v1;
 			using namespace Framework::Base;
 			//entity 1D
 			constructed_name = prefix, constructed_name += csz_Entity1D_StartingPosition;

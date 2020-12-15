@@ -17,6 +17,7 @@
 #include "../../../../Modules/Output/OSG_Viewer/OSG_Viewer/OSG_Viewer.h"
 #include "../../../../Modules/Output/OSG_Viewer/OSG_Viewer/SwerveRobot_UI.h"
 #include "../../../../Modules/Output/OSG_Viewer/OSG_Viewer/Keyboard_State.h"
+#include "../../../../Properties/script_loader.h"
 #include "SwerveRobot.h"
 
 #ifdef _WIN64
@@ -134,8 +135,12 @@ void strafe_box_test(Module::Robot::SwerveRobot& robot, bool reverse_x=false)
 int main()
 {
 	using namespace Module::Robot;
+	Framework::Base::asset_manager properties;
+	properties::script_loader script_loader;
+	script_loader.load_script(properties);
+
 	SwerveRobot _robot;
-	_robot.Init();
+	_robot.Init(&properties);
 	_robot.SetAngularVelocity(0.0);
 
 	#if 1
