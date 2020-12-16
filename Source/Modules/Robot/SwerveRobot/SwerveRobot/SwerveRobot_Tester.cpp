@@ -140,7 +140,12 @@ int main()
 	script_loader.load_script(properties);
 
 	SwerveRobot _robot;
+	//Test without properties too
+	#if 0
+	_robot.Init();
+	#else
 	_robot.Init(&properties);
+	#endif
 	_robot.SetAngularVelocity(0.0);
 
 	#if 1

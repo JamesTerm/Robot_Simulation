@@ -219,8 +219,61 @@ private:
 		return Rotation;
 	}
 	void init_rotary_properties(const Framework::Base::asset_manager* asset_properties,
+		rotary_properties& update, bool IsSwivel)
+	{
+		using namespace ::properties::registry_v1;
+		if (asset_properties)
+		{
+			const char* prefix = IsSwivel ? csz_CommonSwivel_ : csz_CommonDrive_;
+			double ftest = 0.0;  //use to test if an asset exists
+			std::string constructed_name;
+			#define GET_NUMBER(x,y) \
+			constructed_name = prefix, constructed_name += csz_##x; \
+			y = asset_properties->get_number(constructed_name.c_str(), y);
+			#define GET_BOOL(x,y) \
+			constructed_name = prefix, constructed_name += csz_##x; \
+			y = asset_properties->get_bool(constructed_name.c_str(), y);
+
+			#pragma region _Entity1D_
+			//entity 1D
+			rotary_properties::Entity1D_Props& e1d = update.entity_props;
+			//constructed_name = prefix, constructed_name += csz_Entity1D_StartingPosition;
+			//e1d.m_StartingPosition = asset_properties->get_number(constructed_name.c_str(), e1d.m_StartingPosition);
+			GET_NUMBER(Entity1D_StartingPosition, e1d.m_StartingPosition);
+			GET_NUMBER(Entity1D_Mass, e1d.m_Mass);
+			GET_NUMBER(Entity1D_Dimension, e1d.m_Dimension);
+			GET_BOOL(Entity1D_IsAngular,e1d.m_IsAngular);
+			#pragma endregion
+			#pragma region _Ship1D_
+			rotary_properties::Ship_1D_Props& _Ship_1D = update.ship_props;
+			GET_NUMBER(Ship_1D_MAX_SPEED, _Ship_1D.MAX_SPEED);
+			//IF we have this asset assign it to forward and reverse
+			if (asset_properties->get_number_native(constructed_name.c_str(), ftest))
+			{
+				_Ship_1D.MaxSpeed_Forward = _Ship_1D.MAX_SPEED;
+				_Ship_1D.MaxSpeed_Reverse = -_Ship_1D.MAX_SPEED;
+			}
+			GET_NUMBER(Ship_1D_MaxSpeed_Forward, _Ship_1D.MaxSpeed_Forward);
+			GET_NUMBER(Ship_1D_MaxSpeed_Reverse, _Ship_1D.MaxSpeed_Reverse);
+			GET_NUMBER(Ship_1D_ACCEL, _Ship_1D.ACCEL);
+			GET_NUMBER(Ship_1D_BRAKE, _Ship_1D.BRAKE);
+			GET_NUMBER(Ship_1D_MaxAccelForward, _Ship_1D.MaxAccelForward);
+			GET_NUMBER(Ship_1D_MaxAccelReverse, _Ship_1D.MaxAccelReverse);
+			GET_NUMBER(Ship_1D_MinRange, _Ship_1D.MinRange);
+			GET_NUMBER(Ship_1D_MaxRange, _Ship_1D.MaxRange);
+			GET_NUMBER(Ship_1D_DistanceDegradeScalar, _Ship_1D.DistanceDegradeScalar);
+			GET_BOOL(Ship_1D_UsingRange, _Ship_1D.UsingRange) //bool
+			#pragma endregion
+			//finished with the macros
+			#undef GET_NUMBER
+			#undef GET_BOOL
+			//TODO finish list
+		}
+	}
+	void init_rotary_properties(const Framework::Base::asset_manager* asset_properties,
 		rotary_properties &update,size_t index,bool IsSwivel)
 	{
+		using namespace properties::registry_v1;
 		//Update the properties if we have asset properties, the updates will only update with explicit entries in the database
 		//by use of default value parameter
 		if (asset_properties)
@@ -228,15 +281,15 @@ private:
 			//form our prefix, it will use the naming convention in Vehicle Drive.h
 			const char* const prefix_table[2][4] =
 			{
-				{"sFL_","sFR_","sRL_","sRR_"},
-				{"aFL_","aFR_","aRL_","aRR_"}
+				{csz_sFL_,csz_sFR_,csz_sRL_,csz_sRR_},
+				{csz_aFL_,csz_aFR_,csz_aRL_,csz_aRR_}
 			};
 			assert(index < 4);
 			const char* const prefix = prefix_table[IsSwivel ? 1 : 0][index];
 			std::string constructed_name;
 			//we'll go down the list
-			using namespace properties::registry_v1;
 			using namespace Framework::Base;
+			#pragma region _Entity1D_
 			//entity 1D
 			rotary_properties::Entity1D_Props& e1d = update.entity_props;
 			constructed_name = prefix, constructed_name += csz_Entity1D_StartingPosition;
@@ -247,7 +300,7 @@ private:
 			e1d.m_Dimension = asset_properties->get_number(constructed_name.c_str(), e1d.m_Dimension);
 			constructed_name = prefix, constructed_name += csz_Entity1D_IsAngular;
 			e1d.m_IsAngular = asset_properties->get_bool(constructed_name.c_str(), e1d.m_IsAngular);
-
+			#pragma endregion
 			//TODO finish list
 		}
 	}
@@ -357,7 +410,12 @@ public:
 				//double ACCEL, BRAKE;
 				10.0,10.0,
 				//double MaxAccelForward, MaxAccelReverse;
-				5.0,5.0 //These match motion control
+				5.0,5.0, //These match motion control
+				//double MinRange, MaxRange;
+				0.0,0.0,
+				//This may be needed for simulation copy
+				//double DistanceDegradeScalar;
+				1.0
 			};
 		}
 		{
@@ -374,12 +432,19 @@ public:
 
 		#pragma endregion
 		//all cases come here to init rotary systems with correct properties
+		//first test the common to all properties		
+		init_rotary_properties(asset_properties, props_rotary_drive, false);
+		init_rotary_properties(asset_properties, props_rotary_swivel, true);
+		
 		for (size_t i = 0; i < 4; i++)
 		{
-			init_rotary_properties(asset_properties, props_rotary_drive, i, false);
-			m_Drive[i].Init(i,&props_rotary_drive);
-			init_rotary_properties(asset_properties, props_rotary_swivel, i, true);
-			m_Swivel[i].Init(i+4,&props_rotary_swivel);
+			//since we are writing individual properties we'll need a local variable here:
+			rotary_properties module_rotary = props_rotary_drive;
+			init_rotary_properties(asset_properties, module_rotary, i, false);
+			m_Drive[i].Init(i,&module_rotary);
+			module_rotary = props_rotary_swivel;
+			init_rotary_properties(asset_properties, module_rotary, i, true);
+			m_Swivel[i].Init(i+4,&module_rotary);
 		}
 		m_Simulation.Init(asset_properties);
 		Reset();

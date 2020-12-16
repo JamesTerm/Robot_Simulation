@@ -17,12 +17,17 @@ namespace registry_v1
 
 Rg_(Build_bypass_simulation)
 
+#pragma region _prefix section_
 //instance named prefix for each wheel front, and rear... of left and right, left is port side, right starboard
-//or from top view with front facing up
-Rg_(FL_)  //front left
-Rg_(FR_)  //front right
-Rg_(RL_)  //rear left
-Rg_(RR_)  //rear right
+//or from top view with front facing up, s = speed, a = wheel angle
+Rg_(FL_) Rg_(sFL_) Rg_(aFL_)  //front left
+Rg_(FR_) Rg_(sFR_) Rg_(aFR_)  //front right
+Rg_(RL_) Rg_(sRL_) Rg_(aRL_)  //rear left
+Rg_(RR_) Rg_(sRR_) Rg_(aRR_)  //rear right
+//One setting that applies to each
+Rg_(CommonDrive_)
+Rg_(CommonSwivel_)
+#pragma endregion
 
 //Motion 2D properties
 Rg_(Motion2D_max_speed_linear)

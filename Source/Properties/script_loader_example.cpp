@@ -24,8 +24,8 @@ private:
 			//form our prefix, it will use the naming convention in Vehicle Drive.h
 			const char* const prefix_table[2][4] =
 			{
-				{"sFL_","sFR_","sRL_","sRR_"},
-				{"aFL_","aFR_","aRL_","aRR_"}
+				{csz_sFL_,csz_sFR_,csz_sRL_,csz_sRR_},
+				{csz_aFL_,csz_FR_,csz_aRL_,csz_aRR_}
 			};
 			const char* const prefix = prefix_table[0][i];
 			std::string constructed_name;
@@ -45,8 +45,9 @@ private:
 	}
 	void TestCurivator()
 	{
-		#pragma region _LUA converstion_
+		#pragma region _LUA conversion_
 		//Not the fastest robot, but is the most tested and great base line
+		#pragma region _units conversions_
 		static const double Inches2Meters = 0.0254;
 		static const double Feet2Meters = 0.3048;
 		static const double Meters2Feet = 3.2808399;
@@ -54,6 +55,7 @@ private:
 		static const double OunceInchToNewton = 0.00706155183333;
 		static const double Pounds2Kilograms = 0.453592;
 		static const double Deg2Rad = (1.0 / 180.0) * Pi;
+		#pragma endregion
 
 		const double wheel_diameter_Curivator_in = 7.95;
 		const double g_wheel_diameter_in = wheel_diameter_Curivator_in;   //This will determine the correct distance try to make accurate too
@@ -90,6 +92,7 @@ private:
 			const double free_current_amp = 0.4;
 		};
 
+		#pragma region _ship 2d props_
 		//Ship props:
 		const double Mass = 25; //Weight kg
 		const double MaxAccelLeft = 20; 
@@ -110,6 +113,7 @@ private:
 		const double BRAKE = ACCEL;
 		//Turn Rates(radians / sec) This is always correct do not change
 		const double heading_rad = (2 * DriveGearSpeed * Meters2Inches / WheelTurningDiameter_In) * skid;
+		#pragma endregion
 
 		struct	Dimensions 
 		{
@@ -190,6 +194,43 @@ private:
 			const bool use_aggressive_stop = true;
 		};
 		#pragma endregion
+
+		#pragma region _setup put vars_
+		Framework::Base::asset_manager& assets = *m_assets;
+		using namespace properties::registry_v1;
+		std::string constructed_name;
+		const char* prefix = nullptr;
+
+		#define PUT_NUMBER(x,y) \
+			constructed_name = prefix, constructed_name += csz_##x; \
+			assets.put_number(constructed_name.c_str(), y);
+		#define PUT_BOOL(x,y) \
+			constructed_name = prefix, constructed_name += csz_##x; \
+			assets.put_bool(constructed_name.c_str(), y);
+		#pragma endregion
+		#pragma region _Put wheel_common_
+		{
+			prefix = csz_CommonDrive_;
+			wheel_common val;
+			//There is no Entity 1D set in the LUA
+			//The ones commented out are not in the LUA (client will retain default values)
+			PUT_NUMBER(Ship_1D_MAX_SPEED, val.max_speed);
+			//PUT_NUMBER(Ship_1D_MaxSpeed_Forward)
+			//PUT_NUMBER(Ship_1D_MaxSpeed_Reverse)
+			PUT_NUMBER(Ship_1D_ACCEL, val.accel);
+			PUT_NUMBER(Ship_1D_BRAKE, val.brake);
+			PUT_NUMBER(Ship_1D_MaxAccelForward, val.max_accel_forward);
+			PUT_NUMBER(Ship_1D_MaxAccelReverse, val.max_accel_reverse);
+			//PUT_NUMBER(Ship_1D_MinRange)
+			//PUT_NUMBER(Ship_1D_MaxRange)
+			//PUT_NUMBER(Ship_1D_DistanceDegradeScalar)
+			//PUT_BOOL(Ship_1D_UsingRange) //bool
+		}
+		#pragma endregion
+
+		//finished with macros
+		#undef PUT_NUMBER
+		#undef PUT_BOOL
 	}
 public:
 	void load_script(Framework::Base::asset_manager& assets)
@@ -202,7 +243,7 @@ public:
 		assets.put_bool(csz_Build_bypass_simulation, true);
 		#endif
 		//TestIndivualWheels();
-		TestCurivator();
+		//TestCurivator();
 	}
 };
 
