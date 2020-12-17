@@ -231,6 +231,20 @@ private:
 			#define GET_NUMBER(x,y) \
 			constructed_name = prefix, constructed_name += csz_##x; \
 			y = asset_properties->get_number(constructed_name.c_str(), y);
+
+			#define GET_INT(x,y) \
+			constructed_name = prefix, constructed_name += csz_##x; \
+			y = asset_properties->get_number_int(constructed_name.c_str(), y);
+
+			#define GET_SIZE_T(x,y) \
+			constructed_name = prefix, constructed_name += csz_##x; \
+			y = asset_properties->get_number_size_t(constructed_name.c_str(), y);
+
+			#define GET_NUMBER_suffix(x,y,z) \
+			constructed_name = prefix, constructed_name += csz_##x; \
+			constructed_name += #z;\
+			y = asset_properties->get_number(constructed_name.c_str(), y);
+
 			#define GET_BOOL(x,y) \
 			constructed_name = prefix, constructed_name += csz_##x; \
 			y = asset_properties->get_bool(constructed_name.c_str(), y);
@@ -265,6 +279,60 @@ private:
 			GET_NUMBER(Ship_1D_DistanceDegradeScalar, _Ship_1D.DistanceDegradeScalar);
 			GET_BOOL(Ship_1D_UsingRange, _Ship_1D.UsingRange) //bool
 			#pragma endregion
+
+			#pragma region _Rotary_
+			rotary_properties::Rotary_Props& Rotary_ = update.rotary_props;
+			rotary_properties::Rotary_Props::Rotary_Arm_GainAssist_Props& arm = update.rotary_props.ArmGainAssist;
+			GET_NUMBER(Rotary_VoltageScalar, Rotary_.VoltageScalar);
+			GET_NUMBER(Rotary_EncoderToRS_Ratio, Rotary_.EncoderToRS_Ratio);
+			GET_NUMBER(Rotary_EncoderPulsesPerRevolution, Rotary_.EncoderPulsesPerRevolution);
+			//GET_NUMBER(Rotary_PID)  //double[3]... append _p _i _d to the name for each element
+			GET_NUMBER_suffix(Rotary_PID, Rotary_.PID[0], _p);
+			GET_NUMBER_suffix(Rotary_PID, Rotary_.PID[1], _i);
+			GET_NUMBER_suffix(Rotary_PID, Rotary_.PID[2], _d);
+			//Copy PID to arm assist
+			for (size_t i = 0; i < 3; i++)
+				arm.PID_Up[i] = arm.PID_Down[i] = Rotary_.PID[i];
+
+			GET_NUMBER(Rotary_PrecisionTolerance, Rotary_.PrecisionTolerance);
+			//Use _c, _t1, _t2, _t3, _t4 for array 0..5 respectively
+			//GET_NUMBER(Rotary_Voltage_Terms) //PolynomialEquation_forth_Props 
+			GET_NUMBER_suffix(Rotary_Voltage_Terms, Rotary_.Voltage_Terms.Term[0], _c);
+			GET_NUMBER_suffix(Rotary_Voltage_Terms, Rotary_.Voltage_Terms.Term[1], _t1);
+			GET_NUMBER_suffix(Rotary_Voltage_Terms, Rotary_.Voltage_Terms.Term[2], _t2);
+			GET_NUMBER_suffix(Rotary_Voltage_Terms, Rotary_.Voltage_Terms.Term[3], _t3);
+			GET_NUMBER_suffix(Rotary_Voltage_Terms, Rotary_.Voltage_Terms.Term[4], _t4);
+			//Some properties will spawn other defaults (so the order matters on those)
+			GET_NUMBER(Rotary_InverseMaxAccel, Rotary_.InverseMaxAccel);
+			if (asset_properties->get_number_native(constructed_name.c_str(), ftest))
+			{
+				Rotary_.InverseMaxDecel = Rotary_.InverseMaxAccel;	//set up deceleration to be the same value by default
+				arm.InverseMaxAccel_Up = arm.InverseMaxAccel_Down = arm.InverseMaxDecel_Up = arm.InverseMaxDecel_Down = Rotary_.InverseMaxAccel;
+			}
+
+			GET_NUMBER(Rotary_InverseMaxDecel, Rotary_.InverseMaxDecel);
+			if (asset_properties->get_number_native(constructed_name.c_str(), ftest))
+				arm.InverseMaxDecel_Up = arm.InverseMaxDecel_Down = Rotary_.InverseMaxAccel;
+
+			GET_NUMBER(Rotary_Positive_DeadZone, Rotary_.Positive_DeadZone);
+			GET_NUMBER(Rotary_Negative_DeadZone, Rotary_.Negative_DeadZone);
+			//Ensure the negative settings are negative
+			if (Rotary_.Negative_DeadZone > 0.0)
+				Rotary_.Negative_DeadZone = -Rotary_.Negative_DeadZone;
+
+			GET_NUMBER(Rotary_MinLimitRange, Rotary_.MinLimitRange);
+			GET_NUMBER(Rotary_MaxLimitRange, Rotary_.MaxLimitRange);
+			GET_SIZE_T(Rotary_Feedback_DiplayRow, Rotary_.Feedback_DiplayRow);
+			//Enum types have to be casted back explicitly... oh well
+			//GET_INT(Rotary_LoopState, Rotary_.LoopState);
+			constructed_name = prefix, constructed_name += csz_Rotary_LoopState;
+			Rotary_.LoopState = (rotary_properties::Rotary_Props::LoopStates)
+				asset_properties->get_number_int(constructed_name.c_str(), Rotary_.LoopState);
+			GET_BOOL(Rotary_PID_Console_Dump, Rotary_.PID_Console_Dump); //bool
+			GET_BOOL(Rotary_UseAggressiveStop, Rotary_.UseAggressiveStop); //bool
+			GET_BOOL(Rotary_EncoderReversed_Wheel, Rotary_.EncoderReversed_Wheel); //bool
+			#pragma endregion
+			//TODO arm gain assist properties here
 			//finished with the macros
 			#undef GET_NUMBER
 			#undef GET_BOOL

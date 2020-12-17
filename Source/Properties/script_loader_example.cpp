@@ -151,10 +151,10 @@ private:
 		
 		struct wheel_common 
 		{
-			bool is_closed = EncoderLoop;
+			int is_closed = EncoderLoop;
 			bool show_pid_dump = false;
 			//ds_display_row = -1;
-			struct pid { double p = 200; double i = 0; double d = 25; };
+			struct pid { double p = 200; double i = 0; double d = 25; } _pid;
 			//Note: removed in Encoder Simulator v3
 			//curve_voltage =
 			//{t4 = 3.1199; t3 = -4.4664; t2 = 2.2378; t1 = 0.1222; c = 0};
@@ -204,6 +204,11 @@ private:
 		#define PUT_NUMBER(x,y) \
 			constructed_name = prefix, constructed_name += csz_##x; \
 			assets.put_number(constructed_name.c_str(), y);
+		#define PUT_NUMBER_suffix(x,y,z) \
+			constructed_name = prefix, constructed_name += csz_##x; \
+			constructed_name += #z;\
+			assets.put_number(constructed_name.c_str(), y);
+
 		#define PUT_BOOL(x,y) \
 			constructed_name = prefix, constructed_name += csz_##x; \
 			assets.put_bool(constructed_name.c_str(), y);
@@ -212,7 +217,8 @@ private:
 		{
 			prefix = csz_CommonDrive_;
 			wheel_common val;
-			//There is no Entity 1D set in the LUA
+			//There is no Entity 1D set in the LUA--
+			//Ship1D------------------------
 			//The ones commented out are not in the LUA (client will retain default values)
 			PUT_NUMBER(Ship_1D_MAX_SPEED, val.max_speed);
 			//PUT_NUMBER(Ship_1D_MaxSpeed_Forward)
@@ -224,7 +230,32 @@ private:
 			//PUT_NUMBER(Ship_1D_MinRange)
 			//PUT_NUMBER(Ship_1D_MaxRange)
 			//PUT_NUMBER(Ship_1D_DistanceDegradeScalar)
-			//PUT_BOOL(Ship_1D_UsingRange) //bool
+			PUT_BOOL(Ship_1D_UsingRange,val.using_range) //bool
+			//Rotary--------------------------
+			//PUT_NUMBER(Rotary_VoltageScalar, val.VoltageScalar);
+			PUT_NUMBER(Rotary_EncoderToRS_Ratio, val.encoder_to_wheel_ratio);
+			PUT_NUMBER(Rotary_EncoderPulsesPerRevolution, val.encoder_pulses_per_revolution);
+			//PUT_NUMBER(Rotary_PID)  //double[3]... append _p _i _d to the name for each element
+			PUT_NUMBER_suffix(Rotary_PID, val._pid.p, _p);
+			PUT_NUMBER_suffix(Rotary_PID, val._pid.i, _i);
+			PUT_NUMBER_suffix(Rotary_PID, val._pid.d, _d);
+			//PUT_NUMBER(Rotary_PrecisionTolerance, val.PrecisionTolerance);
+			//Use _c, _t1, _t2, _t3, _t4 for array 0..5 respectively
+			//GET_NUMBER(Rotary_Voltage_Terms) //PolynomialEquation_forth_Props 
+			PUT_NUMBER(Rotary_InverseMaxAccel, val.inv_max_accel);
+			//PUT_NUMBER(Rotary_InverseMaxDecel, val.InverseMaxDecel);
+			//PUT_NUMBER(Rotary_Positive_DeadZone, val.Positive_DeadZone);
+			//PUT_NUMBER(Rotary_Negative_DeadZone, val.Negative_DeadZone);
+			//PUT_NUMBER(Rotary_MinLimitRange, val.MinLimitRange);
+			//PUT_NUMBER(Rotary_MaxLimitRange, val.MaxLimitRange);
+			//GET_NUMBER(Rotary_Feedback_DiplayRow, Rotary_.Feedback_DiplayRow);
+			//The logic of loop states. From LUA point of view, was if I didn't have it... it was none = 0, if I do and it is false
+			//it's open which = 1, if "is_closed" is true which = 2 and if "is_closed2" is true (for position only) = 3
+			//Note: Not having it means I can't even try to read it
+			PUT_NUMBER(Rotary_LoopState, val.is_closed ? 2.0 : 1.0); //enum LoopStates... put as double, get as int
+			PUT_BOOL(Rotary_PID_Console_Dump, val.show_pid_dump); //bool
+			PUT_BOOL(Rotary_UseAggressiveStop, val.use_aggressive_stop); //bool
+			PUT_BOOL(Rotary_EncoderReversed_Wheel, val.encoder_reversed_wheel); //bool
 		}
 		#pragma endregion
 
