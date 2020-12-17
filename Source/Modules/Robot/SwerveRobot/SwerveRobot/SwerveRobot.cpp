@@ -219,12 +219,13 @@ private:
 		return Rotation;
 	}
 	void init_rotary_properties(const Framework::Base::asset_manager* asset_properties,
-		rotary_properties& update, bool IsSwivel)
+		rotary_properties& update, const char* prefix)
 	{
+		//Update the properties if we have asset properties, the updates will only update with explicit entries in the database
+		//by use of default value parameter
 		using namespace ::properties::registry_v1;
 		if (asset_properties)
 		{
-			const char* prefix = IsSwivel ? csz_CommonSwivel_ : csz_CommonDrive_;
 			double ftest = 0.0;  //use to test if an asset exists
 			std::string constructed_name;
 			#define GET_NUMBER(x,y) \
@@ -271,38 +272,25 @@ private:
 		}
 	}
 	void init_rotary_properties(const Framework::Base::asset_manager* asset_properties,
+		rotary_properties& update, bool IsSwivel)
+	{
+		using namespace properties::registry_v1;
+		const char* prefix = IsSwivel ? csz_CommonSwivel_ : csz_CommonDrive_;
+		init_rotary_properties(asset_properties, update, prefix);
+	}
+	void init_rotary_properties(const Framework::Base::asset_manager* asset_properties,
 		rotary_properties &update,size_t index,bool IsSwivel)
 	{
 		using namespace properties::registry_v1;
-		//Update the properties if we have asset properties, the updates will only update with explicit entries in the database
-		//by use of default value parameter
-		if (asset_properties)
+		//form our prefix, it will use the naming convention in Vehicle Drive.h
+		const char* const prefix_table[2][4] =
 		{
-			//form our prefix, it will use the naming convention in Vehicle Drive.h
-			const char* const prefix_table[2][4] =
-			{
-				{csz_sFL_,csz_sFR_,csz_sRL_,csz_sRR_},
-				{csz_aFL_,csz_aFR_,csz_aRL_,csz_aRR_}
-			};
-			assert(index < 4);
-			const char* const prefix = prefix_table[IsSwivel ? 1 : 0][index];
-			std::string constructed_name;
-			//we'll go down the list
-			using namespace Framework::Base;
-			#pragma region _Entity1D_
-			//entity 1D
-			rotary_properties::Entity1D_Props& e1d = update.entity_props;
-			constructed_name = prefix, constructed_name += csz_Entity1D_StartingPosition;
-			e1d.m_StartingPosition = asset_properties->get_number(constructed_name.c_str(), e1d.m_StartingPosition);
-			constructed_name = prefix, constructed_name += csz_Entity1D_Mass;
-			e1d.m_Mass = asset_properties->get_number(constructed_name.c_str(), e1d.m_Mass);
-			constructed_name = prefix, constructed_name += csz_Entity1D_Dimension;
-			e1d.m_Dimension = asset_properties->get_number(constructed_name.c_str(), e1d.m_Dimension);
-			constructed_name = prefix, constructed_name += csz_Entity1D_IsAngular;
-			e1d.m_IsAngular = asset_properties->get_bool(constructed_name.c_str(), e1d.m_IsAngular);
-			#pragma endregion
-			//TODO finish list
-		}
+			{csz_sFL_,csz_sFR_,csz_sRL_,csz_sRR_},
+			{csz_aFL_,csz_aFR_,csz_aRL_,csz_aRR_}
+		};
+		assert(index < 4);
+		const char* const prefix = prefix_table[IsSwivel ? 1 : 0][index];
+		init_rotary_properties(asset_properties, update, prefix);
 	}
 public:
 	SwerveRobot_Internal()
