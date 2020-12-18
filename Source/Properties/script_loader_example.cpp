@@ -241,14 +241,14 @@ private:
 			PUT_NUMBER_suffix(Rotary_PID, val._pid.d, _d);
 			//PUT_NUMBER(Rotary_PrecisionTolerance, val.PrecisionTolerance);
 			//Use _c, _t1, _t2, _t3, _t4 for array 0..5 respectively
-			//GET_NUMBER(Rotary_Voltage_Terms) //PolynomialEquation_forth_Props 
+			//PUT_NUMBER(Rotary_Voltage_Terms) //PolynomialEquation_forth_Props 
 			PUT_NUMBER(Rotary_InverseMaxAccel, val.inv_max_accel);
 			//PUT_NUMBER(Rotary_InverseMaxDecel, val.InverseMaxDecel);
 			//PUT_NUMBER(Rotary_Positive_DeadZone, val.Positive_DeadZone);
 			//PUT_NUMBER(Rotary_Negative_DeadZone, val.Negative_DeadZone);
 			//PUT_NUMBER(Rotary_MinLimitRange, val.MinLimitRange);
 			//PUT_NUMBER(Rotary_MaxLimitRange, val.MaxLimitRange);
-			//GET_NUMBER(Rotary_Feedback_DiplayRow, Rotary_.Feedback_DiplayRow);
+			//PUT_NUMBER(Rotary_Feedback_DiplayRow, Rotary_.Feedback_DiplayRow);
 			//The logic of loop states. From LUA point of view, was if I didn't have it... it was none = 0, if I do and it is false
 			//it's open which = 1, if "is_closed" is true which = 2 and if "is_closed2" is true (for position only) = 3
 			//Note: Not having it means I can't even try to read it
@@ -256,6 +256,27 @@ private:
 			PUT_BOOL(Rotary_PID_Console_Dump, val.show_pid_dump); //bool
 			PUT_BOOL(Rotary_UseAggressiveStop, val.use_aggressive_stop); //bool
 			PUT_BOOL(Rotary_EncoderReversed_Wheel, val.encoder_reversed_wheel); //bool
+		}
+		#pragma endregion
+		#pragma region _Average Drive Motor_
+		{
+			prefix = "";
+			averaged_motors val;
+
+			PUT_NUMBER(EncoderSimulation_Wheel_Mass, val.wheel_mass);
+			PUT_NUMBER(EncoderSimulation_COF_Efficiency, val.cof_efficiency);
+			PUT_NUMBER(EncoderSimulation_GearReduction, val.gear_reduction);
+			PUT_NUMBER(EncoderSimulation_TorqueAccelerationDampener, val.torque_on_wheel_radius);
+			PUT_NUMBER(EncoderSimulation_DriveWheelRadius, val.drive_wheel_radius);
+			PUT_NUMBER(EncoderSimulation_NoMotors, val.number_of_motors);
+			PUT_NUMBER(EncoderSimulation_PayloadMass, val.payload_mass);
+			PUT_NUMBER(EncoderSimulation_SpeedLossConstant, val.speed_loss_constant);
+			PUT_NUMBER(EncoderSimulation_DriveTrainEfficiency, val.drive_train_effciency);
+			//	struct Motor_Specs
+			PUT_NUMBER(EncoderSimulation_FreeSpeed_RPM, val.free_speed_rpm);
+			PUT_NUMBER(EncoderSimulation_Stall_Torque_NM, val.stall_torque);
+			PUT_NUMBER(EncoderSimulation_Stall_Current_Amp, val.stall_current_amp);
+			PUT_NUMBER(EncoderSimulation_Free_Current_Amp, val.free_current_amp);
 		}
 		#pragma endregion
 

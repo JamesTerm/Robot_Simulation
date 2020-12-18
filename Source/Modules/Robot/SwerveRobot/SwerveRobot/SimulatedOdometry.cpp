@@ -413,7 +413,32 @@ class COMMON_API Drive_Train_Characteristics
 			EncoderSimulation_Properties default_props;
 			m_Props = default_props.GetEncoderSimulationProps();
 		}
-		void UpdateProps(const EncoderSimulation_Props &props) {m_Props=props;}
+		//void UpdateProps(const EncoderSimulation_Props &props) {m_Props=props;}
+		void UpdateProps(const Framework::Base::asset_manager* props = NULL)
+		{ 
+			if (!props)
+				return;
+			using namespace ::properties::registry_v1;
+			#define GET_NUMBER(x,y) \
+			y = props->get_number(csz_##x, y);
+
+			GET_NUMBER(EncoderSimulation_Wheel_Mass,m_Props.Wheel_Mass);
+			GET_NUMBER(EncoderSimulation_COF_Efficiency, m_Props.COF_Efficiency);
+			GET_NUMBER(EncoderSimulation_GearReduction, m_Props.GearReduction);
+			GET_NUMBER(EncoderSimulation_TorqueAccelerationDampener, m_Props.TorqueAccelerationDampener);
+			GET_NUMBER(EncoderSimulation_DriveWheelRadius, m_Props.DriveWheelRadius);
+			GET_NUMBER(EncoderSimulation_NoMotors, m_Props.NoMotors);
+			GET_NUMBER(EncoderSimulation_PayloadMass, m_Props.PayloadMass);
+			GET_NUMBER(EncoderSimulation_SpeedLossConstant, m_Props.SpeedLossConstant);
+			GET_NUMBER(EncoderSimulation_DriveTrainEfficiency, m_Props.DriveTrainEfficiency);
+			//	struct Motor_Specs
+			EncoderSimulation_Props::Motor_Specs& motor = m_Props.motor;
+			GET_NUMBER(EncoderSimulation_FreeSpeed_RPM, motor.FreeSpeed_RPM);
+			GET_NUMBER(EncoderSimulation_Stall_Torque_NM, motor.Stall_Torque_NM);
+			GET_NUMBER(EncoderSimulation_Stall_Current_Amp, motor.Stall_Current_Amp);
+			GET_NUMBER(EncoderSimulation_Free_Current_Amp, motor.Free_Current_Amp);
+			#undef GET_NUMBER
+		}
 
 		__inline double GetAmp_To_Torque_nm(double Amps) const
 		{
@@ -562,14 +587,16 @@ public:
 	Encoder_Simulator2(const char* EntityName = "EncSimulator") : m_Time_s(0.0), m_EncoderScalar(1.0), m_ReverseMultiply(1.0), m_Position(0.0)
 	{
 	}
-	virtual void Initialize(const Ship_1D_Properties* props = NULL)
+	virtual void Initialize(const Framework::Base::asset_manager *props = NULL)
 	{
-		const Rotary_Properties* rotary_props = dynamic_cast<const Rotary_Properties*>(props);
-		if (rotary_props)
-		{
+		//const Rotary_Properties* rotary_props = dynamic_cast<const Rotary_Properties*>(props);
+		//if (rotary_props)
+		//{
 			//m_DriveTrain.UpdateProps(rotary_props->GetEncoderSimulationProps());
-			m_EncoderScalar = rotary_props->GetRotaryProps().EncoderToRS_Ratio;
-		}
+		//	m_EncoderScalar = rotary_props->GetRotaryProps().EncoderToRS_Ratio;
+		//}
+		m_DriveTrain.UpdateProps(props);
+		//TODO also get encoder scaler
 
 		#if 0
 		//m_Physics.SetMass(68);  //(about 150 pounds)
@@ -743,7 +770,7 @@ public:
 		//Comment this out to do bench testing
 		m_EncoderKind = kind;
 	}
-	virtual void Initialize(const Ship_1D_Properties* props = NULL)
+	virtual void Initialize(const Framework::Base::asset_manager *props = NULL)
 	{
 		__super::Initialize(props);
 		m_Physics.SetAngularInertiaCoefficient(0.5);  //Going for solid cylinder
@@ -887,12 +914,12 @@ public:
 	Potentiometer_Tester3(const char* EntityName = "PotSimulator3") : Encoder_Simulator2(EntityName), m_InvEncoderToRS_Ratio(1.0)
 	{
 	}
-	virtual void Initialize(const Ship_1D_Properties* props = NULL)
+	virtual void Initialize(const Framework::Base::asset_manager* props = NULL)
 	{
 		__super::Initialize(props);
-		const Rotary_Properties* rotary = dynamic_cast<const Rotary_Properties*>(props);
-		if (rotary)
-			m_InvEncoderToRS_Ratio = 1.0 / rotary->GetRotaryProps().EncoderToRS_Ratio;
+		//const Rotary_Properties* rotary = dynamic_cast<const Rotary_Properties*>(props);
+		//if (rotary)
+		//	m_InvEncoderToRS_Ratio = 1.0 / rotary->GetRotaryProps().EncoderToRS_Ratio;
 		m_SlackedValue = GetDistance();
 	}
 	void UpdatePotentiometerVoltage(double Voltage)
@@ -1000,7 +1027,7 @@ public:
 		m_LeftEncoder.Initialize(NULL);
 		m_RightEncoder.Initialize(NULL);
 	}
-	virtual void Initialize(const Ship_1D_Properties* props = NULL)
+	virtual void Initialize(const Framework::Base::asset_manager* props = NULL)
 	{
 		m_LeftEncoder.Initialize(props);
 		m_RightEncoder.Initialize(props);
@@ -1059,7 +1086,7 @@ private:
 	#ifdef __UseLegacySimulation__
 	Legacy::Potentiometer_Tester2 m_Potentiometers[4]; //simulate a real potentiometer for calibration testing
 	//TODO get simulator 3 working
-	Legacy::Encoder_Simulator2 m_Encoders[4];
+	std::shared_ptr<Legacy::Encoder_Simulator2> m_Encoders[4];
 	#endif
 	bool m_UseBypass = true;
 
@@ -1087,18 +1114,38 @@ public:
 			m_bypass_properties.swivel_max_speed[3] = 8.0;
 
 		#ifdef __UseLegacySimulation__
-		//TODO enable once we have simulator 3 working
-		#if 0
-		using Encoder_Simulator3 = Legacy::Encoder_Simulator3;
-		m_Encoders[0].SetEncoderKind(Encoder_Simulator3::eRW_Left);
-		m_Encoders[1].SetEncoderKind(Encoder_Simulator3::eRW_Right);
-		m_Encoders[2].SetEncoderKind(Encoder_Simulator3::eReadOnlyLeft);
-		m_Encoders[3].SetEncoderKind(Encoder_Simulator3::eReadOnlyRight);
-		#endif
-		//TODO set up properties here from asset management
+		
 		for (size_t i = 0; i < 4; i++)
 		{
-			m_Encoders[i].Initialize();
+			//TODO hook up to properties... the defaults do not work with sim 3, as they were made for sim 2
+			//I may want to make the defaults for 3 override as well
+			const bool Simulator3 = false;
+			if (Simulator3)
+			{
+				using Encoder_Simulator3 = Legacy::Encoder_Simulator3;
+				m_Encoders[i] = std::make_shared<Encoder_Simulator3>();
+				Encoder_Simulator3* ptr = dynamic_cast<Encoder_Simulator3 *>(m_Encoders[i].get());
+
+				switch (i)
+				{
+
+				case 0:
+					ptr->SetEncoderKind(Encoder_Simulator3::eRW_Left);
+					break;
+				case 1:
+					ptr->SetEncoderKind(Encoder_Simulator3::eRW_Right);
+					break;
+				case 2:
+					ptr->SetEncoderKind(Encoder_Simulator3::eReadOnlyLeft);
+					break;
+				case 3:
+					ptr->SetEncoderKind(Encoder_Simulator3::eReadOnlyRight);
+					break;
+				}
+			}
+			else
+				m_Encoders[i] = std::make_shared<Legacy::Encoder_Simulator2>();
+			m_Encoders[i]->Initialize(props);
 			m_Potentiometers[i].Initialize();
 		}
 		#endif
@@ -1110,7 +1157,7 @@ public:
 
 		for (size_t i = 0; i < 4; i++)
 		{
-			m_Encoders[i].ResetPos();
+			m_Encoders[i]->ResetPos();
 			m_Potentiometers[i].ResetPos();
 		}
 		#else
@@ -1167,10 +1214,10 @@ public:
 				m_current_position[i] = NormalizeRotation2(m_Potentiometers[i].GetPotentiometerCurrentPosition());
 				m_CurrentVelocities.Velocity.AsArray[i + 4] = m_current_position[i];
 
-				m_Encoders[i].SetTimeDelta(d_time_s);
-				m_Encoders[i].UpdateEncoderVoltage(CurrentVoltage.Velocity.AsArray[i]);
-				m_Encoders[i].TimeChange();
-				m_CurrentVelocities.Velocity.AsArray[i] = m_Encoders[i].GetEncoderVelocity();
+				m_Encoders[i]->SetTimeDelta(d_time_s);
+				m_Encoders[i]->UpdateEncoderVoltage(CurrentVoltage.Velocity.AsArray[i]);
+				m_Encoders[i]->TimeChange();
+				m_CurrentVelocities.Velocity.AsArray[i] = m_Encoders[i]->GetEncoderVelocity();
 			}
 			#else
 			//TODO reserved

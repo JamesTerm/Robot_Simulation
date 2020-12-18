@@ -100,6 +100,29 @@ Rg_(Rotary_Voltage_Stall_Safety_PulseBurstTimeOut) //size_t
 Rg_(Rotary_Voltage_Stall_Safety_StallCounterThreshold) //size_t
 #pragma endregion
 
+#pragma region _simulation odometry legacy_
+//struct EncoderSimulation_Props
+//{
+//all doubles, and only one instance... easy peasy
+	Rg_(EncoderSimulation_Wheel_Mass);  //This is a total mass of all the wheels and gears for one side
+	Rg_(EncoderSimulation_COF_Efficiency);
+	Rg_(EncoderSimulation_GearReduction);  //In reciprocal form of spread sheet   driving gear / driven gear
+	Rg_(EncoderSimulation_TorqueAccelerationDampener); //ratio 1.0 no change
+	Rg_(EncoderSimulation_DriveWheelRadius); //in meters
+	Rg_(EncoderSimulation_NoMotors);  //Used to get total torque
+	Rg_(EncoderSimulation_PayloadMass);  //The robot weight in kg
+	Rg_(EncoderSimulation_SpeedLossConstant);
+	Rg_(EncoderSimulation_DriveTrainEfficiency);
+//	struct Motor_Specs
+	//{
+	Rg_(EncoderSimulation_FreeSpeed_RPM);
+	Rg_(EncoderSimulation_Stall_Torque_NM);
+	Rg_(EncoderSimulation_Stall_Current_Amp);
+	Rg_(EncoderSimulation_Free_Current_Amp);
+	//} motor;
+//};
+#pragma endregion
+
 #undef Reg
 
 }}
