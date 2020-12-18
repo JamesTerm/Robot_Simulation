@@ -261,6 +261,7 @@ private:
 		#pragma region _Average Drive Motor_
 		{
 			prefix = "";
+			PUT_BOOL(EncoderSimulation_UseEncoder2,false); //use encoder 3 simulation
 			averaged_motors val;
 
 			PUT_NUMBER(EncoderSimulation_Wheel_Mass, val.wheel_mass);

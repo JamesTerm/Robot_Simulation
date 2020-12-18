@@ -261,7 +261,7 @@ private:
 	Ship_1D_Properties m_EncoderProps;
 	//GG_Framework::Base::EventMap m_DummyMap;
 	Framework::Base::LatencyFilter m_Latency;
-	double m_EncoderScalar; //used to implement reverse
+	double m_EncoderScaler; //used to implement reverse
 	bool m_GetEncoderFirstCall;  //allows GetEncoderVelocity to know when a new set of calls occur within a time slice
 public:
 	Encoder_Simulator(const char *EntityName="EncSimulator") : m_Time_s(0.0), m_EncoderProps(
@@ -274,7 +274,7 @@ public:
 		//Ship_1D_Props::eRobotArm,
 		false	//Not using the range
 	), Ship_1D(EntityName), m_Latency(0.300),
-		m_EncoderScalar(1.0), m_GetEncoderFirstCall(false)
+		m_EncoderScaler(1.0), m_GetEncoderFirstCall(false)
 	{
 	}
 	virtual void Initialize(const Ship_1D_Properties* props = NULL)
@@ -306,7 +306,7 @@ public:
 	virtual double GetEncoderVelocity()
 	{
 		#if 0
-		return m_Physics.GetVelocity() * m_EncoderScalar;
+		return m_Physics.GetVelocity() * m_EncoderScaler;
 		#else
 		//if (!m_GetEncoderFirstCall) return m_Latency();
 
@@ -323,7 +323,7 @@ public:
 			Voltage = (c[4] * x4) + (c[3] * x3) + (c[2] * x2) + (c[1] * Voltage) + c[0];
 			Voltage *= Direction;
 		}
-		double ret = Voltage * m_EncoderProps.GetMaxSpeed() * m_EncoderScalar;
+		double ret = Voltage * m_EncoderProps.GetMaxSpeed() * m_EncoderScaler;
 		//ret=m_Latency(ret,m_Time_s);
 		m_GetEncoderFirstCall = false; //weed out the repeat calls
 		return ret;
@@ -339,9 +339,9 @@ public:
 	void SetReverseDirection(bool reverseDirection)
 	{
 		//emulates functionality of the encoder (needed because kids put them in differently)
-		m_EncoderScalar = reverseDirection ? -1.0 : 1.0;
+		m_EncoderScaler = reverseDirection ? -1.0 : 1.0;
 	}
-	void SetEncoderScalar(double value) {m_EncoderScalar=value;}  //This helps to simulate differences between sides
+	void SetEncoderScalar(double value) {m_EncoderScaler=value;}  //This helps to simulate differences between sides
 	void SetFriction(double StaticFriction,double KineticFriction) {}
 };
 
@@ -413,7 +413,7 @@ class COMMON_API Drive_Train_Characteristics
 			EncoderSimulation_Properties default_props;
 			m_Props = default_props.GetEncoderSimulationProps();
 		}
-		//void UpdateProps(const EncoderSimulation_Props &props) {m_Props=props;}
+		void UpdateProps(const EncoderSimulation_Props &props) {m_Props=props;}
 		void UpdateProps(const Framework::Base::asset_manager* props = NULL)
 		{ 
 			if (!props)
@@ -581,10 +581,10 @@ protected:
 	double m_Time_s;
 
 	double m_Position;  //also keep track of position to simulate distance use case (i.e. used as a potentiometer)
-	double m_EncoderScalar; //used for position updates
+	double m_EncoderScaler; //used for position updates
 	double m_ReverseMultiply; //used to implement set reverse direction
 public:
-	Encoder_Simulator2(const char* EntityName = "EncSimulator") : m_Time_s(0.0), m_EncoderScalar(1.0), m_ReverseMultiply(1.0), m_Position(0.0)
+	Encoder_Simulator2(const char* EntityName = "EncSimulator") : m_Time_s(0.0), m_EncoderScaler(1.0), m_ReverseMultiply(1.0), m_Position(0.0)
 	{
 	}
 	virtual void Initialize(const Framework::Base::asset_manager *props = NULL)
@@ -593,10 +593,11 @@ public:
 		//if (rotary_props)
 		//{
 			//m_DriveTrain.UpdateProps(rotary_props->GetEncoderSimulationProps());
-		//	m_EncoderScalar = rotary_props->GetRotaryProps().EncoderToRS_Ratio;
+		//	m_EncoderScaler = rotary_props->GetRotaryProps().EncoderToRS_Ratio;
 		//}
 		m_DriveTrain.UpdateProps(props);
-		//TODO also get encoder scaler
+		if (props)
+			m_EncoderScaler = props->get_number(properties::registry_v1::csz_EncoderSimulation_EncoderScaler, 1.0);
 
 		#if 0
 		//m_Physics.SetMass(68);  //(about 150 pounds)
@@ -665,14 +666,14 @@ public:
 		m_Physics.ApplyFractionalForce(FrictionForce, m_Time_s);  //apply the friction
 		double PositionDisplacement;
 		m_Physics.TimeChangeUpdate(m_Time_s, PositionDisplacement);
-		m_Position += PositionDisplacement * m_EncoderScalar * m_ReverseMultiply;
+		m_Position += PositionDisplacement * m_EncoderScaler * m_ReverseMultiply;
 	}
 	void SetReverseDirection(bool reverseDirection)
 	{
 		//emulates functionality of the encoder (needed because kids put them in differently)
 		m_ReverseMultiply = reverseDirection ? -1.0 : 1.0;
 	}
-	void SetEncoderScalar(double value) {m_EncoderScalar=value;}  //This helps to simulate differences between sides
+	void SetEncoderScalar(double value) {m_EncoderScaler=value;}  //This helps to simulate differences between sides
 	void SetFriction(double StaticFriction,double KineticFriction) {m_Physics.SetFriction(StaticFriction,KineticFriction);}
 	virtual void ResetPos()
 	{
@@ -772,6 +773,42 @@ public:
 	}
 	virtual void Initialize(const Framework::Base::asset_manager *props = NULL)
 	{
+
+		const double Pounds2Kilograms = 0.453592;
+		const double wheel_mass = 1.5;
+		const double cof_efficiency = 0.9;
+		const double gear_reduction = 1.0;
+		const double torque_on_wheel_radius = Inches2Meters(1.8);
+		const double drive_wheel_radius = Inches2Meters(4.0);
+		const double number_of_motors = 1;
+		const double payload_mass = 200 * Pounds2Kilograms;
+		const double speed_loss_constant = 0.81;
+		const double drive_train_effciency = 0.9;
+
+		const double free_speed_rpm = 263.88;
+		const double stall_torque = 34;
+		const double stall_current_amp = 84;
+		const double free_current_amp = 0.4;
+		EncoderSimulation_Props defaults_for_sim3 =
+		{
+			wheel_mass,   //This is a total mass of all the wheels and gears for one side
+			cof_efficiency,  //double COF_Efficiency;
+			gear_reduction,  //In reciprocal form of spread sheet   driving gear / driven gear
+			torque_on_wheel_radius, //double TorqueAccelerationDampener; //ratio.. where 1.0 is no change
+			drive_wheel_radius, //double DriveWheelRadius; //in meters
+			number_of_motors, //double NoMotors;  //Used to get total torque
+			payload_mass, //double PayloadMass;  //The robot weight in kg
+			speed_loss_constant, //double SpeedLossConstant;
+			drive_train_effciency, //double DriveTrainEfficiency;
+			//struct Motor_Specs
+			{
+				free_speed_rpm, //double FreeSpeed_RPM;
+				stall_torque, //double Stall_Torque_NM;
+				stall_current_amp, //double Stall_Current_Amp;
+				free_current_amp //double Free_Current_Amp;
+			} 
+		};
+		m_DriveTrain.UpdateProps(defaults_for_sim3);
 		__super::Initialize(props);
 		m_Physics.SetAngularInertiaCoefficient(0.5);  //Going for solid cylinder
 		//now to setup the payload physics   Note: each side pulls half the weight
@@ -862,7 +899,7 @@ public:
 
 		double PositionDisplacement;
 		m_Physics.TimeChangeUpdate(m_Time_s, PositionDisplacement);
-		m_Position += PositionDisplacement * m_EncoderScalar * m_ReverseMultiply;
+		m_Position += PositionDisplacement * m_EncoderScaler * m_ReverseMultiply;
 
 		//cache velocities
 		m_PreviousWheelVelocity = m_Physics.GetVelocity();
@@ -1085,7 +1122,6 @@ private:
 	} m_bypass_properties;
 	#ifdef __UseLegacySimulation__
 	Legacy::Potentiometer_Tester2 m_Potentiometers[4]; //simulate a real potentiometer for calibration testing
-	//TODO get simulator 3 working
 	std::shared_ptr<Legacy::Encoder_Simulator2> m_Encoders[4];
 	#endif
 	bool m_UseBypass = true;
@@ -1119,7 +1155,7 @@ public:
 		{
 			//TODO hook up to properties... the defaults do not work with sim 3, as they were made for sim 2
 			//I may want to make the defaults for 3 override as well
-			const bool Simulator3 = false;
+			const bool Simulator3 = props ? !props->get_bool(csz_EncoderSimulation_UseEncoder2,true) : false;
 			if (Simulator3)
 			{
 				using Encoder_Simulator3 = Legacy::Encoder_Simulator3;
