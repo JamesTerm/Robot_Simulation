@@ -283,7 +283,7 @@ private:
 			#pragma region _Rotary_
 			rotary_properties::Rotary_Props& Rotary_ = update.rotary_props;
 			rotary_properties::Rotary_Props::Rotary_Arm_GainAssist_Props& arm = update.rotary_props.ArmGainAssist;
-			GET_NUMBER(Rotary_VoltageScalar, Rotary_.VoltageScalar);
+			GET_NUMBER(Rotary_VoltageScaler, Rotary_.VoltageScalar);
 			GET_NUMBER(Rotary_EncoderToRS_Ratio, Rotary_.EncoderToRS_Ratio);
 			GET_NUMBER(Rotary_EncoderPulsesPerRevolution, Rotary_.EncoderPulsesPerRevolution);
 			//GET_NUMBER(Rotary_PID)  //double[3]... append _p _i _d to the name for each element
@@ -332,7 +332,32 @@ private:
 			GET_BOOL(Rotary_UseAggressiveStop, Rotary_.UseAggressiveStop); //bool
 			GET_BOOL(Rotary_EncoderReversed_Wheel, Rotary_.EncoderReversed_Wheel); //bool
 			#pragma endregion
-			//TODO arm gain assist properties here
+			#pragma region _Rotary arm gain / pot _
+			//GET_NUMBER(Rotary_Arm_GainAssist_PID_Up, arm.)  //double[3]; append _p _i _d to the name for each element
+			GET_NUMBER_suffix(Rotary_Arm_GainAssist_PID_Up, arm.PID_Up[0], _p);
+			GET_NUMBER_suffix(Rotary_Arm_GainAssist_PID_Up, arm.PID_Up[1], _i);
+			GET_NUMBER_suffix(Rotary_Arm_GainAssist_PID_Up, arm.PID_Up[2], _d);
+			//GET_NUMBER(Rotary_Arm_GainAssist_PID_Down) //double[3]; append _p _i _d to the name for each element
+			GET_NUMBER_suffix(Rotary_Arm_GainAssist_PID_Down, arm.PID_Down[0], _p);
+			GET_NUMBER_suffix(Rotary_Arm_GainAssist_PID_Down, arm.PID_Down[1], _i);
+			GET_NUMBER_suffix(Rotary_Arm_GainAssist_PID_Down, arm.PID_Down[2], _d);
+
+			GET_NUMBER(Rotary_Arm_GainAssist_InverseMaxAccel_Up, arm.InverseMaxAccel_Up);
+			GET_NUMBER(Rotary_Arm_GainAssist_InverseMaxDecel_Up, arm.InverseMaxDecel_Up);
+			GET_NUMBER(Rotary_Arm_GainAssist_InverseMaxAccel_Down, arm.InverseMaxAccel_Down);
+			GET_NUMBER(Rotary_Arm_GainAssist_InverseMaxDecel_Down, arm.InverseMaxDecel_Down);
+			GET_NUMBER(Rotary_Arm_GainAssist_SlowVelocityVoltage, arm.SlowVelocityVoltage);
+			GET_NUMBER(Rotary_Arm_GainAssist_SlowVelocity, arm.SlowVelocity);
+			GET_NUMBER(Rotary_Arm_GainAssist_GainAssistAngleScalar, arm.GainAssistAngleScalar);
+			GET_NUMBER(Rotary_Arm_GainAssist_ToleranceConsecutiveCount, arm.ToleranceConsecutiveCount);
+			GET_NUMBER(Rotary_Arm_GainAssist_VelocityPredictUp, arm.VelocityPredictUp);
+			GET_NUMBER(Rotary_Arm_GainAssist_VelocityPredictDown, arm.VelocityPredictDown);
+			GET_NUMBER(Rotary_Arm_GainAssist_PulseBurstTimeMs, arm.PulseBurstTimeMs);
+			GET_NUMBER(Rotary_Arm_GainAssist_PulseBurstRange, arm.PulseBurstRange)
+			GET_BOOL(Rotary_Arm_GainAssist_UsePID_Up_Only,arm.UsePID_Up_Only); //bool
+			//TODO pot properties need to be included (once we go beyond the simulation)
+			//GET_NUMBER(Rotary_Pot_offset, val.pot_offset);
+			#pragma endregion
 			//finished with the macros
 			#undef GET_NUMBER
 			#undef GET_BOOL

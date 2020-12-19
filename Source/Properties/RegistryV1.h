@@ -18,15 +18,15 @@ namespace registry_v1
 	Rg_(Build_bypass_simulation)
 
 #pragma region _prefix section_
-		//instance named prefix for each wheel front, and rear... of left and right, left is port side, right starboard
-		//or from top view with front facing up, s = speed, a = wheel angle
-		Rg_(FL_) Rg_(sFL_) Rg_(aFL_)  //front left
-		Rg_(FR_) Rg_(sFR_) Rg_(aFR_)  //front right
-		Rg_(RL_) Rg_(sRL_) Rg_(aRL_)  //rear left
-		Rg_(RR_) Rg_(sRR_) Rg_(aRR_)  //rear right
-		//One setting that applies to each
-		Rg_(CommonDrive_)
-		Rg_(CommonSwivel_)
+	//instance named prefix for each wheel front, and rear... of left and right, left is port side, right starboard
+	//or from top view with front facing up, s = speed, a = wheel angle
+	Rg_(FL_) Rg_(sFL_) Rg_(aFL_)  //front left
+	Rg_(FR_) Rg_(sFR_) Rg_(aFR_)  //front right
+	Rg_(RL_) Rg_(sRL_) Rg_(aRL_)  //rear left
+	Rg_(RR_) Rg_(sRR_) Rg_(aRR_)  //rear right
+	//One setting that applies to each
+	Rg_(CommonDrive_)
+	Rg_(CommonSwivel_)
 #pragma endregion
 
 	//Motion 2D properties
@@ -57,7 +57,7 @@ namespace registry_v1
 	Rg_(Ship_1D_UsingRange) //bool
 
 	//Rotary
-	Rg_(Rotary_VoltageScalar)
+	Rg_(Rotary_VoltageScaler)
 	Rg_(Rotary_EncoderToRS_Ratio)
 	Rg_(Rotary_EncoderPulsesPerRevolution)
 	Rg_(Rotary_PID)  //double[3]... append _p _i _d to the name for each element
@@ -98,6 +98,15 @@ namespace registry_v1
 	Rg_(Rotary_Voltage_Stall_Safety_OnBurstLevel)
 	Rg_(Rotary_Voltage_Stall_Safety_PulseBurstTimeOut) //size_t
 	Rg_(Rotary_Voltage_Stall_Safety_StallCounterThreshold) //size_t
+
+	//Rotary_Pot_
+	Rg_(Rotary_Pot_min_limit)
+	Rg_(Rotary_Pot_max_limit)
+	Rg_(Rotary_Pot_limit_tolerance);
+	Rg_(Rotary_Pot_offset);
+	Rg_(Rotary_Pot_range_flipped);
+	//Use _c, _t1, _t2, _t3, _t4 for array 0..5 respectively
+	Rg_(Rotary_Pot_curve_pot); //PotPolyTerms
 #pragma endregion
 
 #pragma region _simulation odometry legacy_
