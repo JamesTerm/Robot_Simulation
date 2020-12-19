@@ -19,6 +19,11 @@
 
 //Useful for diagnostics
 //#define __UseBypass__
+
+//We may want to disable spamming if we are looking for other printf statements
+//Note: this only is used if the properties turns it on
+//#define __DisableConsoleOutPID_Dump__
+
 #pragma endregion
 namespace Module {
 	namespace Robot {
@@ -611,7 +616,7 @@ public:
 				break;
 			}
 
-			#ifdef __DebugLUA__
+			#ifndef __DisableConsoleOutPID_Dump__
 			const double PosY = m_LastPosition * arm.GainAssistAngleScalar; //The scalar makes position more readable
 			const double PredictedPosY = GetPos_m()  * arm.GainAssistAngleScalar;
 			if ((fabs(PotentiometerVelocity) > 0.03) || (CurrentVelocity != 0.0) || (Voltage != 0.0))
@@ -620,7 +625,8 @@ public:
 				printf("v=%.2f y=%.2f py=%.2f p=%.2f e=%.2f eo=%.2f\n", Voltage, PosY, PredictedPosY, CurrentVelocity, PotentiometerVelocity, m_ErrorOffset);
 			}
 			//We may want a way to pick these separately 
-			#if 1
+			//TODO move these to PID dump export (we can't be dependent on SmartDashboard here)
+			#if 0
 			SmartDashboard::PutNumber("voltage", Voltage);
 			SmartDashboard::PutNumber("actual y", PosY);
 			SmartDashboard::PutNumber("desired y", PredictedPosY);
@@ -985,7 +991,7 @@ public:
 				assert(false);
 			}
 
-			#ifdef __DebugLUA__
+			#ifndef __DisableConsoleOutPID_Dump__
 			if (Encoder_Velocity != 0.0)
 			{
 				if (m_Rotary_Props.UseAggressiveStop)

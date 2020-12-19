@@ -174,6 +174,7 @@ private:
 		struct swivel_common
 		{
 			bool is_closed = 0;
+			bool show_pid_dump = false;
 			//ds_display_row = -1;
 			const bool use_pid_up_only = true;
 			struct pid_up { double p = 100; double i = 0; double d = 25; } _pid_swivel;
@@ -323,7 +324,7 @@ private:
 			//it's open which = 1, if "is_closed" is true which = 2 and if "is_closed2" is true (for position only) = 3
 			//Note: Not having it means I can't even try to read it
 			PUT_NUMBER(Rotary_LoopState, val.is_closed ? 2.0 : 1.0); //enum LoopStates... put as double, get as int
-			//PUT_BOOL(Rotary_PID_Console_Dump, val.show_pid_dump); //bool
+			PUT_BOOL(Rotary_PID_Console_Dump, val.show_pid_dump); //bool
 			PUT_BOOL(Rotary_UseAggressiveStop, val.use_aggressive_stop); //bool
 			//PUT_BOOL(Rotary_EncoderReversed_Wheel, val.encoder_reversed_wheel); //bool
 			//Rotary Pot---------------------------------------------------------------
