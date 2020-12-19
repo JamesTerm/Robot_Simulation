@@ -226,11 +226,65 @@ public:
 	{
 		m_SimulateOpposingForce = false;
 	}
-	virtual void Initialize(const Ship_1D_Properties* props = NULL)
+	virtual void Init_Ship_1D(const Ship_1D_Properties* props = NULL)
 	{
 		if (props)
 			m_PotentiometerProps = *props;
 		__super::Initialize(&m_PotentiometerProps);
+	}
+	virtual void Initialize(const Framework::Base::asset_manager* props = NULL)
+	{
+		#pragma region _setup get vars_
+		double ftest = 0.0;  //use to test if an asset exists
+
+		#define GET_NUMBER(x,y) \
+			constructed_name = prefix, constructed_name += csz_##x; \
+			y = props->get_number(constructed_name.c_str(), y);
+		#define GET_BOOL(x,y) \
+			constructed_name = prefix, constructed_name += csz_##x; \
+			y = props->get_bool(constructed_name.c_str(), y);
+
+		using namespace properties::registry_v1;
+		std::string constructed_name;
+		const char * const prefix = csz_CommonSwivel_;
+		#pragma endregion
+		//just pull the ship props from the asset manager
+		Ship_1D_Properties props_to_send;
+		#pragma region _Entity1D_
+		//entity 1D
+		Entity1D_Props& e1d = props_to_send.AsEntityProps();
+		//constructed_name = prefix, constructed_name += csz_Entity1D_StartingPosition;
+		//e1d.m_StartingPosition = asset_properties->get_number(constructed_name.c_str(), e1d.m_StartingPosition);
+		GET_NUMBER(Entity1D_StartingPosition, e1d.m_StartingPosition);
+		GET_NUMBER(Entity1D_Mass, e1d.m_Mass);
+		GET_NUMBER(Entity1D_Dimension, e1d.m_Dimension);
+		GET_BOOL(Entity1D_IsAngular,e1d.m_IsAngular);
+		#pragma endregion
+		#pragma region _Ship1D_
+		Ship_1D_Props& _Ship_1D = props_to_send.GetShip_1D_Props_rw();
+		GET_NUMBER(Ship_1D_MAX_SPEED, _Ship_1D.MAX_SPEED);
+		//IF we have this asset assign it to forward and reverse
+		if (props->get_number_native(constructed_name.c_str(), ftest))
+		{
+			_Ship_1D.MaxSpeed_Forward = _Ship_1D.MAX_SPEED;
+			_Ship_1D.MaxSpeed_Reverse = -_Ship_1D.MAX_SPEED;
+		}
+		GET_NUMBER(Ship_1D_MaxSpeed_Forward, _Ship_1D.MaxSpeed_Forward);
+		GET_NUMBER(Ship_1D_MaxSpeed_Reverse, _Ship_1D.MaxSpeed_Reverse);
+		GET_NUMBER(Ship_1D_ACCEL, _Ship_1D.ACCEL);
+		GET_NUMBER(Ship_1D_BRAKE, _Ship_1D.BRAKE);
+		GET_NUMBER(Ship_1D_MaxAccelForward, _Ship_1D.MaxAccelForward);
+		GET_NUMBER(Ship_1D_MaxAccelReverse, _Ship_1D.MaxAccelReverse);
+		GET_NUMBER(Ship_1D_MinRange, _Ship_1D.MinRange);
+		GET_NUMBER(Ship_1D_MaxRange, _Ship_1D.MaxRange);
+		GET_NUMBER(Ship_1D_DistanceDegradeScalar, _Ship_1D.DistanceDegradeScalar);
+		GET_BOOL(Ship_1D_UsingRange, _Ship_1D.UsingRange) //bool
+		#pragma endregion
+		//finished with macros
+		#undef GET_NUMBER
+		#undef GET_BOOL
+		//send these props
+		Init_Ship_1D(&props_to_send);
 	}
 	void UpdatePotentiometerVoltage(double Voltage)
 	{
@@ -1182,7 +1236,7 @@ public:
 			else
 				m_Encoders[i] = std::make_shared<Legacy::Encoder_Simulator2>();
 			m_Encoders[i]->Initialize(props);
-			m_Potentiometers[i].Initialize();
+			m_Potentiometers[i].Initialize(props);
 		}
 		#endif
 		ResetPos();

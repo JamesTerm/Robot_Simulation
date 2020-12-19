@@ -340,13 +340,13 @@ public:
 	{
 		using namespace properties::registry_v1;
 		m_assets = &assets;
-		#if 0
+		#if 1
 		assets.put_bool(csz_Build_bypass_simulation, false);
 		#else
 		assets.put_bool(csz_Build_bypass_simulation, true);
 		#endif
 		//TestIndivualWheels();
-		//TestCurivator();
+		TestCurivator();
 	}
 };
 
