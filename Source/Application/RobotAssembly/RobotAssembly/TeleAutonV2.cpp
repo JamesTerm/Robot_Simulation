@@ -22,6 +22,7 @@
 #include "../../../Modules/Output/OSG_Viewer/OSG_Viewer/OSG_Viewer.h"
 #include "../../../Modules/Output/OSG_Viewer/OSG_Viewer/SwerveRobot_UI.h"
 #include "../../../Modules/Output/OSG_Viewer/OSG_Viewer/Keyboard_State.h"
+#include "../../../Modules/Output/SmartDashboard_PID_Monitor.h"
 #include "../../../Properties/script_loader.h"
 #include "TeleAutonV2.h"
 
@@ -254,6 +255,11 @@ private:
 			{
 				return m_Entity.GetCurrentHeading();
 			});
+			m_robot.SetExternal_Velocity_PID_Monitor_Callback(
+				[](double Voltage, double  CurrentVelocity, double  Encoder_Velocity, double  ErrorOffset, double  CalibratedScaler)
+				{
+					Module::Output::Velocity_PID_Monitor(Voltage, CurrentVelocity, Encoder_Velocity, ErrorOffset, CalibratedScaler);
+				});
 			#pragma endregion
 			#pragma region _AI Input Robot linking_
 			m_Goal.Set_GetCurrentPosition([&]() -> Vec2D

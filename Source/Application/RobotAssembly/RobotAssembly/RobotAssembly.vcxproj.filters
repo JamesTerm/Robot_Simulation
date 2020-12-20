@@ -131,5 +131,8 @@
     <ClInclude Include="TeleAutonV2.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\..\Modules\Output\SmartDashboard_PID_Monitor.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

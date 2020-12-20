@@ -24,6 +24,12 @@
 //Note: this only is used if the properties turns it on
 //#define __DisableConsoleOutPID_Dump__
 
+#ifndef __DisableConsoleOutPID_Dump__
+#define pid_cout(x,...) printf(x,__VA_ARGS__);
+#else
+#define pid_cout(x,...)
+#endif
+
 #pragma endregion
 namespace Module {
 	namespace Robot {
@@ -695,6 +701,7 @@ private:
 	double m_RequestedVelocity_Difference=0.0;
 	EncoderUsage m_EncoderState=eNoEncoder; //dynamically able to change state
 	double m_PreviousVelocity=0.0; //used to compute acceleration
+	std::function<RotarySystem_Velocity::PID_Monitor_proto> m_PID_Monitor_callback=nullptr;
 	#pragma endregion
 protected:
 	virtual void RequestedVelocityCallback(double VelocityToUse, double DeltaTime_s)
@@ -991,23 +998,42 @@ public:
 				assert(false);
 			}
 
-			#ifndef __DisableConsoleOutPID_Dump__
 			if (Encoder_Velocity != 0.0)
 			{
+				//Note: if we want a console dump and we have an external plugin... it can be implemented and managed there
 				if (m_Rotary_Props.UseAggressiveStop)
-					printf("v=%.2f p=%.2f e=%.2f eo=%.2f\n", Voltage, CurrentVelocity, Encoder_Velocity, m_ErrorOffset);
+				{
+					if (m_PID_Monitor_callback)
+						m_PID_Monitor_callback(Voltage, CurrentVelocity, Encoder_Velocity, m_ErrorOffset, 0.0);
+					else
+						pid_cout("v=%.2f p=%.2f e=%.2f eo=%.2f\n", Voltage, CurrentVelocity, Encoder_Velocity, m_ErrorOffset);
+				}
 				else
 				{
 					if (m_PIDController.GetI() == 0.0)
-						printf("v=%.2f p=%.2f e=%.2f eo=%.2f cs=%.2f\n", Voltage, CurrentVelocity, Encoder_Velocity, m_ErrorOffset, m_CalibratedScaler / MaxSpeed);
+					{
+						pid_cout("v=%.2f p=%.2f e=%.2f eo=%.2f cs=%.2f\n", Voltage, CurrentVelocity, Encoder_Velocity, m_ErrorOffset, m_CalibratedScaler / MaxSpeed);
+						if (m_PID_Monitor_callback)
+							m_PID_Monitor_callback(Voltage, CurrentVelocity, Encoder_Velocity, m_ErrorOffset, m_CalibratedScaler / MaxSpeed);
+						else
+							pid_cout("v=%.2f p=%.2f e=%.2f eo=%.2f\n", Voltage, CurrentVelocity, Encoder_Velocity, m_ErrorOffset);
+					}
 					else
-						printf("v=%.2f p=%.2f e=%.2f i=%.2f cs=%.2f\n", Voltage, CurrentVelocity, Encoder_Velocity, m_PIDController.GetTotalError(), m_CalibratedScaler / MaxSpeed);
+					{
+						if (m_PID_Monitor_callback)
+							m_PID_Monitor_callback(Voltage, CurrentVelocity, Encoder_Velocity, m_PIDController.GetTotalError(), m_CalibratedScaler / MaxSpeed);
+						else
+							pid_cout("v=%.2f p=%.2f e=%.2f i=%.2f cs=%.2f\n", Voltage, CurrentVelocity, Encoder_Velocity, m_PIDController.GetTotalError(), m_CalibratedScaler / MaxSpeed);
+					}
 				}
 			}
-			#endif
 		}
 
 		m_RobotControl->UpdateRotaryVoltage(m_InstanceIndex, Voltage);
+	}
+	void SetExternal_PID_Monitor_Callback(std::function<RotarySystem_Velocity::PID_Monitor_proto> callback)
+	{
+		m_PID_Monitor_callback = callback;
 	}
 };
 
@@ -1151,6 +1177,7 @@ private:
 	std::unique_ptr<Rotary_Velocity_Control> m_rotary_legacy;
 	std::function<void(double new_voltage)> m_VoltageCallback;
 	std::function<double()> m_OdometryCallack = nullptr;
+	std::function<RotarySystem_Velocity::PID_Monitor_proto> m_PID_callback; //cache to delay hook until init
 	#pragma endregion
 	#pragma region _Rotary_Control_Interface_
 protected: //from Rotary_Control_Interface
@@ -1176,6 +1203,8 @@ public:
 		if (m_rotary_legacy == nullptr)
 		{
 			m_rotary_legacy = std::make_unique<Rotary_Velocity_Control>("rotary_velocity", this, InstanceIndex);
+			//now we can set hooks
+			m_rotary_legacy->SetExternal_PID_Monitor_Callback(m_PID_callback);
 			//create a new rotary properties and init with it
 			Rotary_Properties legacy_props;
 			//if client has provided properties, update them
@@ -1222,6 +1251,10 @@ public:
 	void SetOdometryCallback(std::function<double()> callback)
 	{
 		m_OdometryCallack = callback;
+	}
+	void SetExternal_PID_Monitor_Callback(std::function<RotarySystem_Velocity::PID_Monitor_proto> callback)
+	{
+		m_PID_callback = callback;
 	}
 };
 #pragma endregion
@@ -1307,7 +1340,10 @@ void RotarySystem_Velocity::SetOdometryCallback(std::function<double()> callback
 {
 	m_rotary_system->SetOdometryCallback(callback);
 }
-
+void RotarySystem_Velocity::SetExternal_PID_Monitor_Callback(std::function<PID_Monitor_proto> callback)
+{
+	m_rotary_system->SetExternal_PID_Monitor_Callback(callback);
+}
 #pragma endregion
 #pragma endregion
 

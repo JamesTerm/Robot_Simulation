@@ -332,6 +332,13 @@ private:
 		}
 		#pragma endregion
 
+		//Test PID
+		if (false)
+		{
+			prefix = csz_sFL_; //pick the encoder of the left front wheel
+			PUT_BOOL(Rotary_PID_Console_Dump, true); //bool
+		}
+
 		//finished with macros
 		#undef PUT_NUMBER
 		#undef PUT_BOOL

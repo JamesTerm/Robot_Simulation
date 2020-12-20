@@ -190,6 +190,7 @@
     <ClInclude Include="..\..\..\Modules\Output\OSG_Viewer\OSG_Viewer\Keyboard_State.h" />
     <ClInclude Include="..\..\..\Modules\Output\OSG_Viewer\OSG_Viewer\OSG_Viewer.h" />
     <ClInclude Include="..\..\..\Modules\Output\OSG_Viewer\OSG_Viewer\SwerveRobot_UI.h" />
+    <ClInclude Include="..\..\..\Modules\Output\SmartDashboard_PID_Monitor.h" />
     <ClInclude Include="..\..\..\Modules\Robot\DriveKinematics\DriveKinematics\Vehicle_Drive.h" />
     <ClInclude Include="..\..\..\Modules\Robot\Entity2D\Entity2D\Entity2D.h" />
     <ClInclude Include="..\..\..\Modules\Robot\MotionControl2D_physics\MotionControl2D_physics\MotionControl2D.h" />

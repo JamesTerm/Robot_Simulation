@@ -58,7 +58,7 @@ private:
 	std::function<void(double new_velocity)> m_ExternSetHeadingVelocity = nullptr;
 	std::function <Vec2D()> m_ExternGetCurrentPosition = nullptr;
 	std::function <double()> m_ExternGetCurrentHeading = nullptr;
-
+	std::function<SwerveRobot::PID_Velocity_proto> m_PID_Velocity_callback = nullptr;
 	#pragma endregion
 	void SetHooks(bool enable)
 	{
@@ -71,17 +71,16 @@ private:
 		//Oh what fun 22 hooks!
 		if (enable)
 		{
+			#define HOOK(x,y,z) \
+					x(\
+					[&](y)\
+					{\
+						z;\
+					});
+
 			//Link the swerve management to the odometry
-			m_swerve_mgmt.SetOdometryCallback(
-				[&]()
-			{
-				return m_Odometry.GetCurrentVelocities();
-			});
-			m_MotionControl2D.Set_GetCurrentHeading(
-				[&]()
-			{
-				return GetCurrentHeading();
-			});
+			HOOK(m_swerve_mgmt.SetOdometryCallback, , return m_Odometry.GetCurrentVelocities());
+			HOOK(m_MotionControl2D.Set_GetCurrentHeading, , return GetCurrentHeading());
 			//used for way points and motion control
 			m_MotionControl2D.Set_GetCurrentPosition(
 				[&]()
@@ -90,105 +89,38 @@ private:
 				MotionControl2D::Vector2D ret = { postion[0],postion[1] };
 				return ret;
 			});
-			m_Odometry.SetOdometryHeadingCallback(
-				[&]()
-			{
-				return GetCurrentHeading();
-			});
-			m_Odometry.SetOdometryCallback(
-				[&]()
-			{
-				return m_Simulation.GetCurrentVelocities();
-			});
-			m_Simulation.SetVoltageCallback(
-				[&]()
-			{
-				return m_Voltage;
-			});
+			HOOK(m_Odometry.SetOdometryHeadingCallback,, return GetCurrentHeading());
+			HOOK(m_Odometry.SetOdometryCallback,, return m_Simulation.GetCurrentVelocities());
+			HOOK(m_Simulation.SetVoltageCallback,, return m_Voltage);
 			#pragma region _Drive hooks_
 			//These have to be unrolled unfortunately
-			m_Drive[0].Set_UpdateCurrentVoltage(
-				[&](double new_voltage)
-			{
-				m_Voltage.Velocity.AsArray[0] = new_voltage;
-			});
-			m_Drive[1].Set_UpdateCurrentVoltage(
-				[&](double new_voltage)
-			{
-				m_Voltage.Velocity.AsArray[1] = new_voltage;
-			});
-			m_Drive[2].Set_UpdateCurrentVoltage(
-				[&](double new_voltage)
-			{
-				m_Voltage.Velocity.AsArray[2] = new_voltage;
-			});
-			m_Drive[3].Set_UpdateCurrentVoltage(
-				[&](double new_voltage)
-			{
-				m_Voltage.Velocity.AsArray[3] = new_voltage;
-			});
-			m_Drive[0].SetOdometryCallback(
-				[&]()
-			{
-				return m_Odometry.GetCurrentVelocities().Velocity.AsArray[0];
-			});
-			m_Drive[1].SetOdometryCallback(
-				[&]()
-			{
-				return m_Odometry.GetCurrentVelocities().Velocity.AsArray[1];
-			});
-			m_Drive[2].SetOdometryCallback(
-				[&]()
-			{
-				return m_Odometry.GetCurrentVelocities().Velocity.AsArray[2];
-			});
-			m_Drive[3].SetOdometryCallback(
-				[&]()
-			{
-				return m_Odometry.GetCurrentVelocities().Velocity.AsArray[3];
-			});
+			HOOK(m_Drive[0].Set_UpdateCurrentVoltage, double new_voltage, m_Voltage.Velocity.AsArray[0] = new_voltage);
+			HOOK(m_Drive[1].Set_UpdateCurrentVoltage, double new_voltage, m_Voltage.Velocity.AsArray[1] = new_voltage);
+			HOOK(m_Drive[2].Set_UpdateCurrentVoltage, double new_voltage, m_Voltage.Velocity.AsArray[2] = new_voltage);
+			HOOK(m_Drive[3].Set_UpdateCurrentVoltage, double new_voltage, m_Voltage.Velocity.AsArray[3] = new_voltage);
+
+			HOOK(m_Drive[0].SetOdometryCallback, , return m_Odometry.GetCurrentVelocities().Velocity.AsArray[0]);
+			HOOK(m_Drive[1].SetOdometryCallback, , return m_Odometry.GetCurrentVelocities().Velocity.AsArray[1]);
+			HOOK(m_Drive[2].SetOdometryCallback, , return m_Odometry.GetCurrentVelocities().Velocity.AsArray[2]);
+			HOOK(m_Drive[3].SetOdometryCallback, , return m_Odometry.GetCurrentVelocities().Velocity.AsArray[3]);
+
+			#define PID_parms double V, double  CV, double  EV, double  EO, double  CS
+			#define PID_parms2 V,CV,EV,EO,CS
+			HOOK(m_Drive[0].SetExternal_PID_Monitor_Callback, PID_parms, if (m_PID_Velocity_callback) m_PID_Velocity_callback(V, CV, EV, EO, CS));
+			HOOK(m_Drive[1].SetExternal_PID_Monitor_Callback, PID_parms, if (m_PID_Velocity_callback) m_PID_Velocity_callback(V, CV, EV, EO, CS));
+			HOOK(m_Drive[2].SetExternal_PID_Monitor_Callback, PID_parms, if (m_PID_Velocity_callback) m_PID_Velocity_callback(V, CV, EV, EO, CS));
+			HOOK(m_Drive[3].SetExternal_PID_Monitor_Callback, PID_parms, if (m_PID_Velocity_callback) m_PID_Velocity_callback(V, CV, EV, EO, CS));
 			#pragma endregion
 			#pragma region _Swivel hooks_
-			m_Swivel[0].Set_UpdateCurrentVoltage(
-				[&](double new_voltage)
-			{
-				m_Voltage.Velocity.AsArray[4 + 0] = new_voltage;
-			});
-			m_Swivel[1].Set_UpdateCurrentVoltage(
-				[&](double new_voltage)
-			{
-				m_Voltage.Velocity.AsArray[4 + 1] = new_voltage;
-			});
-			m_Swivel[2].Set_UpdateCurrentVoltage(
-				[&](double new_voltage)
-			{
-				m_Voltage.Velocity.AsArray[4 + 2] = new_voltage;
-			});
-			m_Swivel[3].Set_UpdateCurrentVoltage(
-				[&](double new_voltage)
-			{
-				m_Voltage.Velocity.AsArray[4 + 3] = new_voltage;
-			});
-			m_Swivel[0].SetOdometryCallback(
-				[&]()
-			{
-				return m_Odometry.GetCurrentVelocities().Velocity.AsArray[4 + 0];
-			});
-			m_Swivel[1].SetOdometryCallback(
-				[&]()
-			{
-				return m_Odometry.GetCurrentVelocities().Velocity.AsArray[4 + 1];
-			});
-			m_Swivel[2].SetOdometryCallback(
-				[&]()
-			{
-				return m_Odometry.GetCurrentVelocities().Velocity.AsArray[4 + 2];
-			});
-			m_Swivel[3].SetOdometryCallback(
-				[&]()
-			{
-				return m_Odometry.GetCurrentVelocities().Velocity.AsArray[4 + 3];
-			});
+			HOOK(m_Swivel[0].Set_UpdateCurrentVoltage, double new_voltage, m_Voltage.Velocity.AsArray[4 + 0] = new_voltage);
+			HOOK(m_Swivel[1].Set_UpdateCurrentVoltage, double new_voltage, m_Voltage.Velocity.AsArray[4 + 1] = new_voltage);
+			HOOK(m_Swivel[2].Set_UpdateCurrentVoltage, double new_voltage, m_Voltage.Velocity.AsArray[4 + 2] = new_voltage);
+			HOOK(m_Swivel[3].Set_UpdateCurrentVoltage, double new_voltage, m_Voltage.Velocity.AsArray[4 + 3] = new_voltage);
+
+			HOOK(m_Swivel[0].SetOdometryCallback, , return m_Odometry.GetCurrentVelocities().Velocity.AsArray[4 + 0]);
+			HOOK(m_Swivel[1].SetOdometryCallback, , return m_Odometry.GetCurrentVelocities().Velocity.AsArray[4 + 1]);
+			HOOK(m_Swivel[2].SetOdometryCallback, , return m_Odometry.GetCurrentVelocities().Velocity.AsArray[4 + 2]);
+			HOOK(m_Swivel[3].SetOdometryCallback, , return m_Odometry.GetCurrentVelocities().Velocity.AsArray[4 + 3]);
 			#pragma endregion
 		}
 		else
@@ -203,6 +135,7 @@ private:
 			{
 				m_Drive[i].Set_UpdateCurrentVoltage(nullptr);
 				m_Drive[i].SetOdometryCallback(nullptr);
+				m_Drive[i].SetExternal_PID_Monitor_Callback(nullptr);
 				m_Swivel[i].Set_UpdateCurrentVoltage(nullptr);
 				m_Swivel[i].SetOdometryCallback(nullptr);
 			}
@@ -662,6 +595,10 @@ public:
 	{
 		m_ExternGetCurrentHeading = callback;
 	}
+	void SetExternal_Velocity_PID_Monitor_Callback(std::function<SwerveRobot::PID_Velocity_proto> callback)
+	{
+		m_PID_Velocity_callback = callback;
+	}
 	#pragma endregion
 };
 #pragma region _wrapper methods_
@@ -724,6 +661,10 @@ void SwerveRobot::Set_GetCurrentPosition(std::function <Vec2D()> callback)
 void SwerveRobot::Set_GetCurrentHeading(std::function <double()> callback)
 {
 	m_SwerveRobot->Set_GetCurrentHeading(callback);
+}
+void SwerveRobot::SetExternal_Velocity_PID_Monitor_Callback(std::function<PID_Velocity_proto> callback)
+{
+	m_SwerveRobot->SetExternal_Velocity_PID_Monitor_Callback(callback);
 }
 const SwerveVelocities &SwerveRobot::GetCurrentVelocities() const
 {
