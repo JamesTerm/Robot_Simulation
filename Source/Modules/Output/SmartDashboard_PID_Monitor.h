@@ -29,6 +29,7 @@ void Position_PID_Monitor(double Voltage, double Position, double PredictedPosit
 	SmartDashboard::PutNumber("desired_velocity", CurrentVelocity);
 	SmartDashboard::PutNumber("actual_velocity", Encoder_Velocity);
 	SmartDashboard::PutNumber("pid_error_offset", ErrorOffset);
+	printf("v=%.2f y=%.2f py=%.2f p=%.2f e=%.2f eo=%.2f\n", Voltage, Position, PredictedPosition, CurrentVelocity, Encoder_Velocity, ErrorOffset);
 }
 
 	}

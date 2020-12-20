@@ -145,6 +145,9 @@ public:
 	void Set_UpdateCurrentVoltage(std::function<void(double new_voltage)> callback);
 	//provide access to the odometry for closed loops (e.g. potentiometer), use nullptr for open loops
 	void SetOdometryCallback(std::function<double()> callback);
+	//optional PID monitor for calibration
+	using PID_Monitor_proto = void(double Voltage, double Position, double PredictedPosition, double  CurrentVelocity, double  Encoder_Velocity, double  ErrorOffset);
+	void SetExternal_PID_Monitor_Callback(std::function<PID_Monitor_proto> callback);
 private:
 	std::shared_ptr<RotaryPosition_Internal> m_rotary_system;
 };

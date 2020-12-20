@@ -133,6 +133,7 @@ private:
 	PotUsage m_PotentiometerState=eNoPot; //dynamically able to turn off (e.g. panic button)
 	//A counter to count how many times the predicted position and intended position are withing tolerance consecutively
 	size_t m_ToleranceCounter=0;
+	std::function<RotarySystem_Position::PID_Monitor_proto> m_PID_Monitor_callback = nullptr;
 	#pragma endregion
 protected:
 	virtual void SetPotentiometerSafety(bool DisableFeedback)
@@ -622,25 +623,18 @@ public:
 				break;
 			}
 
-			#ifndef __DisableConsoleOutPID_Dump__
 			const double PosY = m_LastPosition * arm.GainAssistAngleScalar; //The scalar makes position more readable
 			const double PredictedPosY = GetPos_m()  * arm.GainAssistAngleScalar;
 			if ((fabs(PotentiometerVelocity) > 0.03) || (CurrentVelocity != 0.0) || (Voltage != 0.0))
 			{
-				//double PosY=RAD_2_DEG(m_LastPosition * arm.GainAssistAngleScalar);
-				printf("v=%.2f y=%.2f py=%.2f p=%.2f e=%.2f eo=%.2f\n", Voltage, PosY, PredictedPosY, CurrentVelocity, PotentiometerVelocity, m_ErrorOffset);
+				if (m_PID_Monitor_callback)
+					m_PID_Monitor_callback(Voltage, PosY, PredictedPosY, CurrentVelocity, PotentiometerVelocity, m_ErrorOffset);
+				else
+				{
+					//double PosY=RAD_2_DEG(m_LastPosition * arm.GainAssistAngleScalar);
+					pid_cout("v=%.2f y=%.2f py=%.2f p=%.2f e=%.2f eo=%.2f\n", Voltage, PosY, PredictedPosY, CurrentVelocity, PotentiometerVelocity, m_ErrorOffset);
+				}
 			}
-			//We may want a way to pick these separately 
-			//TODO move these to PID dump export (we can't be dependent on SmartDashboard here)
-			#if 0
-			SmartDashboard::PutNumber("voltage", Voltage);
-			SmartDashboard::PutNumber("actual y", PosY);
-			SmartDashboard::PutNumber("desired y", PredictedPosY);
-			SmartDashboard::PutNumber("desired velocity", CurrentVelocity);
-			SmartDashboard::PutNumber("actual velocity", PotentiometerVelocity);
-			SmartDashboard::PutNumber("pid error offset", m_ErrorOffset);
-			#endif
-			#endif
 		}
 
 		//Finally check to see if limit switches have been activated
@@ -656,6 +650,10 @@ public:
 		}
 		m_RobotControl->UpdateRotaryVoltage(m_InstanceIndex, Voltage);
 
+	}
+	void SetExternal_PID_Monitor_Callback(std::function<RotarySystem_Position::PID_Monitor_proto> callback)
+	{
+		m_PID_Monitor_callback = callback;
 	}
 };
 
@@ -1056,6 +1054,7 @@ private:
 	std::function<void(double new_voltage)> m_VoltageCallback = nullptr;
 	std::function<double()> m_OdometryCallack = nullptr;
 	double m_OpenLoop_position = 0.0;  //keep track internally if we are open loop
+	std::function<RotarySystem_Position::PID_Monitor_proto> m_PID_callback=nullptr; //cache to delay hook until init
 	#pragma endregion
 	void time_slice_bypass(double d_time_s)
 	{
@@ -1117,6 +1116,9 @@ public:
 		if (m_rotary_legacy == nullptr)
 		{
 			m_rotary_legacy = std::make_unique<Rotary_Position_Control>("rotary_position", this, InstanceIndex);
+			//now we can set hooks
+			m_rotary_legacy->SetExternal_PID_Monitor_Callback(m_PID_callback);
+
 			//create a new rotary properties and init with it
 			Rotary_Properties legacy_props;
 			//if client has provided properties, update them
@@ -1164,6 +1166,10 @@ public:
 	{
 		m_OdometryCallack = callback;
 	}
+	void SetExternal_PID_Monitor_Callback(std::function<RotarySystem_Position::PID_Monitor_proto> callback)
+	{
+		m_PID_callback = callback;
+	}
 };
 #pragma endregion
 #pragma region _RotaryVelocity_Internal_
@@ -1177,7 +1183,7 @@ private:
 	std::unique_ptr<Rotary_Velocity_Control> m_rotary_legacy;
 	std::function<void(double new_voltage)> m_VoltageCallback;
 	std::function<double()> m_OdometryCallack = nullptr;
-	std::function<RotarySystem_Velocity::PID_Monitor_proto> m_PID_callback; //cache to delay hook until init
+	std::function<RotarySystem_Velocity::PID_Monitor_proto> m_PID_callback=nullptr; //cache to delay hook until init
 	#pragma endregion
 	#pragma region _Rotary_Control_Interface_
 protected: //from Rotary_Control_Interface
@@ -1305,6 +1311,10 @@ void RotarySystem_Position::Set_UpdateCurrentVoltage(std::function<void(double n
 void RotarySystem_Position::SetOdometryCallback(std::function<double()> callback)
 {
 	m_rotary_system->SetOdometryCallback(callback);
+}
+void RotarySystem_Position::SetExternal_PID_Monitor_Callback(std::function<PID_Monitor_proto> callback)
+{
+	m_rotary_system->SetExternal_PID_Monitor_Callback(callback);
 }
 #pragma endregion
 #pragma region _Rotary Velocity_

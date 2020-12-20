@@ -336,6 +336,7 @@ private:
 		if (false)
 		{
 			prefix = csz_sFL_; //pick the encoder of the left front wheel
+			//prefix = csz_aFL_; //pick the potentiometer of the left front wheel
 			PUT_BOOL(Rotary_PID_Console_Dump, true); //bool
 		}
 

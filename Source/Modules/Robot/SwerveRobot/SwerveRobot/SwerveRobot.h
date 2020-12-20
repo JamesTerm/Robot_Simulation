@@ -67,6 +67,8 @@ public:
 	void Set_GetCurrentHeading(std::function <double()> callback);  //returns heading where 0 is north in radians
 	using PID_Velocity_proto = void(double Voltage, double  CurrentVelocity, double  Encoder_Velocity, double  ErrorOffset, double  CalibratedScaler);
 	void SetExternal_Velocity_PID_Monitor_Callback(std::function<PID_Velocity_proto> callback);
+	using PID_Position_proto = void(double Voltage, double Position, double PredictedPosition, double CurrentVelocity, double Encoder_Velocity, double ErrorOffset);
+	void SetExternal_Position_PID_Monitor_Callback(std::function<PID_Position_proto> callback);
 private:
 	std::shared_ptr<SwerveRobot_Internal> m_SwerveRobot;
 };

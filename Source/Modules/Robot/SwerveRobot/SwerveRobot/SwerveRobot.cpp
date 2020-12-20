@@ -27,6 +27,15 @@
 namespace Module {
 	namespace Robot {
 
+void Default_Velocity_PID_Monitor(double Voltage, double  CurrentVelocity, double  Encoder_Velocity, double  ErrorOffset, double  CalibratedScaler)
+{
+	printf("v=%.2f p=%.2f e=%.2f eo=%.2f cs=%.2f\n", Voltage, CurrentVelocity, Encoder_Velocity, ErrorOffset, CalibratedScaler);
+}
+void Default_Position_PID_Monitor(double Voltage, double Position, double PredictedPosition, double CurrentVelocity, double Encoder_Velocity, double ErrorOffset)
+{
+	printf("v=%.2f y=%.2f py=%.2f p=%.2f e=%.2f eo=%.2f\n", Voltage, Position, PredictedPosition, CurrentVelocity, Encoder_Velocity, ErrorOffset);
+}
+
 class SwerveRobot_Internal
 {
 private:
@@ -58,8 +67,9 @@ private:
 	std::function<void(double new_velocity)> m_ExternSetHeadingVelocity = nullptr;
 	std::function <Vec2D()> m_ExternGetCurrentPosition = nullptr;
 	std::function <double()> m_ExternGetCurrentHeading = nullptr;
-	std::function<SwerveRobot::PID_Velocity_proto> m_PID_Velocity_callback = nullptr;
-	#pragma endregion
+	std::function<SwerveRobot::PID_Velocity_proto> m_PID_Velocity_callback = Default_Velocity_PID_Monitor;
+	std::function<SwerveRobot::PID_Position_proto> m_PID_Position_callback = Default_Position_PID_Monitor;
+#pragma endregion
 	void SetHooks(bool enable)
 	{
 		#ifdef __UseSimpleMotionControl__
@@ -105,11 +115,11 @@ private:
 			HOOK(m_Drive[3].SetOdometryCallback, , return m_Odometry.GetCurrentVelocities().Velocity.AsArray[3]);
 
 			#define PID_parms double V, double  CV, double  EV, double  EO, double  CS
-			#define PID_parms2 V,CV,EV,EO,CS
-			HOOK(m_Drive[0].SetExternal_PID_Monitor_Callback, PID_parms, if (m_PID_Velocity_callback) m_PID_Velocity_callback(V, CV, EV, EO, CS));
-			HOOK(m_Drive[1].SetExternal_PID_Monitor_Callback, PID_parms, if (m_PID_Velocity_callback) m_PID_Velocity_callback(V, CV, EV, EO, CS));
-			HOOK(m_Drive[2].SetExternal_PID_Monitor_Callback, PID_parms, if (m_PID_Velocity_callback) m_PID_Velocity_callback(V, CV, EV, EO, CS));
-			HOOK(m_Drive[3].SetExternal_PID_Monitor_Callback, PID_parms, if (m_PID_Velocity_callback) m_PID_Velocity_callback(V, CV, EV, EO, CS));
+			HOOK(m_Drive[0].SetExternal_PID_Monitor_Callback, PID_parms, m_PID_Velocity_callback(V, CV, EV, EO, CS));
+			HOOK(m_Drive[1].SetExternal_PID_Monitor_Callback, PID_parms, m_PID_Velocity_callback(V, CV, EV, EO, CS));
+			HOOK(m_Drive[2].SetExternal_PID_Monitor_Callback, PID_parms, m_PID_Velocity_callback(V, CV, EV, EO, CS));
+			HOOK(m_Drive[3].SetExternal_PID_Monitor_Callback, PID_parms, m_PID_Velocity_callback(V, CV, EV, EO, CS));
+			#undef PID_parms
 			#pragma endregion
 			#pragma region _Swivel hooks_
 			HOOK(m_Swivel[0].Set_UpdateCurrentVoltage, double new_voltage, m_Voltage.Velocity.AsArray[4 + 0] = new_voltage);
@@ -121,7 +131,17 @@ private:
 			HOOK(m_Swivel[1].SetOdometryCallback, , return m_Odometry.GetCurrentVelocities().Velocity.AsArray[4 + 1]);
 			HOOK(m_Swivel[2].SetOdometryCallback, , return m_Odometry.GetCurrentVelocities().Velocity.AsArray[4 + 2]);
 			HOOK(m_Swivel[3].SetOdometryCallback, , return m_Odometry.GetCurrentVelocities().Velocity.AsArray[4 + 3]);
+
+			#define PID_parms double V, double Pos, double PP, double  CV, double  EV, double  EO
+			HOOK(m_Swivel[0].SetExternal_PID_Monitor_Callback, PID_parms, m_PID_Position_callback(V, Pos, PP, CV, EV, EO));
+			HOOK(m_Swivel[1].SetExternal_PID_Monitor_Callback, PID_parms, m_PID_Position_callback(V, Pos, PP, CV, EV, EO));
+			HOOK(m_Swivel[2].SetExternal_PID_Monitor_Callback, PID_parms, m_PID_Position_callback(V, Pos, PP, CV, EV, EO));
+			HOOK(m_Swivel[3].SetExternal_PID_Monitor_Callback, PID_parms, m_PID_Position_callback(V, Pos, PP, CV, EV, EO));
+
 			#pragma endregion
+			//done with these macros
+			#undef HOOK
+			#undef PID_parms
 		}
 		else
 		{
@@ -135,9 +155,10 @@ private:
 			{
 				m_Drive[i].Set_UpdateCurrentVoltage(nullptr);
 				m_Drive[i].SetOdometryCallback(nullptr);
-				m_Drive[i].SetExternal_PID_Monitor_Callback(nullptr);
+				m_Drive[i].SetExternal_PID_Monitor_Callback(Default_Velocity_PID_Monitor);
 				m_Swivel[i].Set_UpdateCurrentVoltage(nullptr);
 				m_Swivel[i].SetOdometryCallback(nullptr);
+				m_Swivel[i].SetExternal_PID_Monitor_Callback(Default_Position_PID_Monitor);
 			}
 		}
 	}
@@ -599,6 +620,11 @@ public:
 	{
 		m_PID_Velocity_callback = callback;
 	}
+	void SetExternal_Position_PID_Monitor_Callback(std::function<SwerveRobot::PID_Position_proto> callback)
+	{
+		m_PID_Position_callback = callback;
+	}
+
 	#pragma endregion
 };
 #pragma region _wrapper methods_
@@ -665,6 +691,10 @@ void SwerveRobot::Set_GetCurrentHeading(std::function <double()> callback)
 void SwerveRobot::SetExternal_Velocity_PID_Monitor_Callback(std::function<PID_Velocity_proto> callback)
 {
 	m_SwerveRobot->SetExternal_Velocity_PID_Monitor_Callback(callback);
+}
+void SwerveRobot::SetExternal_Position_PID_Monitor_Callback(std::function<PID_Position_proto> callback)
+{
+	m_SwerveRobot->SetExternal_Position_PID_Monitor_Callback(callback);
 }
 const SwerveVelocities &SwerveRobot::GetCurrentVelocities() const
 {

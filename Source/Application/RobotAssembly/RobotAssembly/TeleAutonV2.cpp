@@ -260,6 +260,12 @@ private:
 				{
 					Module::Output::Velocity_PID_Monitor(Voltage, CurrentVelocity, Encoder_Velocity, ErrorOffset, CalibratedScaler);
 				});
+			m_robot.SetExternal_Position_PID_Monitor_Callback(
+				[](double Voltage, double Position, double PredictedPosition, double CurrentVelocity, double Encoder_Velocity, double ErrorOffset)
+				{
+					Module::Output::Position_PID_Monitor(Voltage, Position, PredictedPosition, CurrentVelocity, Encoder_Velocity, ErrorOffset);
+				});
+
 			#pragma endregion
 			#pragma region _AI Input Robot linking_
 			m_Goal.Set_GetCurrentPosition([&]() -> Vec2D
