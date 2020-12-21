@@ -262,7 +262,8 @@ private:
 		#pragma region _Average Drive Motor_
 		{
 			prefix = "";
-			PUT_BOOL(EncoderSimulation_UseEncoder2,false); //use encoder 3 simulation
+			//TODO Simulator 3 does not bleed off properly... must fix
+			PUT_BOOL(EncoderSimulation_UseEncoder2,true); //use encoder 3 simulation if false
 			averaged_motors val;
 
 			PUT_NUMBER(EncoderSimulation_Wheel_Mass, val.wheel_mass);
