@@ -16,6 +16,7 @@
 #include "../../../Modules/Input/dx_Joystick_Controller/dx_Joystick_Controller/dx_Joystick.h"
 #include "../../../Modules/Input/JoystickConverter.h"
 #include "../../../Modules/Input/AI_Input/AI_Input_Example.h"
+#include "../../../Modules/Input/AI_Input/SmartDashboard_HelperFunctions.h"
 
 #include "../../../Modules/Robot/Entity2D/Entity2D/Entity2D.h"
 #include "../../../Modules/Robot/SwerveRobot/SwerveRobot/SwerveRobot.h"
@@ -355,7 +356,10 @@ public:
 			m_viewer.StartStreaming();
 			//Give driver station a default testing method by invoking here if we are in test mode
 			if (m_game_mode == game_mode::eTest)
-				test(1);
+			{
+				int test_to_run = (int)Auton_Smart_GetSingleValue("AutonTest", 1.0);
+				test(test_to_run);
+			}
 			if (m_game_mode == game_mode::eAuton)
 				m_Goal.GetGoal().Activate();
 		}
