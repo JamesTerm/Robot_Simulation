@@ -258,18 +258,18 @@ public:	//These are only public for the OS callbacks
 		hr = pDev->GetDeviceState(sizeof(DIJOYSTATE2), &js);
 		//Now to translate
 		Info.JoystickNumber = nr;
-		Info.lX = (float)js.lX / 1000.0f;
-		Info.lY = (float)js.lY / 1000.0f;
-		Info.lZ = (float)js.lZ / 1000.0f;
-		Info.lRx = (float)js.lRx / 1000.0f;
-		Info.lRy = (float)js.lRy / 1000.0f;
-		Info.lRz = (float)js.lRz / 1000.0f;
+		Info.Axis.Named.lX = (float)js.lX / 1000.0f;
+		Info.Axis.Named.lY = (float)js.lY / 1000.0f;
+		Info.Axis.Named.lZ = (float)js.lZ / 1000.0f;
+		Info.Axis.Named.lRx = (float)js.lRx / 1000.0f;
+		Info.Axis.Named.lRy = (float)js.lRy / 1000.0f;
+		Info.Axis.Named.lRz = (float)js.lRz / 1000.0f;
 		for (int i = 0; i < caps.nSliderCount; i++)
-			Info.rgSlider[i] = (float)js.rglSlider[i] / 1000.0f;
+			Info.Axis.Named.rgSlider[i] = (float)js.rglSlider[i] / 1000.0f;
 		for (int i = 0; i < caps.nPOVCount; i++)
 		{
 			int result = (int)js.rgdwPOV[i];
-			Info.rgPOV[i] = result == -1 ? -1.0f : (float)result / 100.0f;
+			Info.Axis.Named.rgPOV[i] = result == -1 ? -1.0f : (float)result / 100.0f;
 		}
 
 		//Now for the buttons (not really optimized but should be fine)

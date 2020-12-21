@@ -161,14 +161,14 @@ private:
 		if (m_game_mode==game_mode::eTele)
 		{
 			//Check if we are being driven by some AI method, we override it if we have any angular velocity (i.e. some teleop interaction)
-			const double AngularVelocity = (AnalogConversion(joyinfo.lZ, m_joystick_options) + m_Keyboard.GetState().bits.m_Z) * m_max_heading_rad;
+			const double AngularVelocity = (AnalogConversion(joyinfo.Axis.Named.lZ, m_joystick_options) + m_Keyboard.GetState().bits.m_Z) * m_max_heading_rad;
 			if (!IsZero(AngularVelocity) || (m_robot.GetIsDrivenAngular()==false))
 				m_robot.SetAngularVelocity(AngularVelocity);
 
 			//Get an input from the controllers to feed in... we'll hard code the x and y axis from both joy and keyboard
 			//we simply combine them so they can work inter-changeably (e.g. keyboard for strafing, joy for turning)
-			const double Forward = Feet2Meters(m_maxspeed * (AnalogConversion(joyinfo.lY, m_joystick_options) + m_Keyboard.GetState().bits.m_Y) * -1.0);
-			const double Right = Feet2Meters(m_maxspeed * (AnalogConversion(joyinfo.lX, m_joystick_options) + m_Keyboard.GetState().bits.m_X));
+			const double Forward = Feet2Meters(m_maxspeed * (AnalogConversion(joyinfo.Axis.Named.lY, m_joystick_options) + m_Keyboard.GetState().bits.m_Y) * -1.0);
+			const double Right = Feet2Meters(m_maxspeed * (AnalogConversion(joyinfo.Axis.Named.lX, m_joystick_options) + m_Keyboard.GetState().bits.m_X));
 
 			//Check if we are being driven by some AI method, we override it if we have any linear velocity (i.e. some teleop interaction)
 			//Note: this logic does not quite work right for keyboard if it uses the forward "sticky" button, but since this isn't a real

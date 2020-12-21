@@ -85,7 +85,7 @@ private:
 			if (m_joystick.read_joystick(JoyNum, joyinfo))
 			{
 				//Get an input from the controllers to feed in... we'll hard code the x and y axis
-				m_robot.UpdateVelocities(Feet2Meters(m_maxspeed*joyinfo.lY*-1.0), Feet2Meters(m_maxspeed*joyinfo.lX), joyinfo.lZ * m_max_heading_rad);
+				m_robot.UpdateVelocities(Feet2Meters(m_maxspeed*joyinfo.Axis.Named.lY*-1.0), Feet2Meters(m_maxspeed*joyinfo.Axis.Named.lX), joyinfo.Axis.Named.lZ * m_max_heading_rad);
 				//because of properties to factor we need to interpret the actual velocities resolved from the kinematics by inverse kinematics
 				m_Entity_Input.InterpolateVelocities(m_robot.GetIntendedVelocities());
 

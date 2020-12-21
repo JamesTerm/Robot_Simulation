@@ -73,13 +73,13 @@ int main(int argc, char *argv[])
 				switch (Display)
 				{
 				case 0:
-					printf("\r xaxis=%f yaxis=%f zaxis=%f button=0x%x             ", joyinfo.lX, joyinfo.lY, joyinfo.lZ, joyinfo.ButtonBank[0]);
+					printf("\r xaxis=%f yaxis=%f zaxis=%f button=0x%x             ", joyinfo.Axis.Named.lX, joyinfo.Axis.Named.lY, joyinfo.Axis.Named.lZ, joyinfo.ButtonBank[0]);
 					break;
 				case 1:
-					printf("\r xRot=%f yRot=%f zRot=%f POV=%f               ", joyinfo.lRx, joyinfo.lRy, joyinfo.lRz, joyinfo.rgPOV[0]);
+					printf("\r xRot=%f yRot=%f zRot=%f POV=%f               ", joyinfo.Axis.Named.lRx, joyinfo.Axis.Named.lRy, joyinfo.Axis.Named.lRz, joyinfo.Axis.Named.rgPOV[0]);
 					break;
 				case 2:
-					printf("\r slider0=%f slider1=%f                              ", joyinfo.rgSlider[0], joyinfo.rgSlider[1]);
+					printf("\r slider0=%f slider1=%f                              ", joyinfo.Axis.Named.rgSlider[0], joyinfo.Axis.Named.rgSlider[1]);
 					break;
 				case 3:
 					break;

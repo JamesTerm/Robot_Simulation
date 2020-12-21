@@ -98,7 +98,7 @@ public:
 					//goes to 1.0 for all axis so the diagonal result is a greater magnitude.  To fix we'll normalize the 
 					//direction with 1.0, and clip via min of the current value.. the result is the joystick has a circle
 					//instead of a square on its range of motion.
-					Vec2D JoyInput_To_Use(joyinfo.lX, joyinfo.lY);
+					Vec2D JoyInput_To_Use(joyinfo.Axis.Named.lX, joyinfo.Axis.Named.lY);
 					Vec2D NormalizedDirection = JoyInput_To_Use;
 					double Magnitude =NormalizedDirection.normalize();
 					bool test_clipping = false; //just for display to see how this works
@@ -208,7 +208,7 @@ public:
 				{
 					//unlike in previous test... no magnitude check... we can see how well they work together
 					//Note the right up/down axis may be different on your controller... just hard code the right one for now
-					m_tank_steering.InterpolateVelocities(Feet2Meters(m_maxspeed * joyinfo.lY), Feet2Meters(m_maxspeed *  joyinfo.lZ));
+					m_tank_steering.InterpolateVelocities(Feet2Meters(m_maxspeed * joyinfo.Axis.Named.lY), Feet2Meters(m_maxspeed *  joyinfo.Axis.Named.lZ));
 
 					//Now we can pull the interpolated values to be passed in... Note: we have no strafe, so we can ignore
 					m_robot.UpdateVelocities(m_tank_steering.GetLocalVelocityY(), m_tank_steering.GetAngularVelocity());
@@ -218,8 +218,8 @@ public:
 					//Use smart dashboard to see progress bar representation
 					//set progress bar to 12 to -12 on the range in its properties
 					//Tests show the inputs match the final velocities virtually exact
-					SmartDashboard::PutNumber("Left_input", m_maxspeed * joyinfo.lY);
-					SmartDashboard::PutNumber("Right_input", m_maxspeed * joyinfo.lZ);
+					SmartDashboard::PutNumber("Left_input", m_maxspeed * joyinfo.Axis.Named.lY);
+					SmartDashboard::PutNumber("Right_input", m_maxspeed * joyinfo.Axis.Named.lZ);
 					SmartDashboard::PutNumber("Left", Meters2Feet(m_robot.GetLeftVelocity()));
 					SmartDashboard::PutNumber("Right", Meters2Feet(m_robot.GetRightVelocity()));
 					if (joyinfo.ButtonBank[0] == 2)
@@ -294,7 +294,7 @@ public:
 				{
 					//In this test we will not have magnitude clipping, but I may change that later
 					//Get an input from the controllers to feed in... we'll hard code the x and y axis
-					m_robot.UpdateVelocities(Feet2Meters(m_maxspeed*joyinfo.lY), Feet2Meters(m_maxspeed*joyinfo.lX), joyinfo.lZ * m_max_heading_rad);
+					m_robot.UpdateVelocities(Feet2Meters(m_maxspeed*joyinfo.Axis.Named.lY), Feet2Meters(m_maxspeed*joyinfo.Axis.Named.lX), joyinfo.Axis.Named.lZ * m_max_heading_rad);
 
 					//I've added SmartLayout_Swerve1.xml in the design folder to test
 					//Use smart dashboard to see progress bar representation (gets a better idea of the clipping)
@@ -384,10 +384,10 @@ public:
 				{
 					//unlike in previous test... no magnitude check... we can see how well they work together
 					//Note the right up/down axis may be different on your controller... just hard code the right one for now
-					m_tank_steering.InterpolateVelocities(Feet2Meters(m_maxspeed * joyinfo.lY), Feet2Meters(m_maxspeed *  joyinfo.lZ));
+					m_tank_steering.InterpolateVelocities(Feet2Meters(m_maxspeed * joyinfo.Axis.Named.lY), Feet2Meters(m_maxspeed *  joyinfo.Axis.Named.lZ));
 
 					//Now we can pull the interpolated values to be passed in... Note: we have strafe too!
-					m_robot.UpdateVelocities(m_tank_steering.GetLocalVelocityY(), Feet2Meters(m_maxspeed*joyinfo.lX), m_tank_steering.GetAngularVelocity());
+					m_robot.UpdateVelocities(m_tank_steering.GetLocalVelocityY(), Feet2Meters(m_maxspeed*joyinfo.Axis.Named.lX), m_tank_steering.GetAngularVelocity());
 
 					//Use smart dashboard to see progress bar representation
 					SmartDashboard::PutNumber("Wheel_fl_Velocity", Meters2Feet(m_robot.GetIntendedVelocitiesFromIndex(0)));
@@ -480,9 +480,9 @@ private:
 			//Get an input from the controllers to feed in... we'll hard code the x and y axis from both joy and keyboard
 			//we simply combine them so they can work inter-changeably (e.g. keyboard for strafing, joy for turning)
 			m_robot.UpdateVelocities(
-				Feet2Meters(m_maxspeed*(AnalogConversion(joyinfo.lY,m_joystick_options)+m_Keyboard.GetState().bits.m_Y)*-1.0),
-				Feet2Meters(m_maxspeed*(AnalogConversion(joyinfo.lX, m_joystick_options)+m_Keyboard.GetState().bits.m_X)),
-				(AnalogConversion(joyinfo.lZ, m_joystick_options) +m_Keyboard.GetState().bits.m_Z) * m_max_heading_rad);
+				Feet2Meters(m_maxspeed*(AnalogConversion(joyinfo.Axis.Named.lY,m_joystick_options)+m_Keyboard.GetState().bits.m_Y)*-1.0),
+				Feet2Meters(m_maxspeed*(AnalogConversion(joyinfo.Axis.Named.lX, m_joystick_options)+m_Keyboard.GetState().bits.m_X)),
+				(AnalogConversion(joyinfo.Axis.Named.lZ, m_joystick_options) +m_Keyboard.GetState().bits.m_Z) * m_max_heading_rad);
 			//because of properties to factor we need to interpret the actual velocities resolved from the kinematics by inverse kinematics
 			m_Entity_Input.InterpolateVelocities(m_robot.GetLocalVelocityY(),m_robot.GetLocalVelocityX(),m_robot.GetAngularVelocity());
 

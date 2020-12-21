@@ -146,10 +146,10 @@ private:
 		{
 			//Get an input from the controllers to feed in... we'll hard code the x and y axis from both joy and keyboard
 			//we simply combine them so they can work inter-changeably (e.g. keyboard for strafing, joy for turning)
-			m_robot.SetAngularVelocity((AnalogConversion(joyinfo.lZ, m_joystick_options) + m_Keyboard.GetState().bits.m_Z) * m_max_heading_rad);
+			m_robot.SetAngularVelocity((AnalogConversion(joyinfo.Axis.Named.lZ, m_joystick_options) + m_Keyboard.GetState().bits.m_Z) * m_max_heading_rad);
 			m_robot.SetLinearVelocity_local(
-				Feet2Meters(m_maxspeed*(AnalogConversion(joyinfo.lY, m_joystick_options) + m_Keyboard.GetState().bits.m_Y)*-1.0), 
-				Feet2Meters(m_maxspeed*(AnalogConversion(joyinfo.lX, m_joystick_options) + m_Keyboard.GetState().bits.m_X)));
+				Feet2Meters(m_maxspeed*(AnalogConversion(joyinfo.Axis.Named.lY, m_joystick_options) + m_Keyboard.GetState().bits.m_Y)*-1.0),
+				Feet2Meters(m_maxspeed*(AnalogConversion(joyinfo.Axis.Named.lX, m_joystick_options) + m_Keyboard.GetState().bits.m_X)));
 
 			//This comes in handy for testing
 			if (joyinfo.ButtonBank[0] == 1)

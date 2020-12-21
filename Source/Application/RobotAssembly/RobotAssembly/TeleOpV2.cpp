@@ -133,9 +133,9 @@ private:
 			//Get an input from the controllers to feed in... we'll hard code the x and y axis from both joy and keyboard
 			//we simply combine them so they can work inter-changeably (e.g. keyboard for strafing, joy for turning)
 			m_robot.UpdateVelocities(
-				Feet2Meters(m_maxspeed*(AnalogConversion(joyinfo.lY, m_joystick_options) +m_Keyboard.GetState().bits.m_Y)*-1.0),
-				Feet2Meters(m_maxspeed*(AnalogConversion(joyinfo.lX, m_joystick_options) +m_Keyboard.GetState().bits.m_X)),
-				(AnalogConversion(joyinfo.lZ, m_joystick_options) +m_Keyboard.GetState().bits.m_Z) * m_max_heading_rad);
+				Feet2Meters(m_maxspeed*(AnalogConversion(joyinfo.Axis.Named.lY, m_joystick_options) +m_Keyboard.GetState().bits.m_Y)*-1.0),
+				Feet2Meters(m_maxspeed*(AnalogConversion(joyinfo.Axis.Named.lX, m_joystick_options) +m_Keyboard.GetState().bits.m_X)),
+				(AnalogConversion(joyinfo.Axis.Named.lZ, m_joystick_options) +m_Keyboard.GetState().bits.m_Z) * m_max_heading_rad);
 			//because of properties to factor we need to interpret the actual velocities resolved from the kinematics by inverse kinematics
 			m_Entity_Input.InterpolateVelocities(m_robot.GetIntendedVelocities());
 

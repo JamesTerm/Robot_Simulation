@@ -155,25 +155,25 @@ private:
 		using JoystickInfo = dx_Joystick::JoystickInfo;
 		size_t JoyNum = 0;
 
-		dx_Joystick::JoyState joyinfo = {0}; //setup joy zero'd out
+		dx_Joystick::JoyState joyinfo[4] = {0}; //setup joy zero'd out
 
 		size_t NoJoySticks = m_joystick.GetNoJoysticksFound();
-		if (NoJoySticks)
+		for (size_t i = 0 ; i < NoJoySticks; i++)
 		{
 			//printf("Button: 2=exit, x axis=strafe, y axis=forward/reverse, z axis turn \n");
-			m_joystick.read_joystick(JoyNum, joyinfo);
+			m_joystick.read_joystick(JoyNum, joyinfo[i]);
 		}
 		if (m_game_mode==game_mode::eTele)
 		{
 			//Check if we are being driven by some AI method, we override it if we have any angular velocity (i.e. some teleop interaction)
-			const double AngularVelocity = (AnalogConversion(joyinfo.lZ, m_joystick_options) + m_Keyboard.GetState().bits.m_Z) * m_max_heading_rad;
+			const double AngularVelocity = (AnalogConversion(joyinfo[0].Axis.Named.lZ, m_joystick_options) + m_Keyboard.GetState().bits.m_Z) * m_max_heading_rad;
 			if (!IsZero(AngularVelocity) || (m_robot.GetIsDrivenAngular()==false))
 				m_robot.SetAngularVelocity(AngularVelocity);
 
 			//Get an input from the controllers to feed in... we'll hard code the x and y axis from both joy and keyboard
 			//we simply combine them so they can work inter-changeably (e.g. keyboard for strafing, joy for turning)
-			const double Forward = Feet2Meters(m_maxspeed * (AnalogConversion(joyinfo.lY, m_joystick_options) + m_Keyboard.GetState().bits.m_Y) * -1.0);
-			const double Right = Feet2Meters(m_maxspeed * (AnalogConversion(joyinfo.lX, m_joystick_options) + m_Keyboard.GetState().bits.m_X));
+			const double Forward = Feet2Meters(m_maxspeed * (AnalogConversion(joyinfo[0].Axis.Named.lY, m_joystick_options) + m_Keyboard.GetState().bits.m_Y) * -1.0);
+			const double Right = Feet2Meters(m_maxspeed * (AnalogConversion(joyinfo[0].Axis.Named.lX, m_joystick_options) + m_Keyboard.GetState().bits.m_X));
 
 			//Check if we are being driven by some AI method, we override it if we have any linear velocity (i.e. some teleop interaction)
 			//Note: this logic does not quite work right for keyboard if it uses the forward "sticky" button, but since this isn't a real
@@ -191,7 +191,7 @@ private:
 		}
 		//TODO autonomous and goals here
 		//This comes in handy for testing, but could be good to stop robot if autonomous needs to stop
-		if (joyinfo.ButtonBank[0] == 1)
+		if (joyinfo[0].ButtonBank[0] == 1)
 			Reset();
 	}
 

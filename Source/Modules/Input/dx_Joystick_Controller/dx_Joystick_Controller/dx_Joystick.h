@@ -14,15 +14,22 @@ class dx_Joystick
 		struct JoyState 
 		{
 			size_t JoystickNumber; //Which joystick does this state apply to
-			//All floats range from -1.0 to 1.0
-			float    lX;                    ///< x-axis position
-			float    lY;                    ///< y-axis position
-			float    lZ;                    ///< z-axis position
-			float    lRx;                   ///< x-axis rotation
-			float    lRy;                   ///< y-axis rotation
-			float    lRz;                   ///< z-axis rotation
-			float    rgSlider[2];          ///< extra axes positions
-			float    rgPOV[4];             ///< POV directions in degrees- should be positive integer, if POV is not used it will be -1.0
+			union uAxis
+			{
+				struct Explicit
+				{
+					//All floats range from -1.0 to 1.0
+					float    lX;                    ///< x-axis position
+					float    lY;                    ///< y-axis position
+					float    lZ;                    ///< z-axis position
+					float    lRx;                   ///< x-axis rotation
+					float    lRy;                   ///< y-axis rotation
+					float    lRz;                   ///< z-axis rotation
+					float    rgSlider[2];          ///< extra axes positions
+					float    rgPOV[4];             ///< POV directions in degrees- should be positive integer, if POV is not used it will be -1.0
+				} Named;
+				float AsArray[12];
+			} Axis;
 			///128 buttons, each bank is 32 bits where each bit is the flagged value
 			///Typically you will only need the first bank for 32 buttons
 			unsigned long  ButtonBank[4];          
