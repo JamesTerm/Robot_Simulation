@@ -135,6 +135,19 @@ namespace registry_v1
 //};
 #pragma endregion
 
+#pragma region _Controls Section_
+	Rg_(AxisStrafe_);
+	Rg_(AxisForward_);
+	Rg_(AxisTurn_);
+
+	Rg_(Control_Key);
+	Rg_(Control_Joy);
+	Rg_(Control_FilterRange);
+	Rg_(Control_Multiplier);
+	Rg_(Control_CurveIntensity);
+	Rg_(Control_IsFlipped);  //bool
+#pragma endregion
+
 #undef Reg
 
 }}

@@ -25,6 +25,7 @@
 #include "../../../Modules/Output/OSG_Viewer/OSG_Viewer/Keyboard_State.h"
 #include "../../../Modules/Output/SmartDashboard_PID_Monitor.h"
 #include "../../../Properties/script_loader.h"
+#include "../../../Properties/RegistryV1.h"
 #include "TeleAutonV2.h"
 
 //We can specify the linking in code
@@ -57,7 +58,6 @@ private:
 	//Here we can choose which motion control to use, this works because the interface
 	//between them remain (mostly) identical
 	Module::Input::dx_Joystick m_joystick;  //Note: always late binding, so we can aggregate direct easy here
-	Module::Input::Analog_EventEntry m_joystick_options;  //for now a simple one-stop option for all
 	Module::Input::AI_Example m_Goal;
 	Module::Robot::SwerveRobot m_robot;  //keep track of our intended velocities
 	
@@ -77,6 +77,24 @@ private:
 		eTele,
 		eTest
 	} m_game_mode= game_mode::eTele;
+
+	struct DriveAxisAssignments
+	{
+		struct AxisEntry
+		{
+			size_t AxisIndex;
+			size_t JoystickIndex;
+			Module::Input::Analog_EventEntry Options = {
+			0.3,   //filter dead zone
+			1.0,   //additional scale
+			1.0,   // curve intensity
+			false  //is flipped
+			};
+		};
+		AxisEntry Strafe = {0,0};
+		AxisEntry Forward = { 1,0 };
+		AxisEntry Turn = { 2,0 };
+	} m_Axis;
 
 	bool m_IsStreaming = false;
 	#pragma endregion
@@ -166,15 +184,17 @@ private:
 		}
 		if (m_game_mode==game_mode::eTele)
 		{
+			const DriveAxisAssignments& _ = m_Axis;
 			//Check if we are being driven by some AI method, we override it if we have any angular velocity (i.e. some teleop interaction)
-			const double AngularVelocity = (AnalogConversion(joyinfo[0].Axis.Named.lZ, m_joystick_options) + m_Keyboard.GetState().bits.m_Z) * m_max_heading_rad;
+			const double AngularVelocity = (AnalogConversion(joyinfo[_.Turn.JoystickIndex].Axis.AsArray[_.Turn.AxisIndex], _.Turn.Options) + 
+				m_Keyboard.GetState().bits.m_Z) * m_max_heading_rad;
 			if (!IsZero(AngularVelocity) || (m_robot.GetIsDrivenAngular()==false))
 				m_robot.SetAngularVelocity(AngularVelocity);
 
 			//Get an input from the controllers to feed in... we'll hard code the x and y axis from both joy and keyboard
 			//we simply combine them so they can work inter-changeably (e.g. keyboard for strafing, joy for turning)
-			const double Forward = Feet2Meters(m_maxspeed * (AnalogConversion(joyinfo[0].Axis.Named.lY, m_joystick_options) + m_Keyboard.GetState().bits.m_Y) * -1.0);
-			const double Right = Feet2Meters(m_maxspeed * (AnalogConversion(joyinfo[0].Axis.Named.lX, m_joystick_options) + m_Keyboard.GetState().bits.m_X));
+			const double Forward = Feet2Meters(m_maxspeed * (AnalogConversion(joyinfo[_.Forward.JoystickIndex].Axis.AsArray[_.Forward.AxisIndex], _.Forward.Options) + m_Keyboard.GetState().bits.m_Y) * -1.0);
+			const double Right = Feet2Meters(m_maxspeed * (AnalogConversion(joyinfo[_.Strafe.JoystickIndex].Axis.AsArray[_.Strafe.AxisIndex], _.Strafe.Options) + m_Keyboard.GetState().bits.m_X));
 
 			//Check if we are being driven by some AI method, we override it if we have any linear velocity (i.e. some teleop interaction)
 			//Note: this logic does not quite work right for keyboard if it uses the forward "sticky" button, but since this isn't a real
@@ -300,6 +320,41 @@ private:
 			m_robot.Set_GetCurrentHeading(nullptr);
 		}
 	}
+	void InitController(const char* prefix, DriveAxisAssignments::AxisEntry &val)
+	{
+		const Framework::Base::asset_manager *asset=&m_properties;
+		using namespace ::properties::registry_v1;
+		double ftest = 0.0;  //use to test if an asset exists
+		std::string constructed_name;
+		#define GET_NUMBER(x,y) \
+		constructed_name = prefix, constructed_name += csz_##x; \
+		y = asset->get_number(constructed_name.c_str(), y);
+
+		#define GET_SIZE_T(x,y) \
+		constructed_name = prefix, constructed_name += csz_##x; \
+		y = asset->get_number_size_t(constructed_name.c_str(), y);
+
+		#define GET_BOOL(x,y) \
+		constructed_name = prefix, constructed_name += csz_##x; \
+		y = asset->get_bool(constructed_name.c_str(), y);
+		
+		GET_SIZE_T(Control_Key, val.AxisIndex);
+		GET_SIZE_T(Control_Joy, val.JoystickIndex);
+		GET_NUMBER(Control_FilterRange, val.Options.FilterRange);
+		GET_NUMBER(Control_Multiplier, val.Options.Multiplier);
+		GET_NUMBER(Control_CurveIntensity, val.Options.CurveIntensity);
+		GET_BOOL(Control_IsFlipped, val.Options.IsFlipped);
+	}
+	void InitControllers()
+	{
+		using namespace ::properties::registry_v1;
+		const char* prefix = csz_AxisStrafe_;
+		InitController(prefix, m_Axis.Strafe);
+		prefix = csz_AxisForward_;
+		InitController(prefix, m_Axis.Forward);
+		prefix = csz_AxisTurn_;
+		InitController(prefix, m_Axis.Turn);
+	}
 public:
 	Test_Swerve_Properties()
 	{
@@ -315,12 +370,6 @@ public:
 	void init()
 	{
 		m_joystick.Init();
-		m_joystick_options = { 
-			0.3,   //filter dead zone
-			1.0,   //additional scale
-			1.0,   // curve intensity
-			false  //is flipped
-			};
 		using namespace Module::Robot;
 		//We'll make a square robot for ease to interpret angles
 		Vec2D wheel_dimensions(Inches2Meters(24), Inches2Meters(24));
@@ -341,6 +390,7 @@ public:
 		//much tweaking is needed for PID type operations.
 		//populate properties method here and invoke it, init can have properties sent as a parameter here
 		m_script_loader.load_script(m_properties);
+		InitControllers();
 		m_robot.Init(&m_properties);
 		m_viewer.init();
 		m_RobotUI.Initialize();

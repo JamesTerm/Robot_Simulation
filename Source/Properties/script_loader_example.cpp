@@ -345,6 +345,28 @@ private:
 		#undef PUT_NUMBER
 		#undef PUT_BOOL
 	}
+	void Test_Controls_Airflo()
+	{
+		#pragma region _setup put vars_
+		Framework::Base::asset_manager& assets = *m_assets;
+		using namespace properties::registry_v1;
+		std::string constructed_name;
+		const char* prefix = nullptr;
+
+		#define PUT_NUMBER(x,y) \
+			constructed_name = prefix, constructed_name += csz_##x; \
+			assets.put_number(constructed_name.c_str(), y);
+
+		#define PUT_BOOL(x,y) \
+			constructed_name = prefix, constructed_name += csz_##x; \
+			assets.put_bool(constructed_name.c_str(), y);
+		#pragma endregion
+		{
+			prefix = csz_AxisTurn_;
+			PUT_NUMBER(Control_Key, 5.0);
+			PUT_NUMBER(Control_CurveIntensity, 3.0);
+		}
+	}
 public:
 	void load_script(Framework::Base::asset_manager& assets)
 	{
@@ -357,6 +379,9 @@ public:
 		#endif
 		//TestIndivualWheels();
 		TestCurivator();
+		//This customizes to my AirFlo controller, add your own controller
+		//especially if your axis assignments need to change
+		Test_Controls_Airflo();
 	}
 };
 
