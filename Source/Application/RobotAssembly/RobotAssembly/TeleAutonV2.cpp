@@ -354,6 +354,12 @@ private:
 		InitController(prefix, m_Axis.Forward);
 		prefix = csz_AxisTurn_;
 		InitController(prefix, m_Axis.Turn);
+		//--------------Also need to redo m_maxspeed and m_max_heading_rad
+		const Framework::Base::asset_manager* asset = &m_properties;
+		using namespace ::properties::registry_v1;
+		//assume properties will have none or both to keep code simple
+		m_maxspeed = Meters2Feet(asset->get_number(csz_Motion2D_max_speed_linear,Feet2Meters(m_maxspeed)));
+		m_max_heading_rad = asset->get_number(csz_Motion2D_max_speed_angular, m_max_heading_rad);
 	}
 public:
 	Test_Swerve_Properties()
