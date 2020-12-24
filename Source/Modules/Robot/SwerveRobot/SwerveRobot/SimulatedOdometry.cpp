@@ -55,8 +55,8 @@ const double c_Potentiometer_TestRate = 24.0;
 //const double c_Potentiometer_TestRate=48.0;
 const double Polynomial[5] =
 {
-	//0.0,1.0   ,0.0    ,0.0   ,0.0
-	0.0,2.4878,-2.2091,0.7134,0.0
+	0.0,1.0   ,0.0    ,0.0   ,0.0
+	//0.0,2.4878,-2.2091,0.7134,0.0
 };
 
 const double c_DeadZone = 0.085;
