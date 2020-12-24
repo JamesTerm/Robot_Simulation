@@ -383,9 +383,10 @@ MotionControl2D::MotionControl2D()
 {
 	m_MotionControl2D = std::make_shared<MotionControl2D_internal>();
 }
-void MotionControl2D::SetProperties(const properties &props)
+void MotionControl2D::Initialize(const Framework::Base::asset_manager *props)
 {
-	m_MotionControl2D->SetProperties(props);
+	//TODO Translate properties here
+	//m_MotionControl2D->SetProperties(props);
 }
 void MotionControl2D::TimeSlice(double d_time_s)
 {

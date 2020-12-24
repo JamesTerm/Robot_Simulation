@@ -1,6 +1,7 @@
 #pragma once
 #include <memory>
 #include <functional>
+#include "../../../../Base/AssetManager.h"
 
 //Entity 2D
 //This records its current position on a 2 dimensional plane
@@ -28,7 +29,7 @@ public:
 		double max_deceleration_linear;  //these may be different since we may need to stop quicker
 		double max_acceleration_angular;  //for both acceleration and deceleration
 	};
-	void SetProperties(const properties &props);
+	void Initialize(const Framework::Base::asset_manager *props=nullptr);
 
 	//Give entity a time slice to update its position
 	void TimeSlice(double d_time_s);

@@ -413,6 +413,8 @@ public:
 		m_Entity_Input.SetProperties(inv_props);
 		#pragma endregion
 
+		m_MotionControl2D.Initialize(asset_properties);
+
 		#pragma region _default rotary properties_
 		//Provide rotary properties
 		rotary_properties props_rotary_drive, props_rotary_swivel;

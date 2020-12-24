@@ -587,6 +587,7 @@ public:
 		//this time... no skid
 		m_max_heading_rad = (2 * Feet2Meters(m_maxspeed) / wheel_dimensions.length()) * skid;
 		//Note: We'll skip properties for motion control since we have good defaults
+		m_MotionControl2D.Initialize();  //but do call initialize
 		#pragma region _optional linking of entity to motion control_
 		//Now to link up the callbacks for motion control:  Note we can link them up even if we are not using it
 		#ifndef __Test05_Use_Simple__

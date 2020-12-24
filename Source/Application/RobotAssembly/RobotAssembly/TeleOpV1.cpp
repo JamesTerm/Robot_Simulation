@@ -155,6 +155,7 @@ public:
 		wheel_dimensions[0], //Length between wheels
 		wheel_dimensions[1] //Width between wheels
 		};
+		m_MotionControl2D.Initialize();
 		m_Entity_Input.SetProperties(inv_props);
 		//Assume our robot's top speed is 12 fps
 		m_maxspeed = 12.0;
