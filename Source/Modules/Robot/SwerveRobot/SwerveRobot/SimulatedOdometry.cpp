@@ -1203,8 +1203,10 @@ public:
 			m_bypass_properties.swivel_max_speed[2] =
 			m_bypass_properties.swivel_max_speed[3] = 8.0;
 
+		//If we are using bypass, we are finished
+		if (m_UseBypass)
+			return;
 		#ifdef __UseLegacySimulation__
-		
 		for (size_t i = 0; i < 4; i++)
 		{
 			//TODO hook up to properties... the defaults do not work with sim 3, as they were made for sim 2
@@ -1243,15 +1245,21 @@ public:
 	}
 	void ResetPos()
 	{
-		#ifdef __UseLegacySimulation__
-
-		for (size_t i = 0; i < 4; i++)
+		if (m_UseBypass)
 		{
-			m_Encoders[i]->ResetPos();
-			m_Potentiometers[i].ResetPos();
+			m_current_position[0]= m_current_position[1] = m_current_position[2] = m_current_position[3] = 0.0;
 		}
-		#else
-		#endif
+		else
+		{
+			#ifdef __UseLegacySimulation__
+			for (size_t i = 0; i < 4; i++)
+			{
+				m_Encoders[i]->ResetPos();
+				m_Potentiometers[i].ResetPos();
+			}
+			#else
+			#endif
+		}
 	}
 	void ShutDown()
 	{
