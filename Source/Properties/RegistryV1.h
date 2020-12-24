@@ -29,12 +29,18 @@ namespace registry_v1
 	Rg_(CommonSwivel_)
 #pragma endregion
 
+#pragma region _Kinematics and motion control_
+	//Entity properties
+	Rg_(Drive_WheelBase_in)
+	Rg_(Drive_TrackWidth_in)
+
 	//Motion 2D properties
 	Rg_(Motion2D_max_speed_linear)
 	Rg_(Motion2D_max_speed_angular)
 	Rg_(Motion2D_max_acceleration_linear)
 	Rg_(Motion2D_max_deceleration_linear)
 	Rg_(Motion2D_max_acceleration_angular)
+#pragma endregion
 
 #pragma region _rotary_properties legacy_
 	//Entity1D

@@ -172,6 +172,22 @@ private:
 			Rotation += Pi2;
 		return Rotation;
 	}
+	void init_drive_properties(const Framework::Base::asset_manager* asset_properties, Vec2D& update)
+	{
+		if (asset_properties)
+		{
+			using namespace ::properties::registry_v1;
+			std::string constructed_name;
+			//Default param in inches, then result is in meters
+			#define GET_NUMBER_In2Meter(x,y) \
+				constructed_name = csz_##x; \
+				y = Inches2Meters(asset_properties->get_number(constructed_name.c_str(), Meters2Inches(y)));
+			GET_NUMBER_In2Meter(Drive_WheelBase_in, update.x());
+			GET_NUMBER_In2Meter(Drive_TrackWidth_in, update.y());
+		}
+		//finished with the macro
+		#undef GET_NUMBER_In
+	}
 	void init_rotary_properties(const Framework::Base::asset_manager* asset_properties,
 		rotary_properties& update, const char* prefix)
 	{
@@ -371,19 +387,13 @@ public:
 	{
 		//Go ahead and grab all the default properties first, then if we have asset properties fill in the ones we have and pass
 		//the asset properties down to children
-		//Provide rotary properties
-		rotary_properties props_rotary_drive, props_rotary_swivel;
-		//grab defaults
-		props_rotary_drive.Init();
-		props_rotary_swivel.Init();
 
-		//At some point we may want to callback here for external method to set properties
-		//if (!external_properties) defaults below
-		#pragma region _default properties_
+		#pragma region _drive dimensions properties for Kinematics_
 		//setup some robot properties
 		using properties = Swerve_Drive::properties;
 		//We'll make a square robot for ease to interpret angles
 		Vec2D wheel_dimensions(Inches2Meters(24), Inches2Meters(24));
+		init_drive_properties(asset_properties, wheel_dimensions);
 		properties props =
 		{
 		wheel_dimensions.length(),	//distance from diagonal for 4WD
@@ -401,6 +411,15 @@ public:
 		wheel_dimensions[1] //Width between wheels
 		};
 		m_Entity_Input.SetProperties(inv_props);
+		#pragma endregion
+
+		#pragma region _default rotary properties_
+		//Provide rotary properties
+		rotary_properties props_rotary_drive, props_rotary_swivel;
+		//grab defaults
+		props_rotary_drive.Init();
+		props_rotary_swivel.Init();
+
 		//Default rotary properties... use what we can from other systems to match these
 		//Since the drive rotary system is using linear velocity, we can pull the same characteristics
 		{

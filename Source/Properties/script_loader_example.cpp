@@ -516,6 +516,9 @@ private:
 		#pragma region _Motion 2D_
 		{
 			prefix = "";
+			PUT_NUMBER(Drive_WheelBase_in, WheelBase_Length_In);
+			PUT_NUMBER(Drive_TrackWidth_in, WheelBase_Width_In);
+
 			PUT_NUMBER(Motion2D_max_speed_linear,MAX_SPEED);
 			PUT_NUMBER(Motion2D_max_speed_angular, heading_rad);
 			PUT_NUMBER(Motion2D_max_acceleration_linear, Drive_MaxAccel);
@@ -548,7 +551,7 @@ private:
 			PUT_NUMBER_suffix(Rotary_PID, val._pid.p, _p);
 			PUT_NUMBER_suffix(Rotary_PID, val._pid.i, _i);
 			PUT_NUMBER_suffix(Rotary_PID, val._pid.d, _d);
-			//PUT_NUMBER(Rotary_PrecisionTolerance, val.PrecisionTolerance);
+			//PUT_NUMBER(Rotary_PrecisionTolerance, 0.03);
 			//Use _c, _t1, _t2, _t3, _t4 for array 0..5 respectively
 			//PUT_NUMBER(Rotary_Voltage_Terms) //PolynomialEquation_forth_Props 
 			PUT_NUMBER(Rotary_InverseMaxAccel, val.inv_max_accel);
