@@ -19,6 +19,7 @@
 #include <fstream>
 #include <iostream>
 
+#include "../../../../Properties/RegistryV1.h"
 #include "MotionControl2D.h"
 
 #pragma endregion
@@ -594,6 +595,52 @@ protected:
 	std::function <double()> m_ExternGetCurrentHeading = nullptr;
 
 	#pragma endregion
+	void GetDefault_ShipProps(Ship_Props &props)
+	{
+		//TODO see if we really need to initialize
+		m_Physics.SetMass(120.0 / 2.205); //the typical weight of the robot
+		//virtual void Initialize(Entity2D_Kind::EventMap& em, const Entity_Properties *props = NULL);
+		//These default values are pulled from 2014 robot (perhaps the best tuned robot for driver)
+		const double g_wheel_diameter_in = 4;
+		const double Inches2Meters = 0.0254;
+		const double Meters2Inches = 39.3700787;
+		const double HighGearSpeed = (873.53 / 60.0) * Pi * g_wheel_diameter_in * Inches2Meters * 0.85;
+		const double WheelBase_Width_In = 26.5;	  //The wheel base will determine the turn rate, must be as accurate as possible!
+		const double WheelBase_Length_In = 10.0;  //was 9.625
+		const double WheelTurningDiameter_In = sqrt((WheelBase_Width_In * WheelBase_Width_In) + (WheelBase_Length_In * WheelBase_Length_In));
+		//const double skid = cos(atan2(WheelBase_Length_In, WheelBase_Width_In));
+		const double skid = 1.0;  //no skid for swerve
+		const double Drive_MaxAccel = 5.0;
+		const double gMaxTorqueYaw = (2 * Drive_MaxAccel * Meters2Inches / WheelTurningDiameter_In) * skid;
+		const double MaxAngularVelocity = (2 * HighGearSpeed * Meters2Inches / WheelTurningDiameter_In) * skid;
+		props =
+		{
+			//double dHeading;  I don't have to max out the speed here, swerve doesn't need to rotate to strafe so turns can feel right
+			MaxAngularVelocity * 0.5,
+			//double EngineRampForward, EngineRampReverse, EngineRampAfterBurner;
+			10.0,10.0,10.0,
+			//double EngineDeceleration, EngineRampStrafe;
+			10.0,10.0,
+			//double MAX_SPEED, ENGAGED_MAX_SPEED;
+			HighGearSpeed,HighGearSpeed,
+			//double ACCEL, BRAKE, STRAFE, AFTERBURNER_ACCEL, AFTERBURNER_BRAKE;
+			10.0,10.0,10.0,10.0,10.0,
+			//double MaxAccelLeft, MaxAccelRight, MaxAccelForward, MaxAccelReverse;
+			Drive_MaxAccel,Drive_MaxAccel,Drive_MaxAccel,Drive_MaxAccel,
+			//double MaxAccelForward_High, MaxAccelReverse_High;
+			Drive_MaxAccel * 2,Drive_MaxAccel * 2,
+			//double MaxTorqueYaw, MaxTorqueYaw_High;
+			gMaxTorqueYaw * 0.78,gMaxTorqueYaw * 5.0,
+			//double MaxTorqueYaw_SetPoint, MaxTorqueYaw_SetPoint_High;
+			gMaxTorqueYaw * 2,gMaxTorqueYaw * 10,
+			//double Rotation_Tolerance;  since this is a edge compare we'll need half the total... so 1.5 is really 3 degrees
+			DEG_2_RAD(1.5),
+			//double Rotation_ToleranceConsecutiveCount;
+			0.0,  //disabled by default using  0.0
+			//double Rotation_TargetDistanceScalar;
+			1.0
+		};
+	}
 protected:
 	#pragma region _protected methods_
 	const PhysicsEntity_2D &GetPhysics() const 
@@ -818,51 +865,8 @@ public:
 	}
 	void Initialize_ship_props(const Ship_Properties *ship_props=nullptr)
 	{
-		#pragma region _default ship props_
-		//TODO see if we really need to initialize
-		m_Physics.SetMass(120.0 / 2.205); //the typical weight of the robot
-		//virtual void Initialize(Entity2D_Kind::EventMap& em, const Entity_Properties *props = NULL);
-		//These default values are pulled from 2014 robot (perhaps the best tuned robot for driver)
-		const double g_wheel_diameter_in = 4;
-		const double Inches2Meters = 0.0254;
-		const double Meters2Inches = 39.3700787;
-		const double HighGearSpeed = (873.53 / 60.0) * Pi * g_wheel_diameter_in * Inches2Meters  * 0.85;
-		const double WheelBase_Width_In = 26.5;	  //The wheel base will determine the turn rate, must be as accurate as possible!
-		const double WheelBase_Length_In = 10.0;  //was 9.625
-		const double WheelTurningDiameter_In = sqrt((WheelBase_Width_In * WheelBase_Width_In) + (WheelBase_Length_In * WheelBase_Length_In));
-		//const double skid = cos(atan2(WheelBase_Length_In, WheelBase_Width_In));
-		const double skid = 1.0;  //no skid for swerve
-		const double Drive_MaxAccel = 5.0;
-		const double gMaxTorqueYaw = (2 * Drive_MaxAccel * Meters2Inches / WheelTurningDiameter_In) * skid;
-		const double MaxAngularVelocity = (2 * HighGearSpeed * Meters2Inches / WheelTurningDiameter_In) * skid;
-		Ship_Props props =
-		{
-		//double dHeading;  I don't have to max out the speed here, swerve doesn't need to rotate to strafe so turns can feel right
-		MaxAngularVelocity * 0.5,
-		//double EngineRampForward, EngineRampReverse, EngineRampAfterBurner;
-		10.0,10.0,10.0,
-		//double EngineDeceleration, EngineRampStrafe;
-		10.0,10.0,
-		//double MAX_SPEED, ENGAGED_MAX_SPEED;
-		HighGearSpeed,HighGearSpeed,
-		//double ACCEL, BRAKE, STRAFE, AFTERBURNER_ACCEL, AFTERBURNER_BRAKE;
-		10.0,10.0,10.0,10.0,10.0,
-		//double MaxAccelLeft, MaxAccelRight, MaxAccelForward, MaxAccelReverse;
-		Drive_MaxAccel,Drive_MaxAccel,Drive_MaxAccel,Drive_MaxAccel,
-		//double MaxAccelForward_High, MaxAccelReverse_High;
-		Drive_MaxAccel*2,Drive_MaxAccel*2,
-		//double MaxTorqueYaw, MaxTorqueYaw_High;
-		gMaxTorqueYaw * 0.78,gMaxTorqueYaw * 5.0,
-		//double MaxTorqueYaw_SetPoint, MaxTorqueYaw_SetPoint_High;
-		gMaxTorqueYaw * 2,gMaxTorqueYaw * 10,
-		//double Rotation_Tolerance;  since this is a edge compare we'll need half the total... so 1.5 is really 3 degrees
-		DEG_2_RAD(1.5),
-		//double Rotation_ToleranceConsecutiveCount;
-		0.0,  //disabled by default using  0.0
-		//double Rotation_TargetDistanceScalar;
-		1.0
-		};
-		#pragma endregion
+		Ship_Props props;
+		GetDefault_ShipProps(props);
 		if (ship_props)
 		{
 			m_ShipProperties = *ship_props;
@@ -898,8 +902,35 @@ public:
 	}
 	void Initialize(const Framework::Base::asset_manager *props=nullptr)
 	{
-		//TODO translate here
-		Initialize_ship_props();
+		Ship_Properties ship_properties;
+		Ship_Props& dst = ship_properties.GetShipProps_rw();
+		GetDefault_ShipProps(dst);
+
+		using namespace ::properties::registry_v1;
+		if (props)
+		{
+			double ftest = 0.0;  //use to test if an asset exists
+			std::string constructed_name;
+			//Really made use token pasting, it only worked because the registry matched the props
+			#define GN_(x) \
+				dst.##x = props->get_number(csz_Ship2D_##x, dst.##x);
+			GN_(dHeading);
+			GN_(EngineRampForward); GN_(EngineRampReverse); GN_(EngineRampAfterBurner);
+			GN_(EngineDeceleration); GN_(EngineRampStrafe);
+			GN_(MAX_SPEED); GN_(ENGAGED_MAX_SPEED);
+			GN_(ACCEL); GN_(BRAKE); GN_(STRAFE); GN_(AFTERBURNER_ACCEL); GN_(AFTERBURNER_BRAKE);
+
+			GN_(MaxAccelLeft); GN_(MaxAccelRight); GN_(MaxAccelForward); GN_(MaxAccelReverse);
+			GN_(MaxAccelForward_High); GN_(MaxAccelReverse_High);
+			GN_(MaxTorqueYaw); GN_(MaxTorqueYaw_High);
+			GN_(MaxTorqueYaw_SetPoint); GN_(MaxTorqueYaw_SetPoint_High);
+			GN_(Rotation_Tolerance);
+			GN_(Rotation_ToleranceConsecutiveCount);
+			GN_(Rotation_TargetDistanceScalar);
+			//finished with this macro
+			#undef GN_
+		}
+		Initialize_ship_props(&ship_properties);
 	}
 	void TimeChange(double dTime_s)
 	{

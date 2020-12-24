@@ -525,6 +525,31 @@ private:
 			PUT_NUMBER(Motion2D_max_acceleration_angular, gMaxTorqueYaw);
 		}
 		#pragma endregion
+		#pragma region _Ship 2D_
+		{
+			#define PN_(x) \
+				assets.put_number(csz_Ship2D_##x, x);
+			#define PNy(x,y) \
+				assets.put_number(csz_Ship2D_##x, y);
+
+			PNy(dHeading,heading_rad);
+			//PN_(EngineRampForward); PN_(EngineRampReverse); PN_(EngineRampAfterBurner);
+			//PN_(EngineDeceleration); PN_(EngineRampStrafe);
+			PN_(MAX_SPEED); PNy(ENGAGED_MAX_SPEED,MAX_SPEED);
+			PN_(ACCEL); PN_(BRAKE); //PN_(STRAFE); PN_(AFTERBURNER_ACCEL); PN_(AFTERBURNER_BRAKE);
+
+			PN_(MaxAccelLeft); PN_(MaxAccelRight); PN_(MaxAccelForward); PN_(MaxAccelReverse);
+			PN_(MaxAccelForward_High); PN_(MaxAccelReverse_High);
+			PN_(MaxTorqueYaw); PN_(MaxTorqueYaw_High);
+			PN_(MaxTorqueYaw_SetPoint); PN_(MaxTorqueYaw_SetPoint_High);
+			PNy(Rotation_Tolerance,rotation_tolerance);
+			//PNy(Rotation_ToleranceConsecutiveCount,rotation_tolerance_count);
+			PNy(Rotation_TargetDistanceScalar,rotation_distance_scalar);
+
+			#undef PN_
+			#undef PNy
+		}
+		#pragma endregion
 		#pragma region _Put wheel_common_
 		{
 			prefix = csz_CommonDrive_;

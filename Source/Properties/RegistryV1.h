@@ -42,6 +42,22 @@ namespace registry_v1
 	Rg_(Motion2D_max_acceleration_angular)
 #pragma endregion
 
+#pragma region _Ship_2D legacy_
+	Rg_(Ship2D_dHeading);
+	Rg_(Ship2D_EngineRampForward); Rg_(Ship2D_EngineRampReverse); Rg_(Ship2D_EngineRampAfterBurner);
+	Rg_(Ship2D_EngineDeceleration); Rg_(Ship2D_EngineRampStrafe);
+	Rg_(Ship2D_MAX_SPEED); Rg_(Ship2D_ENGAGED_MAX_SPEED);
+	Rg_(Ship2D_ACCEL); Rg_(Ship2D_BRAKE); Rg_(Ship2D_STRAFE); Rg_(Ship2D_AFTERBURNER_ACCEL); Rg_(Ship2D_AFTERBURNER_BRAKE);
+
+	Rg_(Ship2D_MaxAccelLeft); Rg_(Ship2D_MaxAccelRight); Rg_(Ship2D_MaxAccelForward); Rg_(Ship2D_MaxAccelReverse);
+	Rg_(Ship2D_MaxAccelForward_High); Rg_(Ship2D_MaxAccelReverse_High);
+	Rg_(Ship2D_MaxTorqueYaw); Rg_(Ship2D_MaxTorqueYaw_High);
+	Rg_(Ship2D_MaxTorqueYaw_SetPoint); Rg_(Ship2D_MaxTorqueYaw_SetPoint_High);
+	Rg_(Ship2D_Rotation_Tolerance);
+	Rg_(Ship2D_Rotation_ToleranceConsecutiveCount);
+	Rg_(Ship2D_Rotation_TargetDistanceScalar);
+#pragma endregion
+
 #pragma region _rotary_properties legacy_
 	//Entity1D
 	Rg_(Entity1D_StartingPosition)
