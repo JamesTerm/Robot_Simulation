@@ -270,8 +270,8 @@ bool CommandLineInterface()
 	viewer.init();
 	SwerveRobotTest robot;
 	OutputView_Tester test;
-	//const char *default_ip = "localhost";
-	const char *default_ip = "192.168.1.55";
+	const char *default_ip = "localhost";
+	//const char *default_ip = "192.168.1.55";
 
 	while (prompt(), cin.getline(input_line, 128))
 	{
