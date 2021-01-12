@@ -152,7 +152,7 @@ public:
 	{
 		SwerveRobot_UI::uSwerveRobot_State smart_state = {};
 		//PSAI position, swerve velocities array, attitude, intended orientation
-		const char * const SmartNames[] = { "X","Y",
+		const char * const SmartNames[] = { "X_ft","Y_ft",
 			"Wheel_fl_Velocity","Wheel_fr_Velocity","Wheel_rl_Velocity","Wheel_rr_Velocity",
 			"swivel_fl_Raw","swivel_fr_Raw","swivel_rl_Raw","swivel_rr_Raw",
 			"Heading","Travel_Heading"
