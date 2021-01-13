@@ -138,6 +138,7 @@ class SmartDashboard_Control
 	//It was a bit challenging but this is completely decoupled from SwerveRobotTest, this makes it possible
 	//to link different kind of robot objects, we may have a different update method to match it
 private:
+	bool m_HasEncoder = true;
 public:
 	//Note: to do nothing in the constructor gives client code the ability to instantiate it without using it or any penalty to instantiate it
 	//and not need to consider it as a pointer
@@ -157,8 +158,14 @@ public:
 			"swivel_fl_Raw","swivel_fr_Raw","swivel_rl_Raw","swivel_rr_Raw",
 			"Heading","Travel_Heading"
 		};
+		const char * const SmartNames_Encoder[] = { "X_ft","Y_ft",
+			"wheel_fl_Encoder","wheel_fr_Encoder","wheel_rl_Encoder","wheel_rr_Encoder",
+			"swivel_fl_Raw","swivel_fr_Raw","swivel_rl_Raw","swivel_rr_Raw",
+			"Heading","Travel_Heading"
+		};
+
 		double * const SmartVariables = &smart_state.raw.element[0];
-		Smart_GetMultiValue(12, SmartNames, SmartVariables);
+		Smart_GetMultiValue(12, m_HasEncoder? SmartNames_Encoder : SmartNames, SmartVariables);
 		//The values read in are in feet and degrees (human readable, we have to translate them back)
 		//This is just written out so it's easy to follow and maintain
 		using vi = SwerveRobot_UI::SwerveRobot_State;
@@ -183,6 +190,10 @@ public:
 	~SmartDashboard_Control()
 	{
 		SmartDashboard::shutdown();
+	}
+	void SetHasEncoder(bool hasEncoder)
+	{
+		m_HasEncoder = hasEncoder;
 	}
 };
 
@@ -232,11 +243,14 @@ public:
 		assert(m_viewer);
 		switch (index)
 		{
-		case 0:
+		case 1:
 		{
-			printf("TODO\n");
+			m_smart_control.SetHasEncoder(false);
+			///printf("TODO\n");
 		}
 			break;
+		default:
+			m_smart_control.SetHasEncoder(true);
 		}
 	}
 	~OutputView_Tester()
