@@ -33,6 +33,7 @@ namespace registry_v1
 	//Entity properties
 	Rg_(Drive_WheelBase_in)
 	Rg_(Drive_TrackWidth_in)
+	Rg_(Drive_WheelDiameter_in)
 
 	//Motion 2D properties
 	Rg_(Motion2D_max_speed_linear)
@@ -43,19 +44,19 @@ namespace registry_v1
 #pragma endregion
 
 #pragma region _Ship_2D legacy_
-	Rg_(Ship2D_dHeading);
-	Rg_(Ship2D_EngineRampForward); Rg_(Ship2D_EngineRampReverse); Rg_(Ship2D_EngineRampAfterBurner);
-	Rg_(Ship2D_EngineDeceleration); Rg_(Ship2D_EngineRampStrafe);
-	Rg_(Ship2D_MAX_SPEED); Rg_(Ship2D_ENGAGED_MAX_SPEED);
-	Rg_(Ship2D_ACCEL); Rg_(Ship2D_BRAKE); Rg_(Ship2D_STRAFE); Rg_(Ship2D_AFTERBURNER_ACCEL); Rg_(Ship2D_AFTERBURNER_BRAKE);
+	Rg_(Ship2D_dHeading)
+	Rg_(Ship2D_EngineRampForward) Rg_(Ship2D_EngineRampReverse) Rg_(Ship2D_EngineRampAfterBurner)
+	Rg_(Ship2D_EngineDeceleration) Rg_(Ship2D_EngineRampStrafe)
+	Rg_(Ship2D_MAX_SPEED) Rg_(Ship2D_ENGAGED_MAX_SPEED)
+	Rg_(Ship2D_ACCEL) Rg_(Ship2D_BRAKE) Rg_(Ship2D_STRAFE) Rg_(Ship2D_AFTERBURNER_ACCEL) Rg_(Ship2D_AFTERBURNER_BRAKE)
 
-	Rg_(Ship2D_MaxAccelLeft); Rg_(Ship2D_MaxAccelRight); Rg_(Ship2D_MaxAccelForward); Rg_(Ship2D_MaxAccelReverse);
-	Rg_(Ship2D_MaxAccelForward_High); Rg_(Ship2D_MaxAccelReverse_High);
-	Rg_(Ship2D_MaxTorqueYaw); Rg_(Ship2D_MaxTorqueYaw_High);
-	Rg_(Ship2D_MaxTorqueYaw_SetPoint); Rg_(Ship2D_MaxTorqueYaw_SetPoint_High);
-	Rg_(Ship2D_Rotation_Tolerance);
-	Rg_(Ship2D_Rotation_ToleranceConsecutiveCount);
-	Rg_(Ship2D_Rotation_TargetDistanceScalar);
+	Rg_(Ship2D_MaxAccelLeft) Rg_(Ship2D_MaxAccelRight) Rg_(Ship2D_MaxAccelForward) Rg_(Ship2D_MaxAccelReverse)
+	Rg_(Ship2D_MaxAccelForward_High) Rg_(Ship2D_MaxAccelReverse_High)
+	Rg_(Ship2D_MaxTorqueYaw) Rg_(Ship2D_MaxTorqueYaw_High)
+	Rg_(Ship2D_MaxTorqueYaw_SetPoint) Rg_(Ship2D_MaxTorqueYaw_SetPoint_High)
+	Rg_(Ship2D_Rotation_Tolerance)
+	Rg_(Ship2D_Rotation_ToleranceConsecutiveCount)
+	Rg_(Ship2D_Rotation_TargetDistanceScalar)
 #pragma endregion
 
 #pragma region _rotary_properties legacy_
@@ -124,50 +125,50 @@ namespace registry_v1
 	//Rotary_Pot_
 	Rg_(Rotary_Pot_min_limit)
 	Rg_(Rotary_Pot_max_limit)
-	Rg_(Rotary_Pot_limit_tolerance);
-	Rg_(Rotary_Pot_offset);
-	Rg_(Rotary_Pot_range_flipped);
+	Rg_(Rotary_Pot_limit_tolerance)
+	Rg_(Rotary_Pot_offset)
+	Rg_(Rotary_Pot_range_flipped)
 	//Use _c, _t1, _t2, _t3, _t4 for array 0..5 respectively
-	Rg_(Rotary_Pot_curve_pot); //PotPolyTerms
+	Rg_(Rotary_Pot_curve_pot) //PotPolyTerms
 #pragma endregion
 
 #pragma region _simulation odometry legacy_
 
-	Rg_(EncoderSimulation_UseEncoder2); //currently only 2 or 3 is supported, can change if we have more 3 is more accurate, 2 is simpler
-	Rg_(EncoderSimulation_EncoderScaler);
+	Rg_(EncoderSimulation_UseEncoder2) //currently only 2 or 3 is supported, can change if we have more 3 is more accurate, 2 is simpler
+	Rg_(EncoderSimulation_EncoderScaler)
 //struct EncoderSimulation_Props
 //{
 //all doubles, and only one instance... easy peasy
-	Rg_(EncoderSimulation_Wheel_Mass);  //This is a total mass of all the wheels and gears for one side
-	Rg_(EncoderSimulation_COF_Efficiency);
-	Rg_(EncoderSimulation_GearReduction);  //In reciprocal form of spread sheet   driving gear / driven gear
-	Rg_(EncoderSimulation_TorqueAccelerationDampener); //ratio 1.0 no change
-	Rg_(EncoderSimulation_DriveWheelRadius); //in meters
-	Rg_(EncoderSimulation_NoMotors);  //Used to get total torque
-	Rg_(EncoderSimulation_PayloadMass);  //The robot weight in kg
-	Rg_(EncoderSimulation_SpeedLossConstant);
-	Rg_(EncoderSimulation_DriveTrainEfficiency);
+	Rg_(EncoderSimulation_Wheel_Mass)  //This is a total mass of all the wheels and gears for one side
+	Rg_(EncoderSimulation_COF_Efficiency)
+	Rg_(EncoderSimulation_GearReduction)  //In reciprocal form of spread sheet   driving gear / driven gear
+	Rg_(EncoderSimulation_TorqueAccelerationDampener) //ratio 1.0 no change
+	Rg_(EncoderSimulation_DriveWheelRadius) //in meters
+	Rg_(EncoderSimulation_NoMotors)  //Used to get total torque
+	Rg_(EncoderSimulation_PayloadMass)  //The robot weight in kg
+	Rg_(EncoderSimulation_SpeedLossConstant)
+	Rg_(EncoderSimulation_DriveTrainEfficiency)
 //	struct Motor_Specs
 	//{
-	Rg_(EncoderSimulation_FreeSpeed_RPM);
-	Rg_(EncoderSimulation_Stall_Torque_NM);
-	Rg_(EncoderSimulation_Stall_Current_Amp);
-	Rg_(EncoderSimulation_Free_Current_Amp);
+	Rg_(EncoderSimulation_FreeSpeed_RPM)
+	Rg_(EncoderSimulation_Stall_Torque_NM)
+	Rg_(EncoderSimulation_Stall_Current_Amp)
+	Rg_(EncoderSimulation_Free_Current_Amp)
 	//} motor;
 //};
 #pragma endregion
 
 #pragma region _Controls Section_
-	Rg_(AxisStrafe_);
-	Rg_(AxisForward_);
-	Rg_(AxisTurn_);
+	Rg_(AxisStrafe_)
+	Rg_(AxisForward_)
+	Rg_(AxisTurn_)
 
-	Rg_(Control_Key);
-	Rg_(Control_Joy);
-	Rg_(Control_FilterRange);
-	Rg_(Control_Multiplier);
-	Rg_(Control_CurveIntensity);
-	Rg_(Control_IsFlipped);  //bool
+	Rg_(Control_Key)
+	Rg_(Control_Joy)
+	Rg_(Control_FilterRange)
+	Rg_(Control_Multiplier)
+	Rg_(Control_CurveIntensity)
+	Rg_(Control_IsFlipped)  //bool
 #pragma endregion
 
 #undef Reg

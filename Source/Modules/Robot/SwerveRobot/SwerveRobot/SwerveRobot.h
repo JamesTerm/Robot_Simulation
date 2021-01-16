@@ -41,6 +41,8 @@ public:
 
 	//Give entity a time slice to update its position
 	void TimeSlice(double d_time_s);
+	//If simulator is running this will get a slice
+	void SimulatorTimeSlice(double dTime_s);
 	//allows entity to be stopped and reset to a position and heading
 	void Reset(double X = 0.0, double Y = 0.0, double heading = 0.0);
 
@@ -48,6 +50,7 @@ public:
 	Vec2D GetCurrentPosition() const;
 	double GetCurrentHeading() const;
 	const SwerveVelocities &GetCurrentVelocities() const;  //access to odometry readings
+	const SwerveVelocities &GetSimulatedVelocities() const; //explicite access to simulations velocities
 	const SwerveVelocities &GetCurrentVoltages() const;    //access to voltage writings
 	const SwerveVelocities &GetIntendedVelocities() const;  //access to kinematics
 
@@ -69,6 +72,8 @@ public:
 	void SetExternal_Velocity_PID_Monitor_Callback(std::function<PID_Velocity_proto> callback);
 	using PID_Position_proto = void(double Voltage, double Position, double PredictedPosition, double CurrentVelocity, double Encoder_Velocity, double ErrorOffset);
 	void SetExternal_Position_PID_Monitor_Callback(std::function<PID_Position_proto> callback);
+	//Hook up the physical odometry if we have it
+	void SetPhysicalOdometry(std::function<Robot::SwerveVelocities ()> callback);
 private:
 	std::shared_ptr<SwerveRobot_Internal> m_SwerveRobot;
 };

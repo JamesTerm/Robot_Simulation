@@ -461,8 +461,8 @@ private:
 			//Note: removed in Encoder Simulator v3
 			//curve_voltage =
 			//{t4 = 3.1199; t3 = -4.4664; t2 = 2.2378; t1 = 0.1222; c = 0};
-			const double encoder_pulses_per_revolution = 560 / 4;
-			const double encoder_to_wheel_ratio = 1.0;
+			const double encoder_pulses_per_revolution = 1024 / 4;  //CTR magnetic encoder 1024 cpr
+			const double encoder_to_wheel_ratio = 1.0/9.0;  //should use 9 and not 7 for current draw
 			const bool encoder_reversed_wheel = false;
 			const double max_speed = DriveGearSpeed;
 			const double accel = 10.0;						//We may indeed have a two button solution(match with max accel)
@@ -485,7 +485,9 @@ private:
 			const double tolerance = 0.03;
 			const int tolerance_count = 1;
 			const double voltage_multiply = 1.0;			//May be reversed
-			const double encoder_to_wheel_ratio = 1.0;
+			const double encoder_pulses_per_revolution = 1024 / 4;  //CTR magnetic encoder 1024 cpr
+			const double encoder_to_wheel_ratio = 1.0/81.0;  //assume encoder is on stage closest to shaft
+			const bool encoder_reversed_wheel = false;
 			//In radians using 1.5 rpm
 			const double max_speed = 9.4;
 			const double accel = 10.0;						//We may indeed have a two button solution(match with max accel)
@@ -640,7 +642,7 @@ private:
 			//Rotary--------------------------
 			PUT_NUMBER(Rotary_VoltageScaler, val.voltage_multiply);
 			PUT_NUMBER(Rotary_EncoderToRS_Ratio, val.encoder_to_wheel_ratio);
-			//PUT_NUMBER(Rotary_EncoderPulsesPerRevolution, val.encoder_pulses_per_revolution);
+			PUT_NUMBER(Rotary_EncoderPulsesPerRevolution, val.encoder_pulses_per_revolution);
 			PUT_BOOL(Rotary_Arm_GainAssist_UsePID_Up_Only, val.use_pid_up_only);
 			//PUT_NUMBER(Rotary_PID)  //double[3]... append _p _i _d to the name for each element
 			PUT_NUMBER_suffix(Rotary_Arm_GainAssist_PID_Up, val._pid_swivel.p, _p);
@@ -681,7 +683,12 @@ private:
 		#undef PUT_NUMBER
 		#undef PUT_BOOL
 	}
-	void Test_Controls_Airflo()
+	enum Controller
+	{
+		eAirFlo,
+		eLogitech
+	};
+	void Test_Controls(Controller joystick)
 	{
 		#pragma region _setup put vars_
 		Framework::Base::asset_manager& assets = *m_assets;
@@ -699,7 +706,16 @@ private:
 		#pragma endregion
 		{
 			prefix = csz_AxisTurn_;
-			PUT_NUMBER(Control_Key, 5.0);
+			switch (joystick)
+			{
+			case eAirFlo:
+				PUT_NUMBER(Control_Key, 5.0);
+				break;
+			case eLogitech:
+				PUT_NUMBER(Control_Key, 3.0);
+				break;
+			}
+		
 			PUT_NUMBER(Control_CurveIntensity, 3.0);
 		}
 	}
@@ -708,6 +724,9 @@ public:
 	{
 		using namespace properties::registry_v1;
 		m_assets = &assets;
+		//Note: tuning off bypass you must load one of the robots as the simulation uses the same properties
+		//as the common wheel and swivel, the defaults of the encoder and potentiometer are currently not 
+		//compatible, as the bypass simulation option itself is
 		#if 1
 		assets.put_bool(csz_Build_bypass_simulation, false);
 		#else
@@ -718,7 +737,7 @@ public:
 		TestAndromeda();
 		//This customizes to my AirFlo controller, add your own controller
 		//especially if your axis assignments need to change
-		Test_Controls_Airflo();
+		Test_Controls(eLogitech);
 	}
 };
 

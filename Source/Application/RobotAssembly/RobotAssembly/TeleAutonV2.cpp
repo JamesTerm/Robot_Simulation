@@ -223,6 +223,7 @@ private:
 		GetInputSlice(dTime_s);
 		//Update the predicted motion for this time slice
 		m_robot.TimeSlice(dTime_s);
+		//m_robot.SimulatorTimeSlice(dTime_s);
 		m_Entity.TimeSlice(dTime_s);
 		UpdateVariables();
 	}

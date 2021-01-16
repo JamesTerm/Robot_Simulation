@@ -69,6 +69,7 @@ private:
 	std::function <double()> m_ExternGetCurrentHeading = nullptr;
 	std::function<SwerveRobot::PID_Velocity_proto> m_PID_Velocity_callback = Default_Velocity_PID_Monitor;
 	std::function<SwerveRobot::PID_Position_proto> m_PID_Position_callback = Default_Position_PID_Monitor;
+	std::function<Robot::SwerveVelocities ()> m_PhysicalOdometry=nullptr;
 #pragma endregion
 	void SetHooks(bool enable)
 	{
@@ -100,7 +101,12 @@ private:
 				return ret;
 			});
 			HOOK(m_Odometry.SetOdometryHeadingCallback,, return GetCurrentHeading());
-			HOOK(m_Odometry.SetOdometryCallback,, return m_Simulation.GetCurrentVelocities());
+			//I could use the macro, but I can see this one needing a break point from time-to-time
+			m_Odometry.SetOdometryCallback(
+				[&]()
+				{
+					return m_PhysicalOdometry?m_PhysicalOdometry():m_Simulation.GetCurrentVelocities();
+				});
 			HOOK(m_Simulation.SetVoltageCallback,, return m_Voltage);
 			#pragma region _Drive hooks_
 			//These have to be unrolled unfortunately
@@ -471,7 +477,9 @@ public:
 				0.0,0.0,
 				//This may be needed for simulation copy
 				//double DistanceDegradeScalar;
-				1.0
+				1.0,
+				//bool UsingRange;
+				false
 			};
 		}
 		{
@@ -531,9 +539,8 @@ public:
 			m_Swivel[i].TimeSlice(d_time_s);
 			//These will hook their updates to here in m_Voltage
 		}
-		//The simulation already is hooked to m_Voltage its ready to simulate
-		//This step is skipped in real robot code as it physically happens instead
-		m_Simulation.TimeSlice(d_time_s);
+		//TODO determine why timing thrashes when moving it to its own call
+		m_Simulation.TimeSlice(d_time_s); //TODO: was here now moved into its own call
 		//Now to update the odometry
 		m_Odometry.TimeSlice(d_time_s);
 		//We'll go ahead and maintain an internal state of the position and heading even if this gets managed
@@ -558,6 +565,13 @@ public:
 			//Almost there... the heading needs to be adjusted to fit in the range from -pi2 to pi2
 			m_current_heading = NormalizeRotation2(m_current_heading);  //written out for ease of debugging
 		}
+	}
+	void SimulatorTimeSlice(double dTime_s)
+	{
+		//TODO enable once we determine why timing thrashes
+		//The simulation already is hooked to m_Voltage its ready to simulate
+		//This call is skipped in real robot code as it physically happens instead
+		//m_Simulation.TimeSlice(dTime_s);
 	}
 	#pragma region _mutators_
 	void SetLinearVelocity_local(double forward, double right)
@@ -597,6 +611,10 @@ public:
 	const SwerveVelocities &GetCurrentVelocities() const
 	{
 		return m_Odometry.GetCurrentVelocities();
+	}
+	const SwerveVelocities &GetSimulatedVelocities() const
+	{
+		return m_Simulation.GetCurrentVelocities();
 	}
 	const SwerveVelocities &GetCurrentVoltages() const
 	{
@@ -645,7 +663,10 @@ public:
 	{
 		m_PID_Position_callback = callback;
 	}
-
+	void SetPhysicalOdometry(std::function<Robot::SwerveVelocities ()> callback)
+	{
+		m_PhysicalOdometry=callback;
+	}
 	#pragma endregion
 };
 #pragma region _wrapper methods_
@@ -680,6 +701,10 @@ void SwerveRobot::DriveToLocation(double north, double east, bool absolute, bool
 void SwerveRobot::TimeSlice(double d_time_s)
 {
 	m_SwerveRobot->TimeSlice(d_time_s);
+}
+void SwerveRobot::SimulatorTimeSlice(double dTime_s)
+{
+	m_SwerveRobot->SimulatorTimeSlice(dTime_s);
 }
 void SwerveRobot::Reset(double X, double Y, double heading)
 {
@@ -717,9 +742,17 @@ void SwerveRobot::SetExternal_Position_PID_Monitor_Callback(std::function<PID_Po
 {
 	m_SwerveRobot->SetExternal_Position_PID_Monitor_Callback(callback);
 }
+void SwerveRobot::SetPhysicalOdometry(std::function<Robot::SwerveVelocities ()> callback)
+{
+	m_SwerveRobot->SetPhysicalOdometry(callback);
+}
 const SwerveVelocities &SwerveRobot::GetCurrentVelocities() const
 {
 	return m_SwerveRobot->GetCurrentVelocities();
+}
+const SwerveVelocities &SwerveRobot::GetSimulatedVelocities() const
+{
+	return m_SwerveRobot->GetSimulatedVelocities();
 }
 const SwerveVelocities &SwerveRobot::GetCurrentVoltages() const
 {

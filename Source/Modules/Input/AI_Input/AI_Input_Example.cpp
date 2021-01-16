@@ -249,7 +249,8 @@ public:
 	void Activate()
 	{
 		m_Primer.AsGoal().Terminate();  //sanity check clear previous session
-
+		//reset timer
+		m_Timer = 0.0;
 		AutonType AutonTest = eDoNothing;
 		const char* const AutonTestSelection = "AutonTest";
 		#if 1
