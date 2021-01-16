@@ -172,7 +172,6 @@ private:
 	{
 		using namespace Module::Input;
 		using JoystickInfo = dx_Joystick::JoystickInfo;
-		size_t JoyNum = 0;
 
 		dx_Joystick::JoyState joyinfo[4] = {0}; //setup joy zero'd out
 
@@ -180,7 +179,7 @@ private:
 		for (size_t i = 0 ; i < NoJoySticks; i++)
 		{
 			//printf("Button: 2=exit, x axis=strafe, y axis=forward/reverse, z axis turn \n");
-			m_joystick.read_joystick(JoyNum, joyinfo[i]);
+			m_joystick.read_joystick(i, joyinfo[i]);
 		}
 		if (m_game_mode==game_mode::eTele)
 		{
