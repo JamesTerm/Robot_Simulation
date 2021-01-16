@@ -3,6 +3,8 @@
 #include <Windows.h>
 #include "../../../Modules/Output/OSG_Viewer/OSG_Viewer/OSG_Viewer.h"
 #include "../../../Modules/Output/OSG_Viewer/OSG_Viewer/SwerveRobot_UI.h"
+//helpful for interpolation of position
+#include "../../../Base/Vec2d.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -139,6 +141,59 @@ class SmartDashboard_Control
 	//to link different kind of robot objects, we may have a different update method to match it
 private:
 	bool m_HasEncoder = true;
+	class Interpolate_Position
+	{
+		//Newer SmartDashboard may intensionally update slower than our framerate when this happens the position looks jerky
+		//this will help interpolate the in-between moments of time
+	private:
+		SwerveRobot_UI::uSwerveRobot_State m_last_smart_state;
+		bool m_Bypass=false;
+	public:
+		void SetInterpolatePosition(bool interpolate_position)
+		{
+			m_Bypass = !interpolate_position;
+		}
+		SwerveRobot_UI::uSwerveRobot_State &operator() (SwerveRobot_UI::uSwerveRobot_State smart_state,double dTime_s)
+		{
+			//only interpolate if our times are under 20ms
+			if ((!m_Bypass)&&(dTime_s<0.2))
+			{
+				//To start at this point we have the last state and our time delta (around 16ms)
+				//finally we need our velocities from SmartDashboard
+				const char* const SmartNames[] = { "linear_velocity_x","linear_velocity_y","Rotation Velocity" };
+				double velocity[3] = { 0 };
+				Smart_GetMultiValue(3, SmartNames, &velocity[0]);
+				//Now we have everything we need to interpolate
+				//first we'll interpolate the position
+				using namespace Framework::Base;
+				//as x , y
+				Vec2D position(m_last_smart_state.bits.Pos_m.x,m_last_smart_state.bits.Pos_m.y);
+				const Vec2D global_velocity(velocity[0], velocity[1]);
+				const Vec2D global_pos_delta = global_velocity * dTime_s;  //how much we increment right now
+				//Now we can compute this position. Offset it with last state so we can average it with the current
+				position += global_pos_delta;
+				//So we have 2 positions, the last state predicted, and the current state of smart dashboard... using the old saying
+				//there is 3 sides to a story, the true position is somewhere in the middle, but to keep smooth only apply this when
+				//we exceed a tolerance
+				const Vec2D smart_pos(smart_state.bits.Pos_m.x, smart_state.bits.Pos_m.y);
+				const double tolerance = (smart_pos - position).length();
+				const Vec2D new_pos = tolerance > 0.5 ? (smart_pos + position) / 2.0 : position;
+				//const Vec2D new_pos = position;  //testing
+				//commit this adjustment
+				smart_state.bits.Pos_m.x = new_pos.x();
+				smart_state.bits.Pos_m.y = new_pos.y();
+				//Now for the heading more of the same
+				const double heading_delta = velocity[2] * dTime_s;
+				double predicted_heading = m_last_smart_state.bits.Att_r + heading_delta;
+				const double smart_heading = smart_state.bits.Att_r;
+				const double new_heading = fabs(smart_heading - predicted_heading)>0.2 ? (smart_heading + predicted_heading) / 2.0 : predicted_heading;
+				//commit this
+				smart_state.bits.Att_r = new_heading;
+			}
+			m_last_smart_state = smart_state;
+			return m_last_smart_state;
+		}
+	} m_interpolate;
 public:
 	//Note: to do nothing in the constructor gives client code the ability to instantiate it without using it or any penalty to instantiate it
 	//and not need to consider it as a pointer
@@ -149,7 +204,7 @@ public:
 		SmartDashboard::init();
 	}
 	//This particular update will directly work with the values passed in TeleOpV1
-	void UpdateState_basic(SwerveRobot_UI::uSwerveRobot_State &state)
+	void UpdateState_basic(SwerveRobot_UI::uSwerveRobot_State &state,double dTime_s)
 	{
 		SwerveRobot_UI::uSwerveRobot_State smart_state = {};
 		//PSAI position, swerve velocities array, attitude, intended orientation
@@ -184,6 +239,7 @@ public:
 			DEG_2_RAD(smart_state.bits.Att_r),
 			DEG_2_RAD(smart_state.bits.IntendedOrientation)
 		};
+		state = m_interpolate(state,dTime_s);
 	}
 	//Reserved make update method for voltage and physics simulation of encoders
 	//void UpdateState_physics(SwerveRobot_UI::SwerveRobot_State &state)
@@ -194,6 +250,10 @@ public:
 	void SetHasEncoder(bool hasEncoder)
 	{
 		m_HasEncoder = hasEncoder;
+	}
+	void SetInterpolatePosition(bool interpolate_position)
+	{
+		m_interpolate.SetInterpolatePosition(interpolate_position);
 	}
 };
 
@@ -211,7 +271,7 @@ private:
 		{
 			//The robot has setup most the hooks we just need the update from the robot
 			m_robot->SetUpdateCallback(	[&](double dTime_s)
-				{	m_smart_control.UpdateState_basic(m_robot->get_state_as_union());
+				{	m_smart_control.UpdateState_basic(m_robot->get_state_as_union(),dTime_s);
 				});
 		}
 		else
@@ -244,10 +304,10 @@ public:
 		switch (index)
 		{
 		case 1:
-		{
 			m_smart_control.SetHasEncoder(false);
-			///printf("TODO\n");
-		}
+			break;
+		case 2:
+			m_smart_control.SetInterpolatePosition(false);
 			break;
 		default:
 			m_smart_control.SetHasEncoder(true);
@@ -303,9 +363,9 @@ bool CommandLineInterface()
 			}
 			else if (!_strnicmp(input_line, "test", 4))
 			{
-				const char *IpAddress = str_1[0] == 0 ? default_ip : str_1;
+				const char *IpAddress = (str_1[0] == 0) || (str_1[0] == '0') ? default_ip : str_1;
 				test.init(viewer, robot, IpAddress);
-				test.Test(atoi(str_1));
+				test.Test(atoi(str_2));
 			}
 			else if (!_strnicmp(input_line, "init", 4))
 			{
