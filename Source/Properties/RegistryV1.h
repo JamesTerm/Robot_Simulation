@@ -34,6 +34,7 @@ namespace registry_v1
 	Rg_(Drive_WheelBase_in)
 	Rg_(Drive_TrackWidth_in)
 	Rg_(Drive_WheelDiameter_in)
+	Rg_(Drive_UseFieldCentric)
 
 	//Motion 2D properties
 	Rg_(Motion2D_max_speed_linear)

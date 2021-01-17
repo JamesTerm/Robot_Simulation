@@ -97,6 +97,7 @@ private:
 	} m_Axis;
 
 	bool m_IsStreaming = false;
+	bool m_FieldCentricDrive = false;
 	#pragma endregion
 
 	void UpdateVariables()
@@ -200,7 +201,7 @@ private:
 			//input I am not going to filter it out, but could if needed.  Also the fabs() ensures the forward and right do not cancel
 			//each other out
 			if (!IsZero(fabs(Forward) + fabs(Right)) || (m_robot.GetIsDrivenLinear() == false))
-				m_robot.SetLinearVelocity_local(Forward, Right);
+				m_FieldCentricDrive? m_robot.SetLinearVelocity_global(Forward, Right) : m_robot.SetLinearVelocity_local(Forward, Right);
 		}
 		else if (m_game_mode == game_mode::eAuton)
 		{
@@ -400,6 +401,7 @@ public:
 		m_robot.Init(&m_properties);
 		m_viewer.init();
 		m_RobotUI.Initialize();
+		m_FieldCentricDrive = m_properties.get_bool(properties::registry_v1::csz_Drive_UseFieldCentric, false);
 
 		Reset();  //for entity variables
 	}

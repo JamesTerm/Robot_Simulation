@@ -23,6 +23,7 @@ public:
 	void Shutdown(); //give ability to shut down early
 	//These are local to current orientation
 	void SetLinearVelocity_local(double forward, double right);
+	void SetLinearVelocity_global(double north, double east);  //For field centric use
 	//Note: 0 north, pi/2 east, pi south, pi+pi/2 west, so positive gives clockwise direction
 	void SetAngularVelocity(double clockwise);
 

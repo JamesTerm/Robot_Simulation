@@ -1490,6 +1490,13 @@ public:
 		//Note: SetRequestedVelocity is local
 		SetRequestedVelocity(Vec2D(right, forward));
 	}
+	void SetLinearVelocity_global(double forward, double right)
+	{
+		m_controller.SetIsDriven(false);
+		SetSimFlightMode(true);  //for now never go into slide mode, we can change this later
+		//Note: SetRequestedVelocity is local
+		SetRequestedVelocity(LocalToGlobal(-GetAtt_r(),Vec2D(right, forward)));
+	}
 	void DriveToLocation(double north, double east, bool absolute, bool stop_at_destination, double max_speed, bool can_strafe)
 	{
 		m_controller.DriveToLocation(north, east, absolute, stop_at_destination, max_speed, can_strafe);
@@ -1576,7 +1583,7 @@ void MotionControl2D::SetLinearVelocity_local(double forward, double right)
 }
 void MotionControl2D::SetLinearVelocity_global(double north, double east)
 {
-	m_MotionControl2D->SetRequestedVelocity(Vec2D(north, east));
+	m_MotionControl2D->SetLinearVelocity_global(north, east);
 }
 void MotionControl2D::SetAngularVelocity(double clockwise)
 {

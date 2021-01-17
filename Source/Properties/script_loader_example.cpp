@@ -738,6 +738,8 @@ public:
 		//This customizes to my AirFlo controller, add your own controller
 		//especially if your axis assignments need to change
 		Test_Controls(eLogitech);
+		//use field centric drive here
+		//assets.put_bool(csz_Drive_UseFieldCentric, true);
 	}
 };
 
