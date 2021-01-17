@@ -160,9 +160,10 @@ private:
 			{
 				//To start at this point we have the last state and our time delta (around 16ms)
 				//finally we need our velocities from SmartDashboard
-				const char* const SmartNames[] = { "linear_velocity_x","linear_velocity_y","Rotation Velocity" };
-				double velocity[3] = { 0 };
-				Smart_GetMultiValue(3, SmartNames, &velocity[0]);
+				//The last velocity is pure magnitude which we can use to gauge tolerance
+				const char* const SmartNames[] = { "linear_velocity_x","linear_velocity_y","Rotation Velocity","Velocity" };
+				double velocity[4] = { 0 };
+				Smart_GetMultiValue(4, SmartNames, &velocity[0]);
 				//Now we have everything we need to interpolate
 				//first we'll interpolate the position
 				using namespace Framework::Base;
@@ -172,12 +173,15 @@ private:
 				const Vec2D global_pos_delta = global_velocity * dTime_s;  //how much we increment right now
 				//Now we can compute this position. Offset it with last state so we can average it with the current
 				position += global_pos_delta;
-				//So we have 2 positions, the last state predicted, and the current state of smart dashboard... using the old saying
-				//there is 3 sides to a story, the true position is somewhere in the middle, but to keep smooth only apply this when
-				//we exceed a tolerance
+				//So we have 2 positions, the last state predicted, and the current state of smart dashboard... 
+				//To keep smooth only apply this when we exceed a tolerance
 				const Vec2D smart_pos(smart_state.bits.Pos_m.x, smart_state.bits.Pos_m.y);
-				const double tolerance = (smart_pos - position).length();
-				const Vec2D new_pos = tolerance > 0.5 ? (smart_pos + position) / 2.0 : position;
+				const double error = (smart_pos - position).length();
+				//While position doesn't have to be perfect, having the tolerance scaled to velocity ensure's 
+				//it will not glitch on slower speeds (which would be more noticeable
+				const double tolerance = fabs(velocity[3]) * 0.05; 
+				//SmartDashboard::PutNumber("Test", tolerance);
+				const Vec2D new_pos = error > tolerance ? smart_pos : position;
 				//const Vec2D new_pos = position;  //testing
 				//commit this adjustment
 				smart_state.bits.Pos_m.x = new_pos.x();
@@ -186,7 +190,10 @@ private:
 				const double heading_delta = velocity[2] * dTime_s;
 				double predicted_heading = m_last_smart_state.bits.Att_r + heading_delta;
 				const double smart_heading = smart_state.bits.Att_r;
-				const double new_heading = fabs(smart_heading - predicted_heading)>0.2 ? (smart_heading + predicted_heading) / 2.0 : predicted_heading;
+				//Unlike position, the rotation needs to be perfect when there is no angular velocity, so we scale the tolerance to it
+				const double tolerance_rot = 0.2 * fabs(velocity[2] * 0.5);
+				//SmartDashboard::PutNumber("Test", tolerance_rot);
+				const double new_heading = fabs(smart_heading - predicted_heading) > tolerance_rot ? smart_heading : predicted_heading;
 				//commit this
 				smart_state.bits.Att_r = new_heading;
 			}
