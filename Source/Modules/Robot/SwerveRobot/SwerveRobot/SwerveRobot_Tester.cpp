@@ -39,6 +39,11 @@
 
 #pragma endregion
 
+void TimeSlice(Module::Robot::SwerveRobot& robot)
+{
+	robot.SimulatorTimeSlice(0.010);
+	robot.TimeSlice(0.010); //update a time slice
+}
 void strafe_test(Module::Robot::SwerveRobot &robot)
 {
 	//Test strafing back and forth, test with simple motion control and bypass rotary system to debug swerve management
@@ -46,37 +51,36 @@ void strafe_test(Module::Robot::SwerveRobot &robot)
 	for (size_t i = 0; i < 32; i++)
 	{
 		robot.SetLinearVelocity_local(0.0, 1.0);  //simple move right
-		robot.TimeSlice(0.010); //update a time slice
+		TimeSlice(robot); //update a time slice
 		cout("angle=%.2f,position x=%.2f\n", RAD_2_DEG(robot.GetCurrentVelocities().Velocity.AsArray[4]), Meters2Feet(robot.GetCurrentPosition().x()));
 	}
-	cout("------------------------------------------------------\n");
+	cout("------------------------------------------------------ strafe right\n");
 	for (size_t i = 0; i < 16; i++)
 	{
 		robot.SetLinearVelocity_local(0.0, -1.0);  //simple move left
-		robot.TimeSlice(0.010); //update a time slice
+		TimeSlice(robot); //update a time slice
 		cout("angle=%.2f,position x=%.2f\n", RAD_2_DEG(robot.GetCurrentVelocities().Velocity.AsArray[4]), Meters2Feet(robot.GetCurrentPosition().x()));
 	}
-	cout("------------------------------------------------------\n");
+	cout("------------------------------------------------------ strafe left\n");
 }
-
 void up_down_test(Module::Robot::SwerveRobot& robot)
 {
 	for (size_t i = 0; i < 32; i++)
 	{
 		robot.SetLinearVelocity_local(-1.0, 0.0);  //simple move down reverse
-		robot.TimeSlice(0.010); //update a time slice
+		TimeSlice(robot); //update a time slice
 		cout("angle=%.2f,position y=%.2f\n", RAD_2_DEG(robot.GetCurrentVelocities().Velocity.AsArray[4]), Meters2Feet(robot.GetCurrentPosition().y()));
 	}
-	cout("------------------------------------------------------\n");
+	cout("------------------------------------------------------ down\n");
 
 	for (size_t i = 0; i < 16; i++)
 	{
 		robot.SetLinearVelocity_local(1.0, 0.0);  //simple move up forward
-		robot.TimeSlice(0.010); //update a time slice
+		TimeSlice(robot); //update a time slice
 		//cout("position=%.2f, x=%.2f\n", Meters2Feet( _robot.GetCurrentPosition().y()), Meters2Feet( _robot.GetCurrentPosition().x()));
 		cout("angle=%.2f,position y=%.2f\n", RAD_2_DEG(robot.GetCurrentVelocities().Velocity.AsArray[4]), Meters2Feet(robot.GetCurrentPosition().y()));
 	}
-	cout("------------------------------------------------------\n");
+	cout("------------------------------------------------------ Up\n");
 }
 
 void stop_test(Module::Robot::SwerveRobot& robot, size_t eoi)
@@ -84,7 +88,7 @@ void stop_test(Module::Robot::SwerveRobot& robot, size_t eoi)
 	for (size_t i = 0; i < eoi; i++)
 	{
 		robot.SetLinearVelocity_local(0.0, 0.0);  //stop
-		robot.TimeSlice(0.010); //update a time slice
+		TimeSlice(robot); //update a time slice
 		cout("angle=%.2f,position x=%.2f  y=%.2f\n", RAD_2_DEG(robot.GetCurrentVelocities().Velocity.AsArray[4]),
 			Meters2Feet(robot.GetCurrentPosition().x()), Meters2Feet(robot.GetCurrentPosition().y()));
 	}
@@ -96,7 +100,7 @@ void diagonal_test(Module::Robot::SwerveRobot& robot, double forward, double rig
 	for (size_t i = 0; i < eoi; i++)
 	{
 		robot.SetLinearVelocity_local(forward, right);  //diagonally
-		robot.TimeSlice(0.010); //update a time slice
+		TimeSlice(robot); //update a time slice
 		cout("angle=%.2f,position x=%.2f  y=%.2f\n", RAD_2_DEG(robot.GetCurrentVelocities().Velocity.AsArray[4]),
 			Meters2Feet(robot.GetCurrentPosition().x()), Meters2Feet(robot.GetCurrentPosition().y()));
 	}
@@ -110,35 +114,35 @@ void strafe_box_test(Module::Robot::SwerveRobot& robot, bool reverse_x=false)
 	for (size_t i = 0; i < eoi; i++)
 	{
 		robot.SetLinearVelocity_local(0.0, x_mult*1.0);  //simple move right
-		robot.TimeSlice(0.010); //update a time slice
+		TimeSlice(robot); //update a time slice
 		cout("angle=%.2f,position x=%.2f  y=%.2f\n", RAD_2_DEG(robot.GetCurrentVelocities().Velocity.AsArray[4]), 
 			Meters2Feet(robot.GetCurrentPosition().x()), Meters2Feet(robot.GetCurrentPosition().y()));
 	}
-	cout("------------------------------------------------------ right\n");
+	cout("------------------------------------------------------ box right\n");
 	for (size_t i = 0; i < eoi; i++)
 	{
 		robot.SetLinearVelocity_local(1.0, 0.0);  //simple move down
-		robot.TimeSlice(0.010); //update a time slice
+		TimeSlice(robot); //update a time slice
 		cout("angle=%.2f,position x=%.2f  y=%.2f\n", RAD_2_DEG(robot.GetCurrentVelocities().Velocity.AsArray[4]),
 			Meters2Feet(robot.GetCurrentPosition().x()), Meters2Feet(robot.GetCurrentPosition().y()));
 	}
-	cout("------------------------------------------------------ down\n");
+	cout("------------------------------------------------------ box down\n");
 	for (size_t i = 0; i < eoi; i++)
 	{
 		robot.SetLinearVelocity_local(0.0, x_mult * -1.0);  //simple move left
-		robot.TimeSlice(0.010); //update a time slice
+		TimeSlice(robot); //update a time slice
 		cout("angle=%.2f,position x=%.2f  y=%.2f\n", RAD_2_DEG(robot.GetCurrentVelocities().Velocity.AsArray[4]),
 			Meters2Feet(robot.GetCurrentPosition().x()), Meters2Feet(robot.GetCurrentPosition().y()));
 	}
-	cout("------------------------------------------------------ left\n");
+	cout("------------------------------------------------------ box left\n");
 	for (size_t i = 0; i < eoi; i++)
 	{
 		robot.SetLinearVelocity_local(-1.0, 0.0);  //simple move up
-		robot.TimeSlice(0.010); //update a time slice
+		TimeSlice(robot); //update a time slice
 		cout("angle=%.2f,position x=%.2f  y=%.2f\n", RAD_2_DEG(robot.GetCurrentVelocities().Velocity.AsArray[4]),
 			Meters2Feet(robot.GetCurrentPosition().x()), Meters2Feet(robot.GetCurrentPosition().y()));
 	}
-	cout("------------------------------------------------------ up\n");
+	cout("------------------------------------------------------ box up\n");
 }
 
 int main()
@@ -176,11 +180,11 @@ int main()
 	for (size_t i = 0; i < 16; i++)
 	{
 		_robot.SetAngularVelocity(Pi2);
-		_robot.TimeSlice(0.033); //update a time slice
+		TimeSlice(_robot); //update a time slice
 		//cout("heading=%.2f\n", RAD_2_DEG( _robot.GetCurrentHeading()));
 		cout("angle=%.2f,heading =%.2f\n", RAD_2_DEG(_robot.GetCurrentVelocities().Velocity.AsArray[4]), RAD_2_DEG(_robot.GetCurrentHeading()));
 	}
-	cout("------------------------------------------------------\n");
+	cout("------------------------------------------------------ turn 180\n");
 	#endif
 	#if 1
 	strafe_box_test(_robot);
