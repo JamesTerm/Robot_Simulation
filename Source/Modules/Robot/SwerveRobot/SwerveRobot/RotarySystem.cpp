@@ -488,6 +488,16 @@ public:
 			//ensure the positions are calibrated when we are not moving
 			if (IsZero(NewPosition - m_LastPosition) || NeedGainAssistForUp)
 				SetPos_m(NewPosition);  //this will help min and max limits work properly even though we do not have PID
+			//This could still pertain, but to be passive means to not do anything from the readings especially if the sensor
+			//is faulty; however, for testing this can be helpful
+			#if 0
+			if (!GetLockShipToPosition()&&(arm.UsePID_Up_Only))
+			{
+				const double IsAccel= PotentiometerVelocity * PotAccel > 0.0 ? 1.0 : -1.0;
+				//Note: the velocity has the correct direction, if we are accelerating
+				PredictedPosition = NewPosition + (PotentiometerVelocity * arm.VelocityPredictUp * IsAccel);
+			}
+			#endif
 		}
 
 		#if 0
@@ -534,27 +544,43 @@ public:
 		m_LastTime = dTime_s;
 
 		Rotary_System::TimeChange(dTime_s);
-
-		double OverShootVelocity=m_Physics.GetVelocity();
 		//Note: CurrentVelocity variable is retained before the time change (for proper debugging of PID) we use the new velocity (called Velocity) here for voltage
+		const double NewVelocity=m_Physics.GetVelocity();
+		double OverShootVelocity=NewVelocity;
 		if ((arm.UsePID_Up_Only)&&(arm.VelocityPredictUp>0.0)&&(!GetLockShipToPosition()))
 		{
-			//Overshoot protection: with known latent readings...  use the predicted position and use distance computation if this velocity is
-			//less than the profile... use it
-			const Ship_1D_Props &props=m_Ship_1D_Props;
-			const double DistanceRestraintPositive=props.MaxAccelForward*props.DistanceDegradeScalar;
-			const double DistanceRestraintNegative=props.MaxAccelReverse*props.DistanceDegradeScalar;
-			const double DistanceToUse=m_IntendedPosition-PredictedPosition;
-			if (!m_IsAngular)
+			//Overshoot protection: with known latent readings...  use the predicted position first see if this hits tolerance
+			if (fabs(PredictedPosition-m_IntendedPosition) < m_Rotary_Props.PrecisionTolerance)
 			{
-				//The match velocity needs to be in the same direction as the distance (It will not be if the ship is banking)
-				OverShootVelocity=m_Physics.GetVelocityFromDistance_Linear(DistanceToUse,DistanceRestraintPositive*m_Mass,DistanceRestraintNegative*m_Mass,dTime_s,0.0);
+				OverShootVelocity=0.0;
+				m_ErrorOffset = 0.0;  //no error correction to factor in (avoids noisy resting point)
+				// if (m_InstanceIndex==4)
+				// 	printf("---x--");
 			}
 			else
-				OverShootVelocity=m_Physics.GetVelocityFromDistance_Angular(DistanceToUse,DistanceRestraintPositive*m_Mass,dTime_s,0.0);
+			{
+				//still too far away use distance computation to evaluate this velocity
+				const Ship_1D_Props &props=m_Ship_1D_Props;
+				const double DistanceRestraintPositive=props.MaxAccelForward*props.DistanceDegradeScalar;
+				const double DistanceRestraintNegative=props.MaxAccelReverse*props.DistanceDegradeScalar;
+				//The prediction may go in the wrong direction, so use the smallest distance between the predicted point
+				//and the last read point
+				const double DistanceToUse=std::min(m_IntendedPosition-PredictedPosition,m_IntendedPosition-NewPosition);
+				if (!m_IsAngular)
+				{
+					//The match velocity needs to be in the same direction as the distance (It will not be if the ship is banking)
+					OverShootVelocity=m_Physics.GetVelocityFromDistance_Linear(DistanceToUse,DistanceRestraintPositive*m_Mass,DistanceRestraintNegative*m_Mass,dTime_s,0.0);
+				}
+				else
+					OverShootVelocity=m_Physics.GetVelocityFromDistance_Angular(DistanceToUse,DistanceRestraintPositive*m_Mass,dTime_s,0.0);
+				// if (m_InstanceIndex==4)
+				// 	printf("-|%.2f,%.2f|-",OverShootVelocity,PredictedPosition);
+			}
 		}
-		const double Velocity = fabs(m_Physics.GetVelocity()) < fabs(OverShootVelocity) ? m_Physics.GetVelocity() : OverShootVelocity;
-
+		//If the overshoot and newvelocity conflict in direction it is zero, other wise do a min of magnitude
+		const double Velocity = 
+			NewVelocity * OverShootVelocity < 0.0 ? 0.0 :
+			fabs(NewVelocity) < fabs(OverShootVelocity) ? NewVelocity : OverShootVelocity;
 		const double Acceleration = (Velocity - m_PreviousVelocity) / dTime_s;
 
 		const double MaxSpeed = m_Ship_1D_Props.MAX_SPEED;
@@ -668,11 +694,11 @@ public:
 			if ((fabs(PotentiometerVelocity) > 0.03) || (CurrentVelocity != 0.0) || (Voltage != 0.0))
 			{
 				if (m_PID_Monitor_callback)
-					m_PID_Monitor_callback(Voltage, PosY, PredictedPosY, CurrentVelocity, PotentiometerVelocity, m_ErrorOffset);
+					m_PID_Monitor_callback(Voltage, PosY, PredictedPosY, NewVelocity, PotentiometerVelocity, m_ErrorOffset);
 				else
 				{
 					//double PosY=RAD_2_DEG(m_LastPosition * arm.GainAssistAngleScalar);
-					pid_cout("v=%.2f y=%.2f py=%.2f p=%.2f e=%.2f eo=%.2f\n", Voltage, PosY, PredictedPosY, CurrentVelocity, PotentiometerVelocity, m_ErrorOffset);
+					pid_cout("v=%.2f y=%.2f py=%.2f p=%.2f e=%.2f eo=%.2f\n", Voltage, PosY, PredictedPosY, NewVelocity, PotentiometerVelocity, m_ErrorOffset);
 				}
 			}
 		}
