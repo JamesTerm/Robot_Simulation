@@ -529,6 +529,12 @@ public:
 		m_robot.UpdateVelocities(intended_local_velocity.y(), intended_local_velocity.x(), m_MotionControl2D.GetCurrentAngularVelocity());
 		//pass this to the final swerve management
 		m_swerve_mgmt.InterpolateVelocities(m_robot.GetIntendedVelocities());
+
+		//Update the odometry, note: this must proceed all rotary system loops because of latency, will have the latest positions before
+		//the next iteration
+		//m_Simulation.TimeSlice(d_time_s); //was here now moved into its own call
+		m_Odometry.TimeSlice(d_time_s);
+
 		//our final intended velocities get sent to the input as velocity to the rotary systems
 		for (size_t i = 0; i < 4; i++)
 		{
@@ -539,10 +545,6 @@ public:
 			m_Swivel[i].TimeSlice(d_time_s);
 			//These will hook their updates to here in m_Voltage
 		}
-		//TODO determine why timing thrashes when moving it to its own call
-		m_Simulation.TimeSlice(d_time_s); //TODO: was here now moved into its own call
-		//Now to update the odometry
-		m_Odometry.TimeSlice(d_time_s);
 		//We'll go ahead and maintain an internal state of the position and heading even if this gets managed
 		//We can bind to our entity here if client supports it
 		//externally since it doesn't cost any overhead
@@ -568,10 +570,9 @@ public:
 	}
 	void SimulatorTimeSlice(double dTime_s)
 	{
-		//TODO enable once we determine why timing thrashes
 		//The simulation already is hooked to m_Voltage its ready to simulate
 		//This call is skipped in real robot code as it physically happens instead
-		//m_Simulation.TimeSlice(dTime_s);
+		m_Simulation.TimeSlice(dTime_s);
 	}
 	#pragma region _mutators_
 	void SetLinearVelocity_local(double forward, double right)

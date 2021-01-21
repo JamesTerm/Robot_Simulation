@@ -75,7 +75,7 @@ public:
 	virtual void Initialize(const Entity1D_Properties *props = NULL)
 	{
 		//Cache the m_UsingRange props so that we can know what to set back to
-		__super::Initialize(props);  //must call predecessor first!
+		Ship_1D::Initialize(props);  //must call predecessor first!
 		m_UsingRange_props = m_Ship_1D_Props.UsingRange;
 	}
 	bool GetUsingRange_Props() const 
@@ -120,11 +120,13 @@ private:
 	Rotary_Props m_Rotary_Props;
 
 	double m_LastPosition=0.0;  //used for calibration
+	std::shared_ptr<Averager_Double> m_PotVelocityAverager=nullptr;
 	double m_MatchVelocity=0.0;
 	double m_ErrorOffset=0.0;
 	double m_LastTime=0.0; //used for calibration
 	double m_MaxSpeedReference=0.0; //used for calibration
 	double m_PreviousVelocity=0.0; //used to compute acceleration
+	double m_PotPreviousVelocity=0.0; //used to indicate acceleration direction
 	//We use the negative sign bit to indicate it was turned off... or zero
 	double m_BurstIntensity=0.0;  //This keeps track of the current level of burst to apply... it usually is full 1.0 or 0.0 but will blend on unaligned frame boundaries
 	double m_CurrentBurstTime=0.0; //This keeps track of the time between bursts and the burst itself depending on the current state
@@ -211,16 +213,40 @@ public:
 	}
 	virtual void Initialize(const Entity1D_Properties *props = NULL)
 	{
-		//The parent needs to call initialize
-		if (m_PotentiometerState != eNoPot)
-			m_LastPosition = m_RobotControl->GetRotaryCurrentPorV(m_InstanceIndex);
-		__super::Initialize(props);
 		const Rotary_Properties *Props = dynamic_cast<const Rotary_Properties *>(props);
 		assert(Props);
-		m_VoltagePoly.Initialize(&Props->GetRotaryProps().Voltage_Terms);
+
 		//This will copy all the props
 		//m_Rotary_Props = Props->GetRotaryProps();
 		memcpy(&m_Rotary_Props,&Props->GetRotaryProps(),sizeof(Rotary_Props)); //Hack, legacy ties :(
+
+		//Setup potentiometer state to setup other properties that follow if it exists
+		switch (m_Rotary_Props.LoopState)
+		{
+		case Rotary_Props::eNone:
+			SetPotentiometerSafety(true);
+			break;
+		case Rotary_Props::eOpen:
+			m_PotentiometerState = ePassive;
+			break;
+		case Rotary_Props::eClosed:
+		case Rotary_Props::eClosed_ManualAssist:
+			m_PotentiometerState = eActive;
+			break;
+		}
+
+		if (m_PotentiometerState != eNoPot)
+		{
+			m_LastPosition = m_RobotControl->GetRotaryCurrentPorV(m_InstanceIndex);
+			//set up an averager, for now we'll use VelocityPredictUp property to work out how many elements
+			const size_t NoElements=(size_t)((Props->GetRotaryProps().ArmGainAssist.VelocityPredictUp + 0.01) / 0.01);
+			if (NoElements>0)
+			{
+				m_PotVelocityAverager=std::make_shared<Averager_Double>(NoElements);
+			}
+		}
+		Rotary_System::Initialize(props);
+		m_VoltagePoly.Initialize(&Props->GetRotaryProps().Voltage_Terms);
 		m_PIDControllerUp.SetPID(m_Rotary_Props.ArmGainAssist.PID_Up[0], m_Rotary_Props.ArmGainAssist.PID_Up[1], m_Rotary_Props.ArmGainAssist.PID_Up[2]);
 		m_PIDControllerDown.SetPID(m_Rotary_Props.ArmGainAssist.PID_Down[0], m_Rotary_Props.ArmGainAssist.PID_Down[1], m_Rotary_Props.ArmGainAssist.PID_Down[2]);
 
@@ -239,19 +265,6 @@ public:
 		m_PIDControllerUp.Enable();
 		m_PIDControllerDown.Enable();
 		m_ErrorOffset = 0.0;
-		switch (m_Rotary_Props.LoopState)
-		{
-		case Rotary_Props::eNone:
-			SetPotentiometerSafety(true);
-			break;
-		case Rotary_Props::eOpen:
-			m_PotentiometerState = ePassive;
-			break;
-		case Rotary_Props::eClosed:
-		case Rotary_Props::eClosed_ManualAssist:
-			m_PotentiometerState = eActive;
-			break;
-		}
 		//It is assumed that this property is constant throughout the whole session
 		if (m_Rotary_Props.PID_Console_Dump)
 		{
@@ -261,7 +274,7 @@ public:
 	}
 	virtual void ResetPosition(double Position)
 	{
-		__super::ResetPosition(Position);  //Let the super do it stuff first
+		Rotary_System::ResetPosition(Position);  //Let the super do it stuff first
 
 		//TODO find case where I had this duplicate call to reset rotary I may omit this... but want to find if it needs to be here
 		//  [2/18/2014 James]
@@ -318,8 +331,13 @@ public:
 		}
 
 		const double NewPosition = GetActualPos();
+		double PredictedPosition=NewPosition;
 		const double Displacement = NewPosition - m_LastPosition;
-		const double PotentiometerVelocity = Displacement / m_LastTime;
+		//Note: we may have to average the velocity if our sensor is latent and updates in chunks
+		const double PotentiometerVelocity = (m_PotVelocityAverager) ? 
+			(*m_PotVelocityAverager)(Displacement / m_LastTime)	: Displacement / m_LastTime;
+		const double PotAccel = PotentiometerVelocity - m_PotPreviousVelocity;
+		m_PotPreviousVelocity=PotentiometerVelocity;
 
 		const bool UsingMoterStallSafety = (arm_stall_safety.ErrorThreshold > 0.0) || (arm_stall_safety.StallCounterThreshold > 0);
 		double BurstIntensity = 0.0;
@@ -345,10 +363,13 @@ public:
 				}
 				else
 				{
-					const double PredictedPositionUp = NewPosition + (PotentiometerVelocity * arm.VelocityPredictUp);
+					const double IsAccel= PotentiometerVelocity * PotAccel > 0.0 ? 1.0 : -1.0;
+					//Note: the velocity has the correct direction, if we are accelerating
+					const double PredictedPositionUp = NewPosition + (PotentiometerVelocity * arm.VelocityPredictUp * IsAccel);
 					//PID will correct for position... this may need to use I to compensate for latency
 					if ((arm.UsePID_Up_Only) || (GetPos_m() > PredictedPositionUp))
 					{
+						PredictedPosition=PredictedPositionUp;  //test for overshoot
 						m_PIDControllerDown.ResetI();
 						m_ErrorOffset = m_PIDControllerUp(GetPos_m(), PredictedPositionUp, dTime_s);
 					}
@@ -505,16 +526,35 @@ public:
 				SetRequestedVelocity(0.0);  //ensure the requested velocity is zero once it gets locked to ship position
 				SetCurrentLinearAcceleration(0.0);  //lock ship to position
 				m_ErrorOffset = 0.0;  //no error correction to factor in (avoids noisy resting point)
+				m_ToleranceCounter=0;
 			}
 		}
 
 		m_LastPosition = NewPosition;
 		m_LastTime = dTime_s;
 
-		__super::TimeChange(dTime_s);
+		Rotary_System::TimeChange(dTime_s);
 
+		double OverShootVelocity=m_Physics.GetVelocity();
 		//Note: CurrentVelocity variable is retained before the time change (for proper debugging of PID) we use the new velocity (called Velocity) here for voltage
-		const double Velocity = m_Physics.GetVelocity();
+		if ((arm.UsePID_Up_Only)&&(arm.VelocityPredictUp>0.0)&&(!GetLockShipToPosition()))
+		{
+			//Overshoot protection: with known latent readings...  use the predicted position and use distance computation if this velocity is
+			//less than the profile... use it
+			const Ship_1D_Props &props=m_Ship_1D_Props;
+			const double DistanceRestraintPositive=props.MaxAccelForward*props.DistanceDegradeScalar;
+			const double DistanceRestraintNegative=props.MaxAccelReverse*props.DistanceDegradeScalar;
+			const double DistanceToUse=m_IntendedPosition-PredictedPosition;
+			if (!m_IsAngular)
+			{
+				//The match velocity needs to be in the same direction as the distance (It will not be if the ship is banking)
+				OverShootVelocity=m_Physics.GetVelocityFromDistance_Linear(DistanceToUse,DistanceRestraintPositive*m_Mass,DistanceRestraintNegative*m_Mass,dTime_s,0.0);
+			}
+			else
+				OverShootVelocity=m_Physics.GetVelocityFromDistance_Angular(DistanceToUse,DistanceRestraintPositive*m_Mass,dTime_s,0.0);
+		}
+		const double Velocity = fabs(m_Physics.GetVelocity()) < fabs(OverShootVelocity) ? m_Physics.GetVelocity() : OverShootVelocity;
+
 		const double Acceleration = (Velocity - m_PreviousVelocity) / dTime_s;
 
 		const double MaxSpeed = m_Ship_1D_Props.MAX_SPEED;
@@ -721,7 +761,7 @@ protected:
 			ret = true;
 		}
 		if (!ret)
-			ret = __super::InjectDisplacement(DeltaTime_s, PositionDisplacement);
+			ret = Rotary_System::InjectDisplacement(DeltaTime_s, PositionDisplacement);
 		return ret;
 	}
 	virtual double GetMatchVelocity() const { return m_MatchVelocity; }
@@ -736,7 +776,7 @@ public:
 		//The parent needs to call initialize
 		if ((m_EncoderState == eActive) || (m_EncoderState == ePassive))
 			m_EncoderVelocity = m_RobotControl->GetRotaryCurrentPorV(m_InstanceIndex);
-		__super::Initialize(props);
+		Rotary_System::Initialize(props);
 		const Rotary_Properties *Props = dynamic_cast<const Rotary_Properties *>(props);
 		assert(Props);
 		m_VoltagePoly.Initialize(&Props->GetRotaryProps().Voltage_Terms);
@@ -781,7 +821,7 @@ public:
 	}
 	virtual void ResetPos()
 	{
-		__super::ResetPos();  //Let the super do it stuff first
+		Rotary_System::ResetPos();  //Let the super do it stuff first
 
 		m_PIDController.Reset();
 		//We may need this if we use Kalman filters
@@ -922,7 +962,7 @@ public:
 
 			m_EncoderVelocity = Encoder_Velocity;
 		}
-		__super::TimeChange(dTime_s);
+		Rotary_System::TimeChange(dTime_s);
 		const double Velocity = m_Physics.GetVelocity();
 		double Acceleration = (Velocity - m_PreviousVelocity) / dTime_s;
 		//CurrentVelocity is retained before the time change (for proper debugging of PID) we use the new velocity here for voltage
@@ -1080,7 +1120,8 @@ private:
 		//almost there now to normalize the voltage we need the max speed, this is provided by the free speed of the motor, and since it is the speed of the
 		//swivel itself we factor in the gear reduction.  This should go very quick because the load is light
 		const double free_speed_RPM = 19000.0 / 30.0;  //factor in gear reduction
-		const double max_speed_rad = free_speed_RPM * Pi2;
+		//not used... for reference
+		//const double max_speed_rad = free_speed_RPM * Pi2;
 		//Note: At some point I should determine why the numbers do not quite align, they are empirically tweaked to have a good acceleration, and
 		//should be fine for bypass demo
 		double voltage = velocity / 8;

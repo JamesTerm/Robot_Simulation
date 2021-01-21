@@ -19,7 +19,7 @@ typedef std::map<std::string, std::string, std::greater<std::string> > StringMap
 #define _countof(x) sizeof(x)/sizeof(*x)
 #endif
 
-#ifndef _Win32
+#ifdef __GNUC__
 char *itoa(int value,char *string,int radix);
 #endif
 
@@ -118,6 +118,72 @@ private:
 	int m_currIndex;
 	T m_sum;
 };
+
+
+class Averager_Double
+{
+//This is identical to Averager above except that it is template free, and possible to aggregate as a pointer to instantiate with the
+//number of elements with late binding in this regard
+private:
+	double* m_array=nullptr;
+	int m_currIndex=-1;
+	double m_sum=0.0;
+	size_t m_NumElements=2;
+public:
+	Averager_Double(size_t num_elements) : m_NumElements(num_elements)	
+	{
+		if (m_NumElements > 1)
+			m_array = new double[m_NumElements];
+	}
+	~Averager_Double() 
+	{
+		if (m_array) 
+			delete[] m_array;
+	}
+	double operator()(double newItem)
+	{
+		if (!m_array)	// We are not really using the Averager
+			return newItem;
+
+		// If the first time called, set up the array and use this value
+		if (m_currIndex == -1)
+		{
+			m_array[0] = newItem;
+			m_currIndex = -2;
+			m_sum = newItem;
+			return newItem;
+		}
+		else if (m_currIndex < -1)
+		{
+			// We have not populated the array for the first time yet, still populating
+			m_sum += newItem;
+			int arrayIndex = (m_currIndex*-1)-1;
+			m_array[arrayIndex] = newItem;
+
+			// Still counting backwards unless we have filled all of the array
+			if (arrayIndex == (m_NumElements-1))	// This means we have filled the array
+				m_currIndex = 0;				// Start taking from the array next time
+			else
+				--m_currIndex;
+
+			// Return the average based on what we have counted so far
+			return (m_sum / (arrayIndex+1));
+		}
+		else // 0 or greater, we have filled the array
+		{
+			m_sum += newItem;
+			m_sum -= m_array[m_currIndex];
+			m_array[m_currIndex] = newItem;
+			++m_currIndex;
+			if (m_currIndex == m_NumElements)
+				m_currIndex = 0;
+			return (m_sum / (double)m_NumElements);
+		}
+	}
+
+	void Reset(){m_currIndex=-1;}
+};
+
 
 //Threshold average only changes to new value when that value has been requested THRESHOLD times
 template<class T, unsigned THRESHOLD>

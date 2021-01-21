@@ -476,7 +476,7 @@ private:
 
 		struct swivel_common
 		{
-			bool is_closed = 0;
+			bool is_closed = 1;
 			bool show_pid_dump = false;
 			//ds_display_row = -1;
 			const bool use_pid_up_only = true;
@@ -486,13 +486,14 @@ private:
 			const int tolerance_count = 1;
 			const double voltage_multiply = 1.0;			//May be reversed
 			const double encoder_pulses_per_revolution = 1024 / 4;  //CTR magnetic encoder 1024 cpr
-			const double encoder_to_wheel_ratio = 1.0/81.0;  //assume encoder is on stage closest to shaft
+			const double encoder_to_wheel_ratio = 30.0/70.0;  //assume encoder is on stage closest to shaft
 			const bool encoder_reversed_wheel = false;
 			//In radians using 1.5 rpm
 			const double max_speed = 9.4;
 			const double accel = 10.0;						//We may indeed have a two button solution(match with max accel)
 			const double brake = 10.0;
 			const bool using_range = 0;	//Warning Only use range if we have a potentiometer!
+			const double inv_max_accel = 0.0;  //solved empirically
 			const bool use_aggressive_stop = true;
 		};
 		#pragma endregion
@@ -644,6 +645,8 @@ private:
 			PUT_NUMBER(Rotary_EncoderToRS_Ratio, val.encoder_to_wheel_ratio);
 			PUT_NUMBER(Rotary_EncoderPulsesPerRevolution, val.encoder_pulses_per_revolution);
 			PUT_BOOL(Rotary_Arm_GainAssist_UsePID_Up_Only, val.use_pid_up_only);
+			//use this if we must work with talons as the readings are delayed (pid up only, since we don't have gravity issues)
+			PUT_NUMBER(Rotary_Arm_GainAssist_VelocityPredictUp, 0.02);
 			//PUT_NUMBER(Rotary_PID)  //double[3]... append _p _i _d to the name for each element
 			PUT_NUMBER_suffix(Rotary_Arm_GainAssist_PID_Up, val._pid_swivel.p, _p);
 			PUT_NUMBER_suffix(Rotary_Arm_GainAssist_PID_Up, val._pid_swivel.i, _i);
@@ -652,7 +655,7 @@ private:
 			PUT_NUMBER(Rotary_Arm_GainAssist_ToleranceConsecutiveCount, val.tolerance_count);
 			//Use _c, _t1, _t2, _t3, _t4 for array 0..5 respectively
 			//PUT_NUMBER(Rotary_Voltage_Terms) //PolynomialEquation_forth_Props 
-			//PUT_NUMBER(Rotary_InverseMaxAccel, val.inv_max_accel);
+			PUT_NUMBER(Rotary_InverseMaxAccel, val.inv_max_accel);
 			//PUT_NUMBER(Rotary_InverseMaxDecel, val.InverseMaxDecel);
 			//PUT_NUMBER(Rotary_Positive_DeadZone, val.Positive_DeadZone);
 			//PUT_NUMBER(Rotary_Negative_DeadZone, val.Negative_DeadZone);
@@ -674,8 +677,8 @@ private:
 		//Test PID
 		if (false)
 		{
-			prefix = csz_sFL_; //pick the encoder of the left front wheel
-			//prefix = csz_aFL_; //pick the potentiometer of the left front wheel
+			//prefix = csz_sFL_; //pick the encoder of the left front wheel
+			prefix = csz_aFL_; //pick the potentiometer of the left front wheel
 			PUT_BOOL(Rotary_PID_Console_Dump, true); //bool
 		}
 
@@ -686,7 +689,8 @@ private:
 	enum Controller
 	{
 		eAirFlo,
-		eLogitech
+		eLogitech,
+		eKeyboard
 	};
 	void Test_Controls(Controller joystick)
 	{
@@ -714,6 +718,14 @@ private:
 			case eLogitech:
 				PUT_NUMBER(Control_Key, 3.0);
 				break;
+			case eKeyboard:
+				//For now we just assign it to the next port so we can avoid having to change assignments
+				PUT_NUMBER(Control_Joy,1.0);
+				prefix=csz_AxisForward_;
+				PUT_NUMBER(Control_Joy,1.0);
+				prefix=csz_AxisStrafe_;
+				PUT_NUMBER(Control_Joy,1.0);
+				break;
 			}
 		
 			PUT_NUMBER(Control_CurveIntensity, 3.0);
@@ -735,7 +747,7 @@ public:
 		//TestIndivualWheels();
 		//TestCurivator();
 		TestAndromeda();
-		//This customizes to my AirFlo controller, add your own controller
+		//This customizes the controller, add your own controller
 		//especially if your axis assignments need to change
 		Test_Controls(eLogitech);
 		//use field centric drive here
