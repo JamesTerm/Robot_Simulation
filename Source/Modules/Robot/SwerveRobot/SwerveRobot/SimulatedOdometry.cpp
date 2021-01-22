@@ -276,7 +276,14 @@ public:
 		GET_NUMBER(Ship_1D_MaxSpeed_Reverse, _Ship_1D.MaxSpeed_Reverse);
 		GET_NUMBER(Ship_1D_ACCEL, _Ship_1D.ACCEL);
 		GET_NUMBER(Ship_1D_BRAKE, _Ship_1D.BRAKE);
-		GET_NUMBER(Ship_1D_MaxAccel_simulation, _Ship_1D.MaxAccelForward);
+
+		//I don't do this often but there may be an easier way to handle this, try the simulation one first
+		//if none then use MaxAccelForward
+		constructed_name = prefix, constructed_name += csz_Ship_1D_MaxAccel_simulation;
+		std::string name2 = prefix; 
+		name2 += csz_Ship_1D_MaxAccelForward;
+		_Ship_1D.MaxAccelForward = props->get_number(constructed_name.c_str(),
+			props->get_number(name2.c_str(), _Ship_1D.MaxAccelForward));
 
 		//if I don't have reverse use forward here for default
 		//GET_NUMBER(Ship_1D_MaxAccelReverse, _Ship_1D.MaxAccelForward);
