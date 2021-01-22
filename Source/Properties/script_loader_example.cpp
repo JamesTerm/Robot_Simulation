@@ -639,7 +639,8 @@ private:
 			//PUT_NUMBER(Ship_1D_MaxAccelReverse, val.max_accel_reverse);
 			//PUT_NUMBER(Ship_1D_MinRange, Deg2Rad * val.min_range_deg);
 			//PUT_NUMBER(Ship_1D_MaxRange, Deg2Rad * val.max_range_deg);
-			//PUT_NUMBER(Ship_1D_DistanceDegradeScaler)
+			//With latency on the reading... we need the scaler to avoid overshoot
+			PUT_NUMBER(Ship_1D_DistanceDegradeScaler,0.5);
 			PUT_BOOL(Ship_1D_UsingRange,val.using_range) //bool
 			//Rotary--------------------------
 			PUT_NUMBER(Rotary_VoltageScaler, val.voltage_multiply);
@@ -682,6 +683,7 @@ private:
 			}
 			#pragma endregion
 			//PUT_NUMBER(Rotary_InverseMaxAccel, val.inv_max_accel);
+			//PUT_NUMBER(Rotary_InverseMaxDecel, 1.0/20.0);
 			//PUT_NUMBER(Rotary_InverseMaxDecel, val.InverseMaxDecel);
 			//PUT_NUMBER(Rotary_Positive_DeadZone, val.Positive_DeadZone);
 			//PUT_NUMBER(Rotary_Negative_DeadZone, val.Negative_DeadZone);

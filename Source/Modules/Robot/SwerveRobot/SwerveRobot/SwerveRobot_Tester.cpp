@@ -29,7 +29,7 @@
 #endif
 #endif
 
-//#define __TestPID__
+#define __TestPID__
 
 #ifndef __TestPID__
 #define cout(x,...) printf(x,__VA_ARGS__);
@@ -156,8 +156,8 @@ int main()
 	{
 		using namespace properties::registry_v1;
 		//pick what we want to test... s is speed for encoder, a is angle for potentiometer
-		const char* const prefix = csz_sFL_;
-		//const char* const prefix = csz_aFL_;
+		//const char* const prefix = csz_sFL_;
+		const char* const prefix = csz_aFL_;
 		std::string constructed_name=prefix;
 		constructed_name += csz_Rotary_PID_Console_Dump;
 		properties.put_bool(constructed_name.c_str(), true);
@@ -176,10 +176,9 @@ int main()
 	#if 1
 	up_down_test(_robot);
 	strafe_test(_robot);
-	_robot.SetAngularVelocity(Pi2);
-	for (size_t i = 0; i < 16; i++)
+	for (size_t i = 0; i < 50; i++)
 	{
-		_robot.SetAngularVelocity(Pi2);
+		_robot.SetIntendedOrientation(DEG_2_RAD(45));
 		TimeSlice(_robot); //update a time slice
 		//cout("heading=%.2f\n", RAD_2_DEG( _robot.GetCurrentHeading()));
 		cout("angle=%.2f,heading =%.2f\n", RAD_2_DEG(_robot.GetCurrentVelocities().Velocity.AsArray[4]), RAD_2_DEG(_robot.GetCurrentHeading()));
