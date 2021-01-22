@@ -81,13 +81,13 @@ class Vec2d
             return _v[0]*rhs._v[0]+_v[1]*rhs._v[1];
         }
 
-        /** Multiply by scalar. */
+        /** Multiply by scaler. */
         inline const Vec2d operator * (value_type rhs) const
         {
             return Vec2d(_v[0]*rhs, _v[1]*rhs);
         }
 
-        /** Unary multiply by scalar. */
+        /** Unary multiply by scaler. */
         inline Vec2d& operator *= (value_type rhs)
         {
             _v[0]*=rhs;
@@ -95,13 +95,13 @@ class Vec2d
             return *this;
         }
 
-        /** Divide by scalar. */
+        /** Divide by scaler. */
         inline const Vec2d operator / (value_type rhs) const
         {
             return Vec2d(_v[0]/rhs, _v[1]/rhs);
         }
 
-        /** Unary divide by scalar. */
+        /** Unary divide by scaler. */
         inline Vec2d& operator /= (value_type rhs)
         {
             _v[0]/=rhs;

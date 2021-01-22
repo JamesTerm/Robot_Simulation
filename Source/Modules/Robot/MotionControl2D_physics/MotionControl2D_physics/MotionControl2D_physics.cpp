@@ -106,15 +106,15 @@ public:
 		double MaxTorqueYaw_SetPoint, MaxTorqueYaw_SetPoint_High;
 		//depreciated-
 		//These are used to avoid overshoot when trying to rotate to a heading
-		//double RotateTo_TorqueDegradeScalar,RotateTo_TorqueDegradeScalar_High;
+		//double RotateTo_TorqueDegradeScaler,RotateTo_TorqueDegradeScaler_High;
 		double Rotation_Tolerance;
 		//If zero this has no effect, otherwise when rotating to intended position if it consecutively reaches the count it will flip the
 		//lock heading status to lock... to stop trying to rotate to intended position
 		double Rotation_ToleranceConsecutiveCount;
-		//This supersedes RotateTo_TorqueDegradeScalar to avoid overshoot without slowing down rate
+		//This supersedes RotateTo_TorqueDegradeScaler to avoid overshoot without slowing down rate
 		//This applies linear blended scale against the current distance based on current velocity
 		//default using 1.0 will produce no change
-		double Rotation_TargetDistanceScalar;
+		double Rotation_TargetDistanceScaler;
 	};
 	#pragma endregion
 	enum eThrustState { TS_AfterBurner_Brake = 0, TS_Brake, TS_Coast, TS_Thrust, TS_AfterBurner, TS_NotVisible };
@@ -179,10 +179,10 @@ private:
 			props.EngineRampStrafe = props.STRAFE / RAMP_UP_DUR;
 			props.EngineDeceleration = props.ACCEL / RAMP_DOWN_DUR;
 			//depreciated
-			//props.RotateTo_TorqueDegradeScalar=props.RotateTo_TorqueDegradeScalar_High=1.0;
+			//props.RotateTo_TorqueDegradeScaler=props.RotateTo_TorqueDegradeScaler_High=1.0;
 			props.Rotation_Tolerance = 0.0;
 			props.Rotation_ToleranceConsecutiveCount = 0.0;  //zero is disabled
-			props.Rotation_TargetDistanceScalar = 1.0;
+			props.Rotation_TargetDistanceScaler = 1.0;
 			m_ShipProps = props;
 		}
 		virtual ~Ship_Properties() {}
@@ -400,7 +400,7 @@ protected:
 					}
 					double orientation_to_use = lookDir_radians;
 					//Note the condition to flip has a little bit of extra tolerance to avoid a excessive flipping back and forth
-					//We simply multiply the half pi by a scalar
+					//We simply multiply the half pi by a scaler
 					if (fabs(OrientationDelta) > (PI_2 * 1.2))
 						orientation_to_use = NormalizeRotation2(lookDir_radians + Pi);
 					m_ship.SetIntendedOrientation(orientation_to_use);
@@ -429,15 +429,16 @@ protected:
 				//Vec2D LocalVectorOffset(m_ship.GetAtt_quat().conj() * VectorOffset);
 				const Vec2D LocalVectorOffset = GlobalToLocal(m_ship.GetAtt_r(), VectorOffset);
 				Vec2D velocity_normalized = VectorOffset;
-				const double magnitude = velocity_normalized.normalize();
+				//for reference... not used
+				//const double magnitude = velocity_normalized.normalize();
 				const Vec2D matchVel_ToUse = matchVel ? *matchVel : 
 					LocalToGlobal(atan2(velocity_normalized[0], velocity_normalized[1]),Vec2D(0.0, ScaledSpeed));
 				//Vec2D LocalMatchVel(m_ship.GetAtt_quat().conj() * (*matchVel));
 				Vec2D LocalMatchVel = GlobalToLocal(m_ship.GetAtt_r(), matchVel_ToUse);
 
-				const Vec2D ForceDegradeScalar = m_ship.Get_DriveTo_ForceDegradeScalar();
-				Vec2D ForceRestraintPositive(ShipProps.MaxAccelRight * Mass * ForceDegradeScalar[0], ShipProps.MaxAccelForward_High * Mass * ForceDegradeScalar[1]);
-				Vec2D ForceRestraintNegative(ShipProps.MaxAccelLeft * Mass * ForceDegradeScalar[0], ShipProps.MaxAccelReverse_High * Mass * ForceDegradeScalar[1]);
+				const Vec2D ForceDegradeScaler = m_ship.Get_DriveTo_ForceDegradeScaler();
+				Vec2D ForceRestraintPositive(ShipProps.MaxAccelRight * Mass * ForceDegradeScaler[0], ShipProps.MaxAccelForward_High * Mass * ForceDegradeScaler[1]);
+				Vec2D ForceRestraintNegative(ShipProps.MaxAccelLeft * Mass * ForceDegradeScaler[0], ShipProps.MaxAccelReverse_High * Mass * ForceDegradeScaler[1]);
 				//Note: it is possible to overflow in extreme distances, if we challenge this then I should have an overflow check in physics
 				//Note: version 1 is ideal for a direct route, and perfect for strafing, the other version isolates the components separately, and
 				//may have performed better because of the speed disabled... if I test again with tank drive I may try it and see if that
@@ -637,7 +638,7 @@ protected:
 			DEG_2_RAD(1.5),
 			//double Rotation_ToleranceConsecutiveCount;
 			0.0,  //disabled by default using  0.0
-			//double Rotation_TargetDistanceScalar;
+			//double Rotation_TargetDistanceScaler;
 			1.0
 		};
 	}
@@ -734,7 +735,7 @@ protected:
 		///This allows subclass to evaluate the requested velocity when it is in use
 		//TODO no implementation, should remove
 	}
-	Vec2D Get_DriveTo_ForceDegradeScalar() const 
+	Vec2D Get_DriveTo_ForceDegradeScaler() const 
 	{ 
 		//override to manipulate a distance force degrade, which is used to compensate for deceleration inertia
 		return Vec2D(1.0, 1.0); 
@@ -746,7 +747,7 @@ protected:
 		//This will GetVariables of all properties needed to tweak PID and gain assists
 		SmartDashboard::PutNumber("Rotation Tolerance", RAD_2_DEG(props.Rotation_Tolerance));
 		SmartDashboard::PutNumber("Rotation Tolerance Count", props.Rotation_ToleranceConsecutiveCount);
-		SmartDashboard::PutNumber("rotation_distance_scalar", props.Rotation_TargetDistanceScalar);
+		SmartDashboard::PutNumber("rotation_distance_scaler", props.Rotation_TargetDistanceScaler);
 		#endif
 	}
 	static void NetworkEditProperties(Ship_Props &ship_props)
@@ -756,7 +757,7 @@ protected:
 		//This will GetVariables of all properties needed to tweak PID and gain assists
 		ship_props.Rotation_Tolerance = DEG_2_RAD(SmartDashboard::GetNumber("Rotation Tolerance"));
 		ship_props.Rotation_ToleranceConsecutiveCount = SmartDashboard::GetNumber("Rotation Tolerance Count");
-		ship_props.Rotation_TargetDistanceScalar = SmartDashboard::GetNumber("rotation_distance_scalar");
+		ship_props.Rotation_TargetDistanceScaler = SmartDashboard::GetNumber("rotation_distance_scaler");
 		#endif
 	}
 	#pragma region _Moved from public_
@@ -912,21 +913,26 @@ public:
 			double ftest = 0.0;  //use to test if an asset exists
 			std::string constructed_name;
 			//Really made use token pasting, it only worked because the registry matched the props
-			#define GN_(x) \
-				dst.##x = props->get_number(csz_Ship2D_##x, dst.##x);
-			GN_(dHeading);
-			GN_(EngineRampForward); GN_(EngineRampReverse); GN_(EngineRampAfterBurner);
-			GN_(EngineDeceleration); GN_(EngineRampStrafe);
-			GN_(MAX_SPEED); GN_(ENGAGED_MAX_SPEED);
-			GN_(ACCEL); GN_(BRAKE); GN_(STRAFE); GN_(AFTERBURNER_ACCEL); GN_(AFTERBURNER_BRAKE);
+			//Note: gcc does not like token pasting when a . proceeds it, so I have to use a y
+			//variable to avoid it in macro :(
+			#define GN_(x,y) \
+				y = props->get_number(csz_Ship2D_##x, y);
+			GN_(dHeading,dst.dHeading);
+			GN_(EngineRampForward,dst.EngineRampForward); GN_(EngineRampReverse,dst.EngineRampReverse); 
+			GN_(EngineRampAfterBurner,dst.EngineRampAfterBurner);
+			GN_(EngineDeceleration,dst.EngineDeceleration); GN_(EngineRampStrafe,dst.EngineRampStrafe);
+			GN_(MAX_SPEED,dst.MAX_SPEED); GN_(ENGAGED_MAX_SPEED,dst.ENGAGED_MAX_SPEED);
+			GN_(ACCEL,dst.ACCEL); GN_(BRAKE,dst.BRAKE); GN_(STRAFE,dst.STRAFE); 
+			GN_(AFTERBURNER_ACCEL,dst.AFTERBURNER_ACCEL); GN_(AFTERBURNER_BRAKE,dst.AFTERBURNER_BRAKE);
 
-			GN_(MaxAccelLeft); GN_(MaxAccelRight); GN_(MaxAccelForward); GN_(MaxAccelReverse);
-			GN_(MaxAccelForward_High); GN_(MaxAccelReverse_High);
-			GN_(MaxTorqueYaw); GN_(MaxTorqueYaw_High);
-			GN_(MaxTorqueYaw_SetPoint); GN_(MaxTorqueYaw_SetPoint_High);
-			GN_(Rotation_Tolerance);
-			GN_(Rotation_ToleranceConsecutiveCount);
-			GN_(Rotation_TargetDistanceScalar);
+			GN_(MaxAccelLeft,dst.MaxAccelLeft); GN_(MaxAccelRight,dst.MaxAccelRight); 
+			GN_(MaxAccelForward,dst.MaxAccelForward); GN_(MaxAccelReverse,dst.MaxAccelReverse);
+			GN_(MaxAccelForward_High,dst.MaxAccelForward_High); GN_(MaxAccelReverse_High,dst.MaxAccelReverse_High);
+			GN_(MaxTorqueYaw,dst.MaxTorqueYaw); GN_(MaxTorqueYaw_High,dst.MaxTorqueYaw_High);
+			GN_(MaxTorqueYaw_SetPoint,dst.MaxTorqueYaw_SetPoint); GN_(MaxTorqueYaw_SetPoint_High,dst.MaxTorqueYaw_SetPoint_High);
+			GN_(Rotation_Tolerance,dst.Rotation_Tolerance);
+			GN_(Rotation_ToleranceConsecutiveCount,dst.Rotation_ToleranceConsecutiveCount);
+			GN_(Rotation_TargetDistanceScaler,dst.Rotation_TargetDistanceScaler);
 			//finished with this macro
 			#undef GN_
 		}
@@ -986,14 +992,14 @@ public:
 				SmartDashboard::PutNumber("desired y", RAD_2_DEG(m_IntendedOrientation));
 				SmartDashboard::PutNumber("actual y", RAD_2_DEG(NormalizeRotation2(m_Physics.GetHeading())));
 				#endif
-				const double TargetDistanceScalar = props.Rotation_TargetDistanceScalar;
-				if (TargetDistanceScalar != 1.0)
+				const double TargetDistanceScaler = props.Rotation_TargetDistanceScaler;
+				if (TargetDistanceScaler != 1.0)
 				{
-					//a simple linear blend on the scalar should be fine (could upgrade to poly if needed)
+					//a simple linear blend on the scaler should be fine (could upgrade to poly if needed)
 					const double ratio = fabs(m_Physics.GetAngularVelocity()) / props.dHeading;
-					//Note the slower it goes the more blend of the TargetDistanceScalar needs to become to slow it down more towards
+					//Note the slower it goes the more blend of the TargetDistanceScaler needs to become to slow it down more towards
 					//the last moments
-					const double scale = (ratio * 1.0) + ((1.0 - ratio) * TargetDistanceScalar);
+					const double scale = (ratio * 1.0) + ((1.0 - ratio) * TargetDistanceScaler);
 					#if 0
 					if (ratio != 0.0)
 						printf("%.2f %.2f %.2f\n", m_Physics.GetAngularVelocity(), ratio, scale);

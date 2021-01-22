@@ -252,14 +252,14 @@ private:
 			GET_NUMBER(Ship_1D_MaxAccelReverse, _Ship_1D.MaxAccelReverse);
 			GET_NUMBER(Ship_1D_MinRange, _Ship_1D.MinRange);
 			GET_NUMBER(Ship_1D_MaxRange, _Ship_1D.MaxRange);
-			GET_NUMBER(Ship_1D_DistanceDegradeScalar, _Ship_1D.DistanceDegradeScalar);
+			GET_NUMBER(Ship_1D_DistanceDegradeScaler, _Ship_1D.DistanceDegradeScaler);
 			GET_BOOL(Ship_1D_UsingRange, _Ship_1D.UsingRange) //bool
 			#pragma endregion
 
 			#pragma region _Rotary_
 			rotary_properties::Rotary_Props& Rotary_ = update.rotary_props;
 			rotary_properties::Rotary_Props::Rotary_Arm_GainAssist_Props& arm = update.rotary_props.ArmGainAssist;
-			GET_NUMBER(Rotary_VoltageScaler, Rotary_.VoltageScalar);
+			GET_NUMBER(Rotary_VoltageScaler, Rotary_.VoltageScaler);
 			GET_NUMBER(Rotary_EncoderToRS_Ratio, Rotary_.EncoderToRS_Ratio);
 			GET_NUMBER(Rotary_EncoderPulsesPerRevolution, Rotary_.EncoderPulsesPerRevolution);
 			//GET_NUMBER(Rotary_PID)  //double[3]... append _p _i _d to the name for each element
@@ -324,7 +324,7 @@ private:
 			GET_NUMBER(Rotary_Arm_GainAssist_InverseMaxDecel_Down, arm.InverseMaxDecel_Down);
 			GET_NUMBER(Rotary_Arm_GainAssist_SlowVelocityVoltage, arm.SlowVelocityVoltage);
 			GET_NUMBER(Rotary_Arm_GainAssist_SlowVelocity, arm.SlowVelocity);
-			GET_NUMBER(Rotary_Arm_GainAssist_GainAssistAngleScalar, arm.GainAssistAngleScalar);
+			GET_NUMBER(Rotary_Arm_GainAssist_GainAssistAngleScaler, arm.GainAssistAngleScaler);
 			GET_NUMBER(Rotary_Arm_GainAssist_ToleranceConsecutiveCount, arm.ToleranceConsecutiveCount);
 			GET_NUMBER(Rotary_Arm_GainAssist_VelocityPredictUp, arm.VelocityPredictUp);
 			GET_NUMBER(Rotary_Arm_GainAssist_VelocityPredictDown, arm.VelocityPredictDown);
@@ -458,7 +458,7 @@ public:
 				//double MinRange, MaxRange;
 				0.0,0.0,
 				//This is used to avoid overshoot when trying to rotate to a heading
-				//double DistanceDegradeScalar;
+				//double DistanceDegradeScaler;
 				1.0,
 				//bool UsingRange;
 				false
@@ -476,7 +476,7 @@ public:
 				//double MinRange, MaxRange;
 				0.0,0.0,
 				//This may be needed for simulation copy
-				//double DistanceDegradeScalar;
+				//double DistanceDegradeScaler;
 				1.0,
 				//bool UsingRange;
 				false

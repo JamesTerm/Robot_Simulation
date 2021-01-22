@@ -561,8 +561,8 @@ public:
 			{
 				//still too far away use distance computation to evaluate this velocity
 				const Ship_1D_Props &props=m_Ship_1D_Props;
-				const double DistanceRestraintPositive=props.MaxAccelForward*props.DistanceDegradeScalar;
-				const double DistanceRestraintNegative=props.MaxAccelReverse*props.DistanceDegradeScalar;
+				const double DistanceRestraintPositive=props.MaxAccelForward*props.DistanceDegradeScaler;
+				const double DistanceRestraintNegative=props.MaxAccelReverse*props.DistanceDegradeScaler;
 				//The prediction may go in the wrong direction, so use the smallest distance between the predicted point
 				//and the last read point
 				const double DistanceToUse=std::min(m_IntendedPosition-PredictedPosition,m_IntendedPosition-NewPosition);
@@ -597,7 +597,7 @@ public:
 		{
 			//first start out by allowing the max amount to correspond to the angle of the arm... this assumes the arm zero degrees is parallel to the ground
 			//90 is straight up... should work for angles below zero (e.g. hiking viking)... angles greater than 90 will be negative which is also correct
-			const double MaxVoltage = cos(NewPosition * arm.GainAssistAngleScalar) * arm.SlowVelocityVoltage;
+			const double MaxVoltage = cos(NewPosition * arm.GainAssistAngleScaler) * arm.SlowVelocityVoltage;
 			double BlendStrength = 0.0;
 			const double SlowVelocity = arm.SlowVelocity;
 			//Now to compute blend strength... a simple linear distribution of how much slower it is from the slow velocity
@@ -689,15 +689,15 @@ public:
 				break;
 			}
 
-			const double PosY = m_LastPosition * arm.GainAssistAngleScalar; //The scalar makes position more readable
-			const double PredictedPosY = GetPos_m()  * arm.GainAssistAngleScalar;
+			const double PosY = m_LastPosition * arm.GainAssistAngleScaler; //The scaler makes position more readable
+			const double PredictedPosY = GetPos_m()  * arm.GainAssistAngleScaler;
 			if ((fabs(PotentiometerVelocity) > 0.03) || (CurrentVelocity != 0.0) || (Voltage != 0.0))
 			{
 				if (m_PID_Monitor_callback)
 					m_PID_Monitor_callback(Voltage, PosY, PredictedPosY, NewVelocity, PotentiometerVelocity, m_ErrorOffset);
 				else
 				{
-					//double PosY=RAD_2_DEG(m_LastPosition * arm.GainAssistAngleScalar);
+					//double PosY=RAD_2_DEG(m_LastPosition * arm.GainAssistAngleScaler);
 					pid_cout("v=%.2f y=%.2f py=%.2f p=%.2f e=%.2f eo=%.2f\n", Voltage, PosY, PredictedPosY, NewVelocity, PotentiometerVelocity, m_ErrorOffset);
 				}
 			}

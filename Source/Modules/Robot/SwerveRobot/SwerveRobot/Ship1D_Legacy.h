@@ -32,7 +32,7 @@ struct Ship_1D_Props
 	double MaxAccelForward, MaxAccelReverse;
 	double MinRange, MaxRange;
 	//This is used to avoid overshoot when trying to rotate to a heading
-	double DistanceDegradeScalar;
+	double DistanceDegradeScaler;
 	bool UsingRange;
 };
 
@@ -87,7 +87,7 @@ public:
 		m_Ship_1D_Props.MaxAccelReverse = 70.0 * Scale;
 		m_Ship_1D_Props.MinRange = m_Ship_1D_Props.MaxRange = 0.0;
 		m_Ship_1D_Props.UsingRange = false;
-		m_Ship_1D_Props.DistanceDegradeScalar = 1.0;  //only can be changed in script!
+		m_Ship_1D_Props.DistanceDegradeScaler = 1.0;  //only can be changed in script!
 	}
 	//Allow to construct props in constructor instead of using script
 	Ship_1D_Properties(const char EntityName[], double Mass, double Dimension,
@@ -106,7 +106,7 @@ public:
 		m_Ship_1D_Props.MinRange = MinRange;
 		m_Ship_1D_Props.MaxRange = MaxRange;
 		m_Ship_1D_Props.UsingRange = UsingRange;
-		m_Ship_1D_Props.DistanceDegradeScalar = 1.0;  //only can be changed in script!
+		m_Ship_1D_Props.DistanceDegradeScaler = 1.0;  //only can be changed in script!
 	}
 
 	//virtual void LoadFromScript(Scripting::Script& script, bool NoDefaults = false);
@@ -325,8 +325,8 @@ protected:
 		const double AccRestraintPositive=props.MaxAccelForward;
 		const double AccRestraintNegative=props.MaxAccelReverse;
 
-		const double DistanceRestraintPositive=props.MaxAccelForward*props.DistanceDegradeScalar;
-		const double DistanceRestraintNegative=props.MaxAccelReverse*props.DistanceDegradeScalar;
+		const double DistanceRestraintPositive=props.MaxAccelForward*props.DistanceDegradeScaler;
+		const double DistanceRestraintNegative=props.MaxAccelReverse*props.DistanceDegradeScaler;
 
 		//Unlike in 2D the intended position and velocity control now resides in the same vector to apply force.  To implement, we'll branch depending on
 		//which last LockShipToPosition was used.  Typically speaking the mouse, AI, or SetIntendedPosition() will branch to the non locked mode, while the
@@ -499,7 +499,7 @@ public:
 	}
 	virtual void Initialize(const Entity1D_Properties *props = NULL)
 	{
-		__super::Initialize(props);
+		Entity1D::Initialize(props);
 		const Ship_1D_Properties *ship_props = dynamic_cast<const Ship_1D_Properties *>(props);
 		if (ship_props)
 		{
@@ -539,7 +539,7 @@ public:
 	virtual void ResetPosition(double Position)
 	{
 		// Places the ship back at its initial position and resets all vectors
-		__super::ResetPosition(Position);
+		Entity1D::ResetPosition(Position);
 		m_RequestedVelocity = m_currAccel = 0.0;
 		//See case 397... for the 1D this is not really an issue as once we get it started it works itself out... it just cannot be zero to get it started
 		m_Last_RequestedVelocity = -1.0;

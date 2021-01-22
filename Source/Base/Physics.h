@@ -381,7 +381,7 @@ public:
 	}
 	double GetFrictionalForce(double DeltaTime_s, double Ground = 0.0, double gravity = 9.80665, double BrakeResistence = 0.0) const
 	{
-		/// \param Brake is a brake coast parameter where if gravity pulls it down it can apply a scalar to slow down the reversed rate
+		/// \param Brake is a brake coast parameter where if gravity pulls it down it can apply a scaler to slow down the reversed rate
 		/// where 0 is full stop and 1 is full coast (range is 0 - 1)
 
 		if (!DeltaTime_s) return 0.0;  //since we divide by time avoid division by zero
@@ -636,7 +636,7 @@ public:
 		//This is how many meters per second the ship is capable to stop for this given time frame
 		Vec2D Restraint;
 		//Compute the restraint based off of its current direction
-		for (size_t i = 0; i < 3; i++)
+		for (size_t i = 0; i < 2; i++)
 			Restraint[i] = DistToUse[i] > 0 ? ForceRestraintPositive[i] : ForceRestraintNegative[i];
 
 		Vec2D Acceleration = (Restraint / m_EntityMass); //obtain acceleration
@@ -1033,7 +1033,7 @@ public:
 	}
 	virtual void ResetVectors()
 	{
-		__super::ResetVectors();
+		PhysicsEntity_2D::ResetVectors();
 		if (m_UseDefaultHeading)
 			m_DefaultHeading = 0.0;
 		m_CurrentAcceleration = m_TargetAcceleration = Vec2D(0.0, 0.0);
@@ -1060,13 +1060,13 @@ public:
 		double DistanceDirection = m_HeadingToUse() - Orientation;
 		return shortest_angle(DistanceDirection);
 	}
-	const double GetHeading() 
+	double GetHeading() 
 	{
 		return m_HeadingToUse();
 	}
 	virtual void TimeChangeUpdate(double DeltaTime_s, Vec2D &PositionDisplacement, double &RotationDisplacement)
 	{
-		__super::TimeChangeUpdate(DeltaTime_s, PositionDisplacement, RotationDisplacement);
+		PhysicsEntity_2D::TimeChangeUpdate(DeltaTime_s, PositionDisplacement, RotationDisplacement);
 		if (m_UseDefaultHeading)
 			m_DefaultHeading += RotationDisplacement;
 	}
@@ -1156,7 +1156,7 @@ public:
 		/// These are overloaded to optionally factor in the acceleration period
 		Vec2D Force;
 		if (!m_UsingAccelerationRate)
-			Force = __super::GetForceFromVelocity(vDesiredVelocity, DeltaTime_s);
+			Force = PhysicsEntity_2D::GetForceFromVelocity(vDesiredVelocity, DeltaTime_s);
 		else
 		{
 			Vec2D Zerod = Vec2D(0.0, 0.0);
@@ -1194,7 +1194,7 @@ public:
 
 		if (!m_UsingAccelerationRate)
 		{
-			ret = __super::GetVelocityFromDistance_Linear(Distance, ForceRestraintPositive, ForceRestraintNegative, DeltaTime_s, matchVel);
+			ret = PhysicsEntity_2D::GetVelocityFromDistance_Linear(Distance, ForceRestraintPositive, ForceRestraintNegative, DeltaTime_s, matchVel);
 			#if 0
 			assert(m_HeadingToUse!=nullptr);
 			{

@@ -193,7 +193,7 @@ private:
 
 		const double Pos = GetPos_m();
 		const double Velocity = m_Physics.GetVelocity();
-		double ForceScalar = 0.0;
+		double ForceScaler = 0.0;
 		if ((Pos > OuterDistance) && (Velocity >= 0.0))
 		{
 			//determine how much force is being applied
@@ -202,13 +202,13 @@ private:
 			{
 				//dampen force depending on the current distance
 				const double scale = 1.0 / (CoreDistance - OuterDistance);
-				ForceScalar = (Pos - OuterDistance) * scale;
+				ForceScaler = (Pos - OuterDistance) * scale;
 			}
 			else
-				ForceScalar = 1.0;
-			m_Physics.ApplyFractionalForce(-Force * ForceScalar, m_Time_s);
+				ForceScaler = 1.0;
+			m_Physics.ApplyFractionalForce(-Force * ForceScaler, m_Time_s);
 		}
-		SetRequestedVelocity(Voltage * (1.0 - ForceScalar) * m_PotentiometerProps.GetMaxSpeed());
+		SetRequestedVelocity(Voltage * (1.0 - ForceScaler) * m_PotentiometerProps.GetMaxSpeed());
 	}
 	double m_Time_s=0.0;
 	Ship_1D_Properties m_PotentiometerProps;
@@ -285,7 +285,7 @@ public:
 
 		GET_NUMBER(Ship_1D_MinRange, _Ship_1D.MinRange);
 		GET_NUMBER(Ship_1D_MaxRange, _Ship_1D.MaxRange);
-		GET_NUMBER(Ship_1D_DistanceDegradeScalar, _Ship_1D.DistanceDegradeScalar);
+		GET_NUMBER(Ship_1D_DistanceDegradeScaler, _Ship_1D.DistanceDegradeScaler);
 		GET_BOOL(Ship_1D_UsingRange, _Ship_1D.UsingRange) //bool
 		#pragma endregion
 		//finished with macros
@@ -358,7 +358,7 @@ public:
 		//For coast it is more like applying force
 		double Velocity = m_Physics.GetVelocity();
 		double MaxSpeed = m_EncoderProps.GetMaxSpeed();
-		double Accel = Voltage * 5000.0 * MaxSpeed * m_Time_s;  //determine current acceleration by applying the ratio with a scalar  
+		double Accel = Voltage * 5000.0 * MaxSpeed * m_Time_s;  //determine current acceleration by applying the ratio with a scaler  
 		double filter = 1.0 - (fabs(Velocity) / MaxSpeed);  //as there is more speed there is less torque
 		//double friction=((Velocity>0.04)?-0.025 : (Velocity<-0.04)?+0.025 : 0.0 )* rTime ;  //There is a constant amount of friction opposite to current velocity
 		double friction = ((Velocity > 0.04) ? -250 : (Velocity < -0.04) ? +250 : 0.0) * m_Time_s;  //There is a constant amount of friction opposite to current velocity
@@ -403,7 +403,7 @@ public:
 		//emulates functionality of the encoder (needed because kids put them in differently)
 		m_EncoderScaler = reverseDirection ? -1.0 : 1.0;
 	}
-	void SetEncoderScalar(double value) {m_EncoderScaler=value;}  //This helps to simulate differences between sides
+	void SetEncoderScaler(double value) {m_EncoderScaler=value;}  //This helps to simulate differences between sides
 	void SetFriction(double StaticFriction,double KineticFriction) {}
 };
 
@@ -735,7 +735,7 @@ public:
 		//emulates functionality of the encoder (needed because kids put them in differently)
 		m_ReverseMultiply = reverseDirection ? -1.0 : 1.0;
 	}
-	void SetEncoderScalar(double value) {m_EncoderScaler=value;}  //This helps to simulate differences between sides
+	void SetEncoderScaler(double value) {m_EncoderScaler=value;}  //This helps to simulate differences between sides
 	void SetFriction(double StaticFriction,double KineticFriction) {m_Physics.SetFriction(StaticFriction,KineticFriction);}
 	virtual void ResetPos()
 	{
@@ -1055,7 +1055,7 @@ public:
 			const double r2 = 1.82 * 1.82;
 			//point mass at radius is 1.0
 			const double I = mass * r2;
-			double Torque = I * 9.80665 * -0.55;  //the last scalar gets the direction correct with negative... and tones it down from surgical tubing
+			double Torque = I * 9.80665 * -0.55;  //the last scaler gets the direction correct with negative... and tones it down from surgical tubing
 			double TorqueWithAngle = cos(GetDistance() * m_InvEncoderToRS_Ratio) * Torque * m_Time_s;  //gravity has most effect when the angle is zero
 			//add surgical tubing simulation... this works in both directions  //1.6 seemed closest but on weaker battery, and can't hit 9 feet well
 			TorqueWithAngle += sin(GetDistance() * m_InvEncoderToRS_Ratio) * -1.5;
@@ -1159,9 +1159,9 @@ public:
 	{
 		m_LeftEncoder.SetReverseDirection(Left_reverseDirection),m_RightEncoder.SetReverseDirection(Right_reverseDirection);
 	}
-	void SetLeftRightScalar(double LeftScalar,double RightScalar)
+	void SetLeftRightScaler(double LeftScaler,double RightScaler)
 	{
-		m_LeftEncoder.SetEncoderScalar(LeftScalar),m_RightEncoder.SetEncoderScalar(RightScalar);
+		m_LeftEncoder.SetEncoderScaler(LeftScaler),m_RightEncoder.SetEncoderScaler(RightScaler);
 	}
 };
 

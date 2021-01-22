@@ -57,7 +57,7 @@ namespace registry_v1
 	Rg_(Ship2D_MaxTorqueYaw_SetPoint) Rg_(Ship2D_MaxTorqueYaw_SetPoint_High)
 	Rg_(Ship2D_Rotation_Tolerance)
 	Rg_(Ship2D_Rotation_ToleranceConsecutiveCount)
-	Rg_(Ship2D_Rotation_TargetDistanceScalar)
+	Rg_(Ship2D_Rotation_TargetDistanceScaler)
 #pragma endregion
 
 #pragma region _rotary_properties legacy_
@@ -78,7 +78,7 @@ namespace registry_v1
 	Rg_(Ship_1D_MaxAccelReverse)
 	Rg_(Ship_1D_MinRange)
 	Rg_(Ship_1D_MaxRange)
-	Rg_(Ship_1D_DistanceDegradeScalar)
+	Rg_(Ship_1D_DistanceDegradeScaler)
 	Rg_(Ship_1D_UsingRange) //bool
 
 	//Rotary
@@ -110,7 +110,7 @@ namespace registry_v1
 	Rg_(Rotary_Arm_GainAssist_InverseMaxDecel_Down)
 	Rg_(Rotary_Arm_GainAssist_SlowVelocityVoltage)
 	Rg_(Rotary_Arm_GainAssist_SlowVelocity)
-	Rg_(Rotary_Arm_GainAssist_GainAssistAngleScalar)
+	Rg_(Rotary_Arm_GainAssist_GainAssistAngleScaler)
 	Rg_(Rotary_Arm_GainAssist_ToleranceConsecutiveCount)
 	Rg_(Rotary_Arm_GainAssist_VelocityPredictUp)
 	Rg_(Rotary_Arm_GainAssist_VelocityPredictDown)

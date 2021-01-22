@@ -107,7 +107,7 @@ private:
 		const double MaxTorqueYaw_SetPoint = gMaxTorqueYaw * 2;
 		const double MaxTorqueYaw_SetPoint_High = gMaxTorqueYaw * 10;
 		const double rotation_tolerance = Deg2Rad * 2;
-		const double rotation_distance_scalar = 1.0;
+		const double rotation_distance_scaler = 1.0;
 
 		const double MAX_SPEED = DriveGearSpeed;
 		const double ACCEL = 10; //Thruster Acceleration m / s2(1g = 9.8)
@@ -231,10 +231,10 @@ private:
 			PUT_NUMBER(Ship_1D_MaxAccelReverse, val.max_accel_reverse);
 			//PUT_NUMBER(Ship_1D_MinRange)
 			//PUT_NUMBER(Ship_1D_MaxRange)
-			//PUT_NUMBER(Ship_1D_DistanceDegradeScalar)
+			//PUT_NUMBER(Ship_1D_DistanceDegradeScaler)
 			PUT_BOOL(Ship_1D_UsingRange,val.using_range) //bool
 			//Rotary--------------------------
-			//PUT_NUMBER(Rotary_VoltageScalar, val.VoltageScalar);
+			//PUT_NUMBER(Rotary_VoltageScaler, val.VoltageScaler);
 			PUT_NUMBER(Rotary_EncoderToRS_Ratio, val.encoder_to_wheel_ratio);
 			PUT_NUMBER(Rotary_EncoderPulsesPerRevolution, val.encoder_pulses_per_revolution);
 			//PUT_NUMBER(Rotary_PID)  //double[3]... append _p _i _d to the name for each element
@@ -300,7 +300,7 @@ private:
 			//PUT_NUMBER(Ship_1D_MaxAccelReverse, val.max_accel_reverse);
 			PUT_NUMBER(Ship_1D_MinRange, Deg2Rad * val.min_range_deg);
 			PUT_NUMBER(Ship_1D_MaxRange, Deg2Rad * val.max_range_deg);
-			//PUT_NUMBER(Ship_1D_DistanceDegradeScalar)
+			//PUT_NUMBER(Ship_1D_DistanceDegradeScaler)
 			PUT_BOOL(Ship_1D_UsingRange,val.using_range) //bool
 			//Rotary--------------------------
 			PUT_NUMBER(Rotary_VoltageScaler, val.voltage_multiply);
@@ -410,7 +410,7 @@ private:
 		const double MaxTorqueYaw_SetPoint = gMaxTorqueYaw * 2;
 		const double MaxTorqueYaw_SetPoint_High = gMaxTorqueYaw * 10;
 		const double rotation_tolerance = Deg2Rad * 2;
-		const double rotation_distance_scalar = 1.0;
+		const double rotation_distance_scaler = 1.0;
 
 		const double MAX_SPEED = DriveGearSpeed;
 		const double ACCEL = 10; //Thruster Acceleration m / s2(1g = 9.8)
@@ -490,11 +490,11 @@ private:
 			const double encoder_to_wheel_ratio = 30.0/70.0;  //assume encoder is on stage closest to shaft
 			const bool encoder_reversed_wheel = false;
 			//In radians using 1.5 rpm
-			const double max_speed = 9.4;
+			//const double max_speed = 9.4;
+			const double max_speed = 10.32;  //from JVN sheet
 			const double accel = 10.0;						//We may indeed have a two button solution(match with max accel)
 			const double brake = 10.0;
 			const bool using_range = 0;	//Warning Only use range if we have a potentiometer!
-			const double inv_max_accel = 0.0;  //solved empirically
 			const bool use_aggressive_stop = true;
 		};
 		#pragma endregion
@@ -548,7 +548,7 @@ private:
 			PN_(MaxTorqueYaw_SetPoint); PN_(MaxTorqueYaw_SetPoint_High);
 			PNy(Rotation_Tolerance,rotation_tolerance);
 			//PNy(Rotation_ToleranceConsecutiveCount,rotation_tolerance_count);
-			PNy(Rotation_TargetDistanceScalar,rotation_distance_scalar);
+			PNy(Rotation_TargetDistanceScaler,rotation_distance_scaler);
 
 			#undef PN_
 			#undef PNy
@@ -570,10 +570,10 @@ private:
 			PUT_NUMBER(Ship_1D_MaxAccelReverse, val.max_accel_reverse);
 			//PUT_NUMBER(Ship_1D_MinRange)
 			//PUT_NUMBER(Ship_1D_MaxRange)
-			//PUT_NUMBER(Ship_1D_DistanceDegradeScalar)
+			//PUT_NUMBER(Ship_1D_DistanceDegradeScaler)
 			PUT_BOOL(Ship_1D_UsingRange,val.using_range) //bool
 			//Rotary--------------------------
-			//PUT_NUMBER(Rotary_VoltageScalar, val.VoltageScalar);
+			//PUT_NUMBER(Rotary_VoltageScaler, val.VoltageScaler);
 			PUT_NUMBER(Rotary_EncoderToRS_Ratio, val.encoder_to_wheel_ratio);
 			PUT_NUMBER(Rotary_EncoderPulsesPerRevolution, val.encoder_pulses_per_revolution);
 			//PUT_NUMBER(Rotary_PID)  //double[3]... append _p _i _d to the name for each element
@@ -639,7 +639,7 @@ private:
 			//PUT_NUMBER(Ship_1D_MaxAccelReverse, val.max_accel_reverse);
 			//PUT_NUMBER(Ship_1D_MinRange, Deg2Rad * val.min_range_deg);
 			//PUT_NUMBER(Ship_1D_MaxRange, Deg2Rad * val.max_range_deg);
-			//PUT_NUMBER(Ship_1D_DistanceDegradeScalar)
+			//PUT_NUMBER(Ship_1D_DistanceDegradeScaler)
 			PUT_BOOL(Ship_1D_UsingRange,val.using_range) //bool
 			//Rotary--------------------------
 			PUT_NUMBER(Rotary_VoltageScaler, val.voltage_multiply);
@@ -656,8 +656,9 @@ private:
 			PUT_NUMBER(Rotary_Arm_GainAssist_ToleranceConsecutiveCount, val.tolerance_count);
 			//Use _c, _t1, _t2, _t3, _t4 for array 0..5 respectively
 			//PUT_NUMBER(Rotary_Voltage_Terms) //PolynomialEquation_forth_Props
-			//TODO This is from default, but should determine maximum torque capability
-			PUT_NUMBER(Ship_1D_MaxAccelForward, 38.0);
+			//This is a safe default
+			//PUT_NUMBER(Ship_1D_MaxAccelForward, 38.0);
+			PUT_NUMBER(Ship_1D_MaxAccelForward, 75.0);
 			#pragma region _Simulation Acceleraton_
 			{
 				//In here we compute the acceleration of the simulation, our motion profile can be less than this but not more otherwise we overshoot
@@ -680,7 +681,7 @@ private:
 				PUT_NUMBER(Ship_1D_MaxAccel_simulation, MaxAccel_simulation);
 			}
 			#pragma endregion
-			PUT_NUMBER(Rotary_InverseMaxAccel, val.inv_max_accel);
+			//PUT_NUMBER(Rotary_InverseMaxAccel, val.inv_max_accel);
 			//PUT_NUMBER(Rotary_InverseMaxDecel, val.InverseMaxDecel);
 			//PUT_NUMBER(Rotary_Positive_DeadZone, val.Positive_DeadZone);
 			//PUT_NUMBER(Rotary_Negative_DeadZone, val.Negative_DeadZone);

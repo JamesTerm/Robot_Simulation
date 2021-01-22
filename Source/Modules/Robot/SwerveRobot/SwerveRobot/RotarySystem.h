@@ -42,14 +42,14 @@ struct rotary_properties
 		double MaxAccelForward, MaxAccelReverse;
 		double MinRange, MaxRange;
 		//This is used to avoid overshoot when trying to rotate to a heading
-		double DistanceDegradeScalar;
+		double DistanceDegradeScaler;
 		bool UsingRange;
 	} ship_props;
 
 	struct Rotary_Props
 	{
 		using PolynomialEquation_forth_Props = Framework::Base::PolynomialEquation_forth_Props;
-		double VoltageScalar;		//Used to handle reversed voltage wiring
+		double VoltageScaler;		//Used to handle reversed voltage wiring
 		//Note: EncoderToRS_Ratio is a place holder property that is implemented in the robot control
 		//interface as needed for that control... it is not used in the rotary system code
 		//The gear reduction used when multiplied by the encoder RPS will equal the *Rotary System's* RPS
@@ -102,7 +102,7 @@ struct rotary_properties
 
 			double SlowVelocityVoltage;  //Empirically solved as the max voltage to keep load just above steady state for worst case scenario
 			double SlowVelocity;  //Rate at which the gain assist voltage gets blended out; This may be a bit more than the slow velocity used for SlowVelocityVoltage
-			double GainAssistAngleScalar;  //Convert gear ratio into the readable ratio for cos() (i.e. GearToArmRatio)
+			double GainAssistAngleScaler;  //Convert gear ratio into the readable ratio for cos() (i.e. GearToArmRatio)
 			double ToleranceConsecutiveCount;
 			//In milliseconds predict what the position will be by using the potentiometers velocity to help compensate for lag
 			double VelocityPredictUp;
