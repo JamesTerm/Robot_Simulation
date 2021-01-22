@@ -120,6 +120,8 @@ double GetTweakedVoltage(double Voltage)
 	}
 	return Voltage;
 }
+//Not used
+#if 0
 static double AngleToHeight_m(double Angle_r)
 {
 	//TODO fix
@@ -130,6 +132,7 @@ static double AngleToHeight_m(double Angle_r)
 
 	return (sin(Angle_r * c_GearToArmRatio) * c_ArmLength_m) + c_GearHeightOffset;
 }
+#endif
 #pragma endregion
 class COMMON_API Potentiometer_Tester : public Ship_1D
 {
@@ -166,7 +169,7 @@ public:
 	{
 		//Note this is in native potentiometer ratios
 		double Pos_m = GetPos_m();
-		double height = AngleToHeight_m(Pos_m);
+		//double height = AngleToHeight_m(Pos_m);  //not used... for reference
 
 		//DOUT5("Pot=%f Angle=%f %fft %fin",m_Physics.GetVelocity(),RAD_2_DEG(Pos_m*c_GearToArmRatio),height*3.2808399,height*39.3700787);
 
@@ -176,7 +179,7 @@ public:
 	void SetTimeDelta(double dTime_s) {m_Time_s=dTime_s;}
 	void TimeChange()
 	{
-		__super::TimeChange(m_Time_s);
+		Ship_1D::TimeChange(m_Time_s);
 	}
 	void SetBypass(bool bypass) {m_Bypass=bypass;}
 };
@@ -230,7 +233,7 @@ public:
 	{
 		if (props)
 			m_PotentiometerProps = *props;
-		__super::Initialize(&m_PotentiometerProps);
+		Ship_1D::Initialize(&m_PotentiometerProps);
 	}
 	virtual void Initialize(const Framework::Base::asset_manager* props = NULL)
 	{
@@ -273,7 +276,7 @@ public:
 		GET_NUMBER(Ship_1D_MaxSpeed_Reverse, _Ship_1D.MaxSpeed_Reverse);
 		GET_NUMBER(Ship_1D_ACCEL, _Ship_1D.ACCEL);
 		GET_NUMBER(Ship_1D_BRAKE, _Ship_1D.BRAKE);
-		GET_NUMBER(Ship_1D_MaxAccelForward, _Ship_1D.MaxAccelForward);
+		GET_NUMBER(Ship_1D_MaxAccel_simulation, _Ship_1D.MaxAccelForward);
 
 		//if I don't have reverse use forward here for default
 		//GET_NUMBER(Ship_1D_MaxAccelReverse, _Ship_1D.MaxAccelForward);
@@ -309,7 +312,7 @@ public:
 	void SetTimeDelta(double dTime_s) {m_Time_s=dTime_s;}
 	void TimeChange()
 	{
-		__super::TimeChange(m_Time_s);
+		Ship_1D::TimeChange(m_Time_s);
 	}
 	void SetSimulateOpposingForce(bool Simulate) {m_SimulateOpposingForce=Simulate;}
 };
@@ -340,7 +343,7 @@ public:
 	{
 		if (props)
 			m_EncoderProps = *props;
-		__super::Initialize(&m_EncoderProps);
+		Ship_1D::Initialize(&m_EncoderProps);
 	}
 	void UpdateEncoderVoltage(double Voltage)
 	{
@@ -393,7 +396,7 @@ public:
 	void TimeChange()
 	{
 		m_GetEncoderFirstCall = true;
-		__super::TimeChange(m_Time_s);
+		Ship_1D::TimeChange(m_Time_s);
 	}
 	void SetReverseDirection(bool reverseDirection)
 	{
@@ -868,7 +871,7 @@ public:
 			} 
 		};
 		m_DriveTrain.UpdateProps(defaults_for_sim3);
-		__super::Initialize(props);
+		Encoder_Simulator2::Initialize(props);
 		m_Physics.SetAngularInertiaCoefficient(0.5);  //Going for solid cylinder
 		//now to setup the payload physics   Note: each side pulls half the weight
 		if (m_EncoderKind == eRW_Left)
@@ -985,7 +988,7 @@ public:
 	}
 	virtual void ResetPos()
 	{
-		__super::ResetPos();
+		Encoder_Simulator2::ResetPos();
 		if (m_EncoderKind == eRW_Left)
 			s_PayloadPhysics_Left.ResetVectors();
 		if (m_EncoderKind == eRW_Right)
@@ -1012,7 +1015,7 @@ public:
 	}
 	virtual void Initialize(const Framework::Base::asset_manager* props = NULL)
 	{
-		__super::Initialize(props);
+		Encoder_Simulator2::Initialize(props);
 		//const Rotary_Properties* rotary = dynamic_cast<const Rotary_Properties*>(props);
 		//if (rotary)
 		//	m_InvEncoderToRS_Ratio = 1.0 / rotary->GetRotaryProps().EncoderToRS_Ratio;
@@ -1072,7 +1075,7 @@ public:
 	}
 	virtual void TimeChange()
 	{
-		__super::TimeChange();
+		Encoder_Simulator2::TimeChange();
 		double CurrentVelociy = m_Physics.GetVelocity();
 		m_Slack.push(GetDistance());
 		const size_t MaxLatencyCount = 40;
@@ -1099,7 +1102,7 @@ public:
 	}
 	virtual void ResetPos()
 	{
-		__super::ResetPos();
+		Encoder_Simulator2::ResetPos();
 		while (!m_Slack.empty())
 			m_Slack.pop();
 		m_SlackedValue = GetDistance();

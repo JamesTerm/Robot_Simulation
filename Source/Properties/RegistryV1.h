@@ -73,6 +73,7 @@ namespace registry_v1
 	Rg_(Ship_1D_MaxSpeed_Reverse)
 	Rg_(Ship_1D_ACCEL)
 	Rg_(Ship_1D_BRAKE)
+	Rg_(Ship_1D_MaxAccel_simulation)
 	Rg_(Ship_1D_MaxAccelForward)
 	Rg_(Ship_1D_MaxAccelReverse)
 	Rg_(Ship_1D_MinRange)

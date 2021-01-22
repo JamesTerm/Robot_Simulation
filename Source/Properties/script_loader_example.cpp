@@ -1,4 +1,5 @@
 #include "../Base/Base_Includes.h"
+#include "../Base/Physics.h"  //can make it easy to get some computations
 
 #include "script_loader.h"
 #include "RegistryV1.h"
@@ -657,6 +658,28 @@ private:
 			//PUT_NUMBER(Rotary_Voltage_Terms) //PolynomialEquation_forth_Props
 			//TODO This is from default, but should determine maximum torque capability
 			PUT_NUMBER(Ship_1D_MaxAccelForward, 38.0);
+			#pragma region _Simulation Acceleraton_
+			{
+				//In here we compute the acceleration of the simulation, our motion profile can be less than this but not more otherwise we overshoot
+				//I'll write out each variable so that we can tweak the final value and compare against actual
+				//For start we are using a 775pro motor with its rated torque
+				const double stall_torque = 0.71;  //Nm
+				const double gear_reduction = (1.0 / 81.0) * (3.0 / 7.0);
+				//This will account for the friction
+				const double gear_box_effeciency = 0.65;
+				//I'm going to be more conservative and give more mass to account for the weight bearing on the wheel
+				//const double mass = Pounds2Kilograms * 3.06;
+				const double mass = Pounds2Kilograms * 6.0;
+				Framework::Base::PhysicsEntity_1D motor_wheel_model;
+				motor_wheel_model.SetMass(mass);
+				motor_wheel_model.SetAngularInertiaCoefficient(0.4);  //using a solid sphere
+				motor_wheel_model.SetRadiusOfConcentratedMass(Feet2Meters(4.42*0.5));
+				// t=Ia 
+				//I=sum(m*r^2) or sum(AngularCoef*m*r^2)
+				const double MaxAccel_simulation = motor_wheel_model.GetAngularAccelerationDelta(stall_torque * (1.0/gear_reduction) * gear_box_effeciency);
+				PUT_NUMBER(Ship_1D_MaxAccel_simulation, MaxAccel_simulation);
+			}
+			#pragma endregion
 			PUT_NUMBER(Rotary_InverseMaxAccel, val.inv_max_accel);
 			//PUT_NUMBER(Rotary_InverseMaxDecel, val.InverseMaxDecel);
 			//PUT_NUMBER(Rotary_Positive_DeadZone, val.Positive_DeadZone);
