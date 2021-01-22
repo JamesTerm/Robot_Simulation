@@ -654,7 +654,9 @@ private:
 			PUT_NUMBER(Rotary_PrecisionTolerance, val.tolerance);
 			PUT_NUMBER(Rotary_Arm_GainAssist_ToleranceConsecutiveCount, val.tolerance_count);
 			//Use _c, _t1, _t2, _t3, _t4 for array 0..5 respectively
-			//PUT_NUMBER(Rotary_Voltage_Terms) //PolynomialEquation_forth_Props 
+			//PUT_NUMBER(Rotary_Voltage_Terms) //PolynomialEquation_forth_Props
+			//TODO This is from default, but should determine maximum torque capability
+			PUT_NUMBER(Ship_1D_MaxAccelForward, 38.0);
 			PUT_NUMBER(Rotary_InverseMaxAccel, val.inv_max_accel);
 			//PUT_NUMBER(Rotary_InverseMaxDecel, val.InverseMaxDecel);
 			//PUT_NUMBER(Rotary_Positive_DeadZone, val.Positive_DeadZone);

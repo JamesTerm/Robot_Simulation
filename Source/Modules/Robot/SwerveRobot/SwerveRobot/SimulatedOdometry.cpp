@@ -274,7 +274,12 @@ public:
 		GET_NUMBER(Ship_1D_ACCEL, _Ship_1D.ACCEL);
 		GET_NUMBER(Ship_1D_BRAKE, _Ship_1D.BRAKE);
 		GET_NUMBER(Ship_1D_MaxAccelForward, _Ship_1D.MaxAccelForward);
-		GET_NUMBER(Ship_1D_MaxAccelReverse, _Ship_1D.MaxAccelReverse);
+
+		//if I don't have reverse use forward here for default
+		//GET_NUMBER(Ship_1D_MaxAccelReverse, _Ship_1D.MaxAccelForward);
+		constructed_name = prefix, constructed_name += csz_Ship_1D_MaxAccelReverse;
+		_Ship_1D.MaxAccelReverse = props->get_number(constructed_name.c_str(), _Ship_1D.MaxAccelForward);
+
 		GET_NUMBER(Ship_1D_MinRange, _Ship_1D.MinRange);
 		GET_NUMBER(Ship_1D_MaxRange, _Ship_1D.MaxRange);
 		GET_NUMBER(Ship_1D_DistanceDegradeScalar, _Ship_1D.DistanceDegradeScalar);
