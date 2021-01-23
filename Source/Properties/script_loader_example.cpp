@@ -679,7 +679,7 @@ private:
 				motor_wheel_model.SetRadiusOfConcentratedMass(Feet2Meters(4.42*0.5));
 				// t=Ia 
 				//I=sum(m*r^2) or sum(AngularCoef*m*r^2)
-				const double MaxAccel_simulation = motor_wheel_model.GetAngularAccelerationDelta(stall_torque * (1.0/gear_reduction) * gear_box_effeciency);
+				const double MaxAccel_simulation = motor_wheel_model.GetAngularAcceleration(stall_torque * (1.0/gear_reduction) * gear_box_effeciency);
 				PUT_NUMBER(Ship_1D_MaxAccel_simulation, MaxAccel_simulation);
 			}
 			#pragma endregion

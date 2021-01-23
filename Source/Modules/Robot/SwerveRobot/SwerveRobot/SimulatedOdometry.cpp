@@ -705,7 +705,7 @@ public:
 		double TorqueToApply=m_DriveTrain.GetTorqueFromVoltage_V1(Voltage);
 		const double TorqueAbsorbed=m_DriveTrain.INV_GetTorqueFromVelocity(m_Physics.GetVelocity());
 		TorqueToApply-=TorqueAbsorbed;
-		m_Physics.ApplyFractionalTorque(TorqueToApply,m_Time_s,m_DriveTrain.GetDriveTrainProps().TorqueAccelerationDampener);
+		m_Physics.ApplyFractionalTorque_depreciated(TorqueToApply,m_Time_s,m_DriveTrain.GetDriveTrainProps().TorqueAccelerationDampener);
 		#endif
 	}
 	virtual double GetEncoderVelocity() const
@@ -797,7 +797,7 @@ private:
 		if (PayloadVelocity*WheelVelocity >= 0.0)
 		{
 			//now to factor in the mass
-			const double PayloadForce = WheelPhysics.GetMomentofInertia(dtc.GetDriveTrainProps().TorqueAccelerationDampener) * acceleration;
+			const double PayloadForce = WheelPhysics.GetMomentofInertia()*(1.0/dtc.GetDriveTrainProps().TorqueAccelerationDampener)* acceleration;
 			WheelPhysics.ApplyFractionalTorque(PayloadForce,Time_s);
 		}
 		//else
@@ -915,14 +915,14 @@ public:
 			TorqueToApply = 0.0;
 		//Note: Even though TorqueToApply has direction, if it gets saturated to 0 it loses it... ultimately the voltage parameter is sacred to the correct direction
 		//in all cases so we'll convert TorqueToApply to magnitude
-		m_Physics.ApplyFractionalTorque(fabs(TorqueToApply) * Voltage, m_Time_s, m_DriveTrain.GetDriveTrainProps().TorqueAccelerationDampener);
+		m_Physics.ApplyFractionalTorque_depreciated(fabs(TorqueToApply) * Voltage, m_Time_s, m_DriveTrain.GetDriveTrainProps().TorqueAccelerationDampener);
 
 		//Apply the appropriate change in linear velocity to the payload.  Note:  This is not necessarily torque because of the TorqueAccelerationDampener... the torque
 		//acts as voltage acts to a circuit... it gives the potential but the current doesn't reflect this right away... its the current, or in our case the velocity
 		//change of he wheel itself that determines how much force to apply.
 		const double Wheel_Acceleration = (m_Physics.GetVelocity() - m_PreviousWheelVelocity) / m_Time_s;
 		//Now to reconstruct the torque Ia, where I = cm R^2 /torquedampner
-		const double Wheel_Torque = Wheel_Acceleration * m_Physics.GetMomentofInertia(m_DriveTrain.GetDriveTrainProps().TorqueAccelerationDampener);
+		const double Wheel_Torque = Wheel_Acceleration * m_Physics.GetMomentofInertia()*(1.0/m_DriveTrain.GetDriveTrainProps().TorqueAccelerationDampener);
 		//Grrr I have to blend this... mostly because of the feedback from the payload... I'll see if there is some way to avoid needing to do this
 		const double smoothing_value = 0.75;
 		const double BlendTorqueToApply = (Wheel_Torque * smoothing_value) + (TorqueToApply * (1.0 - smoothing_value));
@@ -1050,7 +1050,7 @@ public:
 		double TorqueToApply = m_DriveTrain.GetTorqueFromVoltage(Voltage);
 		const double TorqueAbsorbed = m_DriveTrain.INV_GetTorqueFromVelocity(m_Physics.GetVelocity());
 		TorqueToApply -= TorqueAbsorbed;
-		m_Physics.ApplyFractionalTorque(TorqueToApply, m_Time_s, m_DriveTrain.GetDriveTrainProps().TorqueAccelerationDampener);
+		m_Physics.ApplyFractionalTorque_depreciated(TorqueToApply, m_Time_s, m_DriveTrain.GetDriveTrainProps().TorqueAccelerationDampener);
 		//If we have enough voltage and enough velocity the locking pin is not engaged... gravity can apply extra torque
 		//if ((fabs(Voltage)>0.04)&&(fabs(m_Physics.GetVelocity())>0.05))
 		if (fabs(Voltage) > 0.04)
@@ -1069,7 +1069,7 @@ public:
 			//The pin can protect it against going the wrong direction... if they are opposite... saturate the max opposing direction
 			if (((Torque * TorqueToApply) < 0.0) && (fabs(TorqueWithAngle) > fabs(TorqueToApply)))
 				TorqueWithAngle = -TorqueToApply;
-			m_Physics.ApplyFractionalTorque(TorqueWithAngle, m_Time_s, m_DriveTrain.GetDriveTrainProps().TorqueAccelerationDampener);
+			m_Physics.ApplyFractionalTorque_depreciated(TorqueWithAngle, m_Time_s, m_DriveTrain.GetDriveTrainProps().TorqueAccelerationDampener);
 		}
 	}
 	virtual double GetPotentiometerCurrentPosition()
@@ -1174,7 +1174,7 @@ public:
 				//just compute in magnitude, then restore the opposite direction of the velocity
 				const double adverse_accel_limit = fabs(current_velocity) / m_Time_s; //acceleration in radians enough to stop motion
 				//Now to convert into torque still in magnitude
-				const double adverse_torque_limit = m_motor_wheel_model.GetMomentofInertia(1.0) * adverse_accel_limit;
+				const double adverse_torque_limit = m_motor_wheel_model.GetMomentofInertia() * adverse_accel_limit;
 				//clip adverse torque as-needed and restore the opposite sign (this makes it easier to add in the next step
 				const double adverse_torque = std::min(adverse_torque_limit,dead_zone*max_torque) * ((current_velocity > 0) ? -1.0:1.0);
 				m_motor_wheel_model.ApplyFractionalTorque(adverse_torque, m_Time_s);
