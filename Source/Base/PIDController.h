@@ -183,7 +183,7 @@ private:
 	#pragma endregion
 public:
 	PIDController2(	double p, double i, double d, bool AutoResetI=true,	double maximumOutput=1.0,double minimumOutput=-1.0,	
-		double maximumInput=1.0,double minimumInput=-1.0,double m_tolerance=.05,bool continuous=false,bool enabled=false) :
+		double maximumInput=1.0,double minimumInput=-1.0,double tolerance=.05,bool continuous=false,bool enabled=false) :
 		m_P(p), m_I(i), m_D(d), m_maximumOutput(maximumOutput), m_minimumOutput(minimumOutput), m_maximumInput(maximumInput), 
 		m_minimumInput(minimumInput),m_continuous(continuous), m_enabled(enabled), m_AutoResetI(AutoResetI)
 	{
@@ -200,7 +200,7 @@ public:
 		/// \param enabled If client knows all the above, set to true; otherwise enable use Enable() for late binding
 		m_prevError = 0;
 		m_totalError = 0;
-		m_tolerance = .05;
+		m_tolerance = tolerance;
 
 		m_result = 0;
 	}
@@ -217,7 +217,8 @@ public:
 		if (m_enabled)
 		{
 			//While it is true it forces client to use large values it is consistent and will yield much better results
-			m_error = (setpoint - input) * dTime_s;  //Using dTime_s will keep the errors consistent if time is erratic
+			m_error = setpoint - input;
+			//Note: for continuous test difference before applying the time scaler
 			if (m_continuous)
 			{
 				if (fabs(m_error) >
@@ -230,8 +231,8 @@ public:
 						m_maximumInput - m_minimumInput;
 				}
 			}
-
-
+			//Using dTime_s will keep the errors consistent if time is erratic
+			m_error *= dTime_s;
 			//If both the setpoint and input are zero then there should be no total error
 			if (m_AutoResetI && IsZero(setpoint + input))
 				m_totalError = 0.0;

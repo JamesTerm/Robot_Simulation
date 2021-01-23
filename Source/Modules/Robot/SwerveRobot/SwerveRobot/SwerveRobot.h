@@ -51,7 +51,7 @@ public:
 	Vec2D GetCurrentPosition() const;
 	double GetCurrentHeading() const;
 	const SwerveVelocities &GetCurrentVelocities() const;  //access to odometry readings
-	const SwerveVelocities &GetSimulatedVelocities() const; //explicite access to simulations velocities
+	const SwerveVelocities &GetSimulatedVelocities() const; //explicit access to simulations velocities
 	const SwerveVelocities &GetCurrentVoltages() const;    //access to voltage writings
 	const SwerveVelocities &GetIntendedVelocities() const;  //access to kinematics
 

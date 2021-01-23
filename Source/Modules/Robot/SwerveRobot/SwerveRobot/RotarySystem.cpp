@@ -205,10 +205,25 @@ protected:
 	{
 		return false;
 	}
+	inline double NormalizeRotation_IfAngular(double Rotation)
+	{
+		if (m_IsAngular)
+		{
+			//This is our typical NormalizeRotation2
+			const double Pi2 = M_PI * 2.0;
+			//Normalize the rotation
+			if (Rotation > M_PI)
+				Rotation -= Pi2;
+			else if (Rotation < -M_PI)
+				Rotation += Pi2;
+		}
+		return Rotation;
+	}
 	static inline double NormalizeRotation3(double Rotation)
 	{
+		//Like NormalizeRotation2 but uses while for many turns
 		//we should really push a SmartDashboard check-box to disable drive
-		assert(fabs(Rotation) < Pi2 * 20); //should be less than 20 turns!  If it's greater something is terribly wrong!
+		assert(fabs(Rotation) < Pi2 * 60); //should be less than 60 turns!  If it's greater something is terribly wrong!
 		//const double Pi2 = M_PI * 2.0;
 		//Normalize the rotation
 		while (Rotation > M_PI)
@@ -265,12 +280,36 @@ public:
 		m_PIDControllerUp.SetPID(m_Rotary_Props.ArmGainAssist.PID_Up[0], m_Rotary_Props.ArmGainAssist.PID_Up[1], m_Rotary_Props.ArmGainAssist.PID_Up[2]);
 		m_PIDControllerDown.SetPID(m_Rotary_Props.ArmGainAssist.PID_Down[0], m_Rotary_Props.ArmGainAssist.PID_Down[1], m_Rotary_Props.ArmGainAssist.PID_Down[2]);
 
+		//Are we tuning position or velocity, currently the velocity does not use this class (only solves P )
+		#if 0
 		const double MaxSpeedReference = Props->GetMaxSpeed();
 		m_PIDControllerUp.SetInputRange(-MaxSpeedReference, MaxSpeedReference);
 		m_PIDControllerDown.SetInputRange(-MaxSpeedReference, MaxSpeedReference);
 		double tolerance = 0.99; //we must be less than one (on the positive range) to avoid lockup
 		m_PIDControllerUp.SetOutputRange(-MaxSpeedReference * tolerance, MaxSpeedReference*tolerance);
 		m_PIDControllerDown.SetOutputRange(-MaxSpeedReference * tolerance, MaxSpeedReference*tolerance);
+		#else
+		//Solving for position, if we are angular we need to normalize rotation so we put -Pi to Pi and set to continuous
+		//Otherwise we grab min max range like we do for velocity
+		if (m_IsAngular)
+		{
+		}
+		const double MaxPosReference = (m_IsAngular) ? Pi : m_Rotary_Props.MaxLimitRange;
+		const double MinPosReference = (m_IsAngular) ? -Pi : m_Rotary_Props.MinLimitRange;
+		m_PIDControllerUp.SetInputRange(MinPosReference, MaxPosReference);
+		m_PIDControllerDown.SetInputRange(MinPosReference, MaxPosReference);
+		//for non-angular we must be less than one (on the positive range) to avoid lockup
+		const double tolerance = m_IsAngular ? 1.0 : 0.99; 
+		m_PIDControllerUp.SetOutputRange(MinPosReference * tolerance, MaxPosReference * tolerance);
+		m_PIDControllerDown.SetOutputRange(MinPosReference * tolerance, MaxPosReference * tolerance);
+		//finally for angular we set them continuous to activate the normalization
+		if (m_IsAngular)
+		{
+			m_PIDControllerUp.SetContinuous();
+			m_PIDControllerDown.SetContinuous();
+		}
+		#endif
+
 		//The idea here is that the arm may rest at a stop point that needs consistent voltage to keep steady
 		if (m_Rotary_Props.ArmGainAssist.SlowVelocityVoltage != 0.0)
 		{
@@ -323,9 +362,8 @@ public:
 	{
 		//Give client code access to the actual position, as the position of the entity cannot be altered for its projected position
 		double NewPosition = (m_PotentiometerState != eNoPot) ? m_RobotControl->GetRotaryCurrentPorV(m_InstanceIndex) : GetPos_m();
-		//TODO: may want to enable this but need to work out how this impacts the motion profile (see how they can align)
-		//if (m_IsAngular)
-		//	NewPosition=NormalizeRotation3(NewPosition);
+		if (m_IsAngular)
+			NewPosition=NormalizeRotation3(NewPosition);
 		return NewPosition;
 	}
 	virtual void TimeChange(double dTime_s)
@@ -350,7 +388,7 @@ public:
 
 		const double NewPosition = GetActualPos();
 		double PredictedPosition=NewPosition;
-		const double Displacement = NewPosition - m_LastPosition;
+		const double Displacement = NormalizeRotation_IfAngular(NewPosition - m_LastPosition);
 		//Note: we may have to average the velocity if our sensor is latent and updates in chunks
 		const double PotentiometerVelocity = (m_PotVelocityAverager) ? 
 			(*m_PotVelocityAverager)(Displacement / m_LastTime)	: Displacement / m_LastTime;
@@ -383,7 +421,7 @@ public:
 				{
 					const double IsAccel= PotentiometerVelocity * PotAccel > 0.0 ? 1.0 : -1.0;
 					//Note: the velocity has the correct direction, if we are accelerating
-					const double PredictedPositionUp = NewPosition + (PotentiometerVelocity * arm.VelocityPredictUp * IsAccel);
+					const double PredictedPositionUp = NormalizeRotation_IfAngular(NewPosition + (PotentiometerVelocity * arm.VelocityPredictUp * IsAccel));
 					//PID will correct for position... this may need to use I to compensate for latency
 					if ((arm.UsePID_Up_Only) || (GetPos_m() > PredictedPositionUp))
 					{

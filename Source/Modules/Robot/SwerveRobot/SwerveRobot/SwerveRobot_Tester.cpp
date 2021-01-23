@@ -145,6 +145,18 @@ void strafe_box_test(Module::Robot::SwerveRobot& robot, bool reverse_x=false)
 	cout("------------------------------------------------------ box up\n");
 }
 
+void Test_Turn(Module::Robot::SwerveRobot& robot)
+{
+	for (size_t i = 0; i < 50; i++)
+	{
+		robot.SetIntendedOrientation(DEG_2_RAD(45));
+		TimeSlice(robot); //update a time slice
+		//cout("heading=%.2f\n", RAD_2_DEG( _robot.GetCurrentHeading()));
+		cout("angle=%.2f,heading =%.2f\n", RAD_2_DEG(robot.GetCurrentVelocities().Velocity.AsArray[4]), RAD_2_DEG(robot.GetCurrentHeading()));
+	}
+	cout("------------------------------------------------------ turn 45\n");
+}
+
 int main()
 {
 	using namespace Module::Robot;
@@ -176,14 +188,9 @@ int main()
 	#if 1
 	up_down_test(_robot);
 	strafe_test(_robot);
-	for (size_t i = 0; i < 50; i++)
-	{
-		_robot.SetIntendedOrientation(DEG_2_RAD(45));
-		TimeSlice(_robot); //update a time slice
-		//cout("heading=%.2f\n", RAD_2_DEG( _robot.GetCurrentHeading()));
-		cout("angle=%.2f,heading =%.2f\n", RAD_2_DEG(_robot.GetCurrentVelocities().Velocity.AsArray[4]), RAD_2_DEG(_robot.GetCurrentHeading()));
-	}
-	cout("------------------------------------------------------ turn 180\n");
+	#endif
+	#if 1
+	Test_Turn(_robot);
 	#endif
 	#if 1
 	strafe_box_test(_robot);
