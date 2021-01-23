@@ -249,6 +249,10 @@ private:
 			GET_NUMBER(Ship_1D_ACCEL, _Ship_1D.ACCEL);
 			GET_NUMBER(Ship_1D_BRAKE, _Ship_1D.BRAKE);
 			GET_NUMBER(Ship_1D_MaxAccelForward, _Ship_1D.MaxAccelForward);
+			//IF we have this asset assign it to reverse; Note: reverse is not negative
+			if (asset_properties->get_number_native(constructed_name.c_str(), ftest))
+				_Ship_1D.MaxAccelReverse = _Ship_1D.MaxAccelForward;
+
 			GET_NUMBER(Ship_1D_MaxAccelReverse, _Ship_1D.MaxAccelReverse);
 			GET_NUMBER(Ship_1D_MinRange, _Ship_1D.MinRange);
 			GET_NUMBER(Ship_1D_MaxRange, _Ship_1D.MaxRange);
@@ -288,7 +292,7 @@ private:
 
 			GET_NUMBER(Rotary_InverseMaxDecel, Rotary_.InverseMaxDecel);
 			if (asset_properties->get_number_native(constructed_name.c_str(), ftest))
-				arm.InverseMaxDecel_Up = arm.InverseMaxDecel_Down = Rotary_.InverseMaxAccel;
+				arm.InverseMaxDecel_Up = arm.InverseMaxDecel_Down = Rotary_.InverseMaxDecel;
 
 			GET_NUMBER(Rotary_Positive_DeadZone, Rotary_.Positive_DeadZone);
 			GET_NUMBER(Rotary_Negative_DeadZone, Rotary_.Negative_DeadZone);
@@ -307,6 +311,7 @@ private:
 			GET_BOOL(Rotary_PID_Console_Dump, Rotary_.PID_Console_Dump); //bool
 			GET_BOOL(Rotary_UseAggressiveStop, Rotary_.UseAggressiveStop); //bool
 			GET_BOOL(Rotary_EncoderReversed_Wheel, Rotary_.EncoderReversed_Wheel); //bool
+			GET_SIZE_T(Rotary_AverageReadingsCount, Rotary_.AverageReadingsCount); //size_t
 			#pragma endregion
 			#pragma region _Rotary arm gain / pot _
 			//GET_NUMBER(Rotary_Arm_GainAssist_PID_Up, arm.)  //double[3]; append _p _i _d to the name for each element

@@ -136,6 +136,7 @@ private:
 	//A counter to count how many times the predicted position and intended position are withing tolerance consecutively
 	size_t m_ToleranceCounter=0;
 	std::function<RotarySystem_Position::PID_Monitor_proto> m_PID_Monitor_callback = nullptr;
+	bool m_IsAngular=false;  //from entity properties
 	#pragma endregion
 protected:
 	virtual void SetPotentiometerSafety(bool DisableFeedback)
@@ -204,6 +205,19 @@ protected:
 	{
 		return false;
 	}
+	static inline double NormalizeRotation3(double Rotation)
+	{
+		//we should really push a SmartDashboard check-box to disable drive
+		assert(fabs(Rotation) < Pi2 * 20); //should be less than 20 turns!  If it's greater something is terribly wrong!
+		//const double Pi2 = M_PI * 2.0;
+		//Normalize the rotation
+		while (Rotation > M_PI)
+			Rotation -= Pi2;
+		while (Rotation < -M_PI)
+			Rotation += Pi2;
+		return Rotation;
+	}
+
 public:
 	Rotary_Position_Control(const char EntityName[], Rotary_Control_Interface *robot_control, size_t InstanceIndex = 0) :
 		Rotary_System(EntityName), m_RobotControl(robot_control), m_InstanceIndex(InstanceIndex),
@@ -213,6 +227,7 @@ public:
 	}
 	virtual void Initialize(const Entity1D_Properties *props = NULL)
 	{
+		m_IsAngular = props->m_IsAngular;  //cache this since we are not caching Entity properties
 		const Rotary_Properties *Props = dynamic_cast<const Rotary_Properties *>(props);
 		assert(Props);
 
@@ -238,8 +253,8 @@ public:
 		if (m_PotentiometerState != eNoPot)
 		{
 			m_LastPosition = m_RobotControl->GetRotaryCurrentPorV(m_InstanceIndex);
-			//set up an averager, for now we'll use VelocityPredictUp property to work out how many elements
-			const size_t NoElements=(size_t)((Props->GetRotaryProps().ArmGainAssist.VelocityPredictUp + 0.01) / 0.01);
+			//set up an averager
+			const size_t NoElements=Props->GetRotaryProps().AverageReadingsCount;
 			if (NoElements>0)
 			{
 				m_PotVelocityAverager=std::make_shared<Averager_Double>(NoElements);
@@ -307,7 +322,10 @@ public:
 	double GetActualPos() const
 	{
 		//Give client code access to the actual position, as the position of the entity cannot be altered for its projected position
-		const double NewPosition = (m_PotentiometerState != eNoPot) ? m_RobotControl->GetRotaryCurrentPorV(m_InstanceIndex) : GetPos_m();
+		double NewPosition = (m_PotentiometerState != eNoPot) ? m_RobotControl->GetRotaryCurrentPorV(m_InstanceIndex) : GetPos_m();
+		//TODO: may want to enable this but need to work out how this impacts the motion profile (see how they can align)
+		//if (m_IsAngular)
+		//	NewPosition=NormalizeRotation3(NewPosition);
 		return NewPosition;
 	}
 	virtual void TimeChange(double dTime_s)
@@ -552,10 +570,13 @@ public:
 			//Overshoot protection: with known latent readings...  use the predicted position first see if this hits tolerance
 			if (fabs(PredictedPosition-m_IntendedPosition) < m_Rotary_Props.PrecisionTolerance)
 			{
-				OverShootVelocity=0.0;
-				m_ErrorOffset = 0.0;  //no error correction to factor in (avoids noisy resting point)
-				// if (m_InstanceIndex==4)
-				// 	printf("---x--");
+				if (!m_Rotary_Props.UseAggressiveStop)
+				{
+					OverShootVelocity = 0.0;
+					m_ErrorOffset = 0.0;  //no error correction to factor in (avoids noisy resting point)
+					// if (m_InstanceIndex==4)
+					// 	printf("---x--");
+				}
 			}
 			else
 			{
@@ -577,7 +598,7 @@ public:
 				// 	printf("-|%.2f,%.2f|-",OverShootVelocity,PredictedPosition);
 			}
 		}
-		//If the overshoot and newvelocity conflict in direction it is zero, other wise do a min of magnitude
+		//If the overshoot and new velocity conflict in direction it is zero, other wise do a min of magnitude
 		const double Velocity = 
 			NewVelocity * OverShootVelocity < 0.0 ? 0.0 :
 			fabs(NewVelocity) < fabs(OverShootVelocity) ? NewVelocity : OverShootVelocity;

@@ -87,7 +87,7 @@ struct rotary_properties
 		//Very similar to EncoderToRS_Ratio and is also a placeholder implemented in the robot control
 		//This too is a method provided at startup to keep numbers positive
 		bool EncoderReversed_Wheel;
-
+		size_t AverageReadingsCount; //used to average readings great for latent reads or noise, but does introduce latency
 		//Only supported in Rotary_Position_Control
 		struct Rotary_Arm_GainAssist_Props
 		{

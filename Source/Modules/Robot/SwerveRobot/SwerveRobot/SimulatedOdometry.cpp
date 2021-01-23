@@ -1116,6 +1116,93 @@ public:
 	}
 };
 
+class Potentiometer_Tester4
+{
+#pragma region _Description_
+	//This is specialized for motor simulation turning a loaded mass
+	//This version is much simpler than the others in that it works with the motor curves to determine 
+	//This will model a solid sphere for the moment of inertia
+#pragma endregion
+private:
+	Framework::Base::PhysicsEntity_1D m_motor_wheel_model;
+	double m_free_speed_rad = 18730 * (1.0/60.0) * Pi2; //radians per second of motor
+	double m_stall_torque = 0.71;  //Nm
+	double m_gear_reduction = (1.0 / 81.0) * (3.0 / 7.0);
+	//This will account for the friction
+	double m_gear_box_effeciency = 0.65;
+	double m_mass = Pounds2Kilograms(6.0);
+	//Use SolidWorks and get the cube root of the volume which gives a rough diameter error on the side of larger
+	//divide the diameter for the radius
+	double m_RadiusOfConcentratedMass = Feet2Meters(4.0 * 0.5);
+	double m_Time_s = 0.010;
+	double m_Heading=0.0;
+	size_t m_InstanceIndex = 0;  //for ease of debugging
+public:
+	virtual void Initialize(size_t index,const Framework::Base::asset_manager* props = NULL)
+	{
+		//TODO pull from properties, all hard coded for now
+		m_motor_wheel_model.SetMass(m_mass);
+		m_motor_wheel_model.SetAngularInertiaCoefficient(0.4);  //using a solid sphere
+		m_motor_wheel_model.SetRadiusOfConcentratedMass(m_RadiusOfConcentratedMass);
+		m_InstanceIndex = index;
+	}
+	void UpdatePotentiometerVoltage(double Voltage)
+	{
+		//All we do here is compute the torque to apply from the voltage
+		const double max_torque = m_stall_torque * (1.0 / m_gear_reduction) * m_gear_box_effeciency;
+		//The max torque is scaled from both the ratio of speed to max speed and the ratio of voltage itself
+		const double speed_ratio = 1.0 - (fabs(m_motor_wheel_model.GetVelocity()) / (m_free_speed_rad * m_gear_reduction));
+		const double torque = max_torque * speed_ratio * Voltage;
+		m_motor_wheel_model.ApplyFractionalTorque(torque, m_Time_s);
+		//grab the latest velocity now for what is next
+		const double current_velocity = m_motor_wheel_model.GetVelocity();
+		//We could stop here if there was no friction and no gravity, but there is
+		//if (m_InstanceIndex == 1)
+		//	int x = 4;
+		const double dead_zone = 0.17;  //this is the amount of voltage to get motion can be tested
+		//The dead zone defines the opposing force to be added to the mass we'll clip it down to match the velocity
+		//as the equilibrium sets in to no motion
+		if (current_velocity != 0)
+		{
+			//Don't have this mess with small increments, friction will take the final bite here
+			if (fabs(current_velocity) < 0.01)
+			{
+				m_motor_wheel_model.ResetVectors();
+			}
+			else if (m_Time_s > 0.0)  // no division by zero
+			{
+				//just compute in magnitude, then restore the opposite direction of the velocity
+				const double adverse_accel_limit = fabs(current_velocity) / m_Time_s; //acceleration in radians enough to stop motion
+				//Now to convert into torque still in magnitude
+				const double adverse_torque_limit = m_motor_wheel_model.GetMomentofInertia(1.0) * adverse_accel_limit;
+				//clip adverse torque as-needed and restore the opposite sign (this makes it easier to add in the next step
+				const double adverse_torque = std::min(adverse_torque_limit,dead_zone*max_torque) * ((current_velocity > 0) ? -1.0:1.0);
+				m_motor_wheel_model.ApplyFractionalTorque(adverse_torque, m_Time_s);
+			}
+		}
+	}
+	double GetPotentiometerCurrentPosition() const
+	{
+		return m_Heading;
+	}
+	void TimeChange()
+	{
+		double PositionDisplacement;
+		m_motor_wheel_model.TimeChangeUpdate(m_Time_s, PositionDisplacement);
+		//No normalizing here, we represent the actual position!
+		m_Heading += PositionDisplacement;
+	}
+	//This is broken up so that the real interface does not have to pass time
+	void SetTimeDelta(double dTime_s) 
+	{ 
+		m_Time_s = dTime_s; 
+	}
+	void ResetPos()
+	{
+		m_motor_wheel_model.ResetVectors();
+	}
+};
+
 class COMMON_API Encoder_Tester
 {
 private:
@@ -1190,7 +1277,7 @@ private:
 		double swivel_max_speed[4];
 	} m_bypass_properties;
 	#ifdef __UseLegacySimulation__
-	Legacy::Potentiometer_Tester2 m_Potentiometers[4]; //simulate a real potentiometer for calibration testing
+	Legacy::Potentiometer_Tester4 m_Potentiometers[4]; //simulate a real potentiometer for calibration testing
 	std::shared_ptr<Legacy::Encoder_Simulator2> m_Encoders[4];
 	#endif
 	bool m_UseBypass = true;
@@ -1253,7 +1340,7 @@ public:
 			else
 				m_Encoders[i] = std::make_shared<Legacy::Encoder_Simulator2>();
 			m_Encoders[i]->Initialize(props);
-			m_Potentiometers[i].Initialize(props);
+			m_Potentiometers[i].Initialize(i,props);
 		}
 		#endif
 		ResetPos();
@@ -1324,7 +1411,9 @@ public:
 				m_Potentiometers[i].SetTimeDelta(d_time_s);
 				m_Potentiometers[i].UpdatePotentiometerVoltage(CurrentVoltage.Velocity.AsArray[i + 4]);
 				m_Potentiometers[i].TimeChange();
-				m_current_position[i] = NormalizeRotation2(m_Potentiometers[i].GetPotentiometerCurrentPosition());
+				//cannot normalize here
+				//m_current_position[i] = NormalizeRotation2(m_Potentiometers[i].GetPotentiometerCurrentPosition());
+				m_current_position[i] = m_Potentiometers[i].GetPotentiometerCurrentPosition();
 				m_CurrentVelocities.Velocity.AsArray[i + 4] = m_current_position[i];
 
 				m_Encoders[i]->SetTimeDelta(d_time_s);

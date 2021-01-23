@@ -450,6 +450,7 @@ const double PI_2 = 1.57079632679489661923;
 #define Feet2Meters(x)		((x)*0.3048)
 #define Meters2Feet(x)		((x)*3.2808399)
 #define Meters2Inches(x)	((x)*39.3700787)
+#define Pounds2Kilograms(x) ((x)*0.453592)
 #define MIN(a,b)			((a)<(b)?(a):(b))
 #define MAX(a,b)			((a)>(b)?(a):(b))
 

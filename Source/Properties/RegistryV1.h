@@ -100,6 +100,7 @@ namespace registry_v1
 	Rg_(Rotary_PID_Console_Dump) //bool
 	Rg_(Rotary_UseAggressiveStop) //bool
 	Rg_(Rotary_EncoderReversed_Wheel) //bool
+	Rg_(Rotary_AverageReadingsCount) //size_t
 
 	//Rotary_Arm_GainAssist_
 	Rg_(Rotary_Arm_GainAssist_PID_Up)  //double[3]; append _p _i _d to the name for each element

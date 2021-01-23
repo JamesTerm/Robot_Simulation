@@ -48,7 +48,7 @@ struct Rotary_Props
 	//Very similar to EncoderToRS_Ratio and is also a placeholder implemented in the robot control
 	//This too is a method provided at startup to keep numbers positive
 	bool EncoderReversed_Wheel;
-
+	size_t AverageReadingsCount; //used to average readings great for latent reads or noise, but does introduce latency
 	//Only supported in Rotary_Position_Control
 	struct Rotary_Arm_GainAssist_Props
 	{
@@ -107,6 +107,7 @@ public:
 		props.MaxLimitRange = props.MinLimitRange = 0.0;  //just zero out; these are optionally used and explicitly set when used
 		props.EncoderPulsesPerRevolution = 0.0;
 		props.EncoderReversed_Wheel = false;
+		props.AverageReadingsCount = 0;
 		Rotary_Props::Rotary_Arm_GainAssist_Props &arm = props.ArmGainAssist;
 		arm.SlowVelocity = arm.SlowVelocityVoltage = 0.0;
 		arm.GainAssistAngleScalar = 1.0;

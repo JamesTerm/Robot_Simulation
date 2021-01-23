@@ -640,7 +640,7 @@ private:
 			//PUT_NUMBER(Ship_1D_MinRange, Deg2Rad * val.min_range_deg);
 			//PUT_NUMBER(Ship_1D_MaxRange, Deg2Rad * val.max_range_deg);
 			//With latency on the reading... we need the scaler to avoid overshoot
-			PUT_NUMBER(Ship_1D_DistanceDegradeScaler,0.5);
+			//PUT_NUMBER(Ship_1D_DistanceDegradeScaler,0.50);
 			PUT_BOOL(Ship_1D_UsingRange,val.using_range) //bool
 			//Rotary--------------------------
 			PUT_NUMBER(Rotary_VoltageScaler, val.voltage_multiply);
@@ -648,7 +648,8 @@ private:
 			PUT_NUMBER(Rotary_EncoderPulsesPerRevolution, val.encoder_pulses_per_revolution);
 			PUT_BOOL(Rotary_Arm_GainAssist_UsePID_Up_Only, val.use_pid_up_only);
 			//use this if we must work with talons as the readings are delayed (pid up only, since we don't have gravity issues)
-			PUT_NUMBER(Rotary_Arm_GainAssist_VelocityPredictUp, 0.02);
+			PUT_NUMBER(Rotary_AverageReadingsCount, 2.0);
+			PUT_NUMBER(Rotary_Arm_GainAssist_VelocityPredictUp, 0.03);
 			//PUT_NUMBER(Rotary_PID)  //double[3]... append _p _i _d to the name for each element
 			PUT_NUMBER_suffix(Rotary_Arm_GainAssist_PID_Up, val._pid_swivel.p, _p);
 			PUT_NUMBER_suffix(Rotary_Arm_GainAssist_PID_Up, val._pid_swivel.i, _i);
@@ -682,8 +683,8 @@ private:
 				PUT_NUMBER(Ship_1D_MaxAccel_simulation, MaxAccel_simulation);
 			}
 			#pragma endregion
-			//PUT_NUMBER(Rotary_InverseMaxAccel, val.inv_max_accel);
-			//PUT_NUMBER(Rotary_InverseMaxDecel, 1.0/20.0);
+			//PUT_NUMBER(Rotary_InverseMaxAccel, 0.0);
+			PUT_NUMBER(Rotary_InverseMaxDecel, 1.0/600.0);
 			//PUT_NUMBER(Rotary_InverseMaxDecel, val.InverseMaxDecel);
 			//PUT_NUMBER(Rotary_Positive_DeadZone, val.Positive_DeadZone);
 			//PUT_NUMBER(Rotary_Negative_DeadZone, val.Negative_DeadZone);
