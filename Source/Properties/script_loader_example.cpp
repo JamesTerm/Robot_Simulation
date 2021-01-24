@@ -700,6 +700,7 @@ private:
 			//PUT_BOOL(Rotary_EncoderReversed_Wheel, val.encoder_reversed_wheel); //bool
 			//Rotary Pot---------------------------------------------------------------
 			//PUT_NUMBER(Rotary_Pot_offset, val.pot_offset);
+			//PUT_NUMBER(Pot4_dead_zone, 0.14);
 		}
 		#pragma endregion
 

@@ -159,6 +159,18 @@ namespace registry_v1
 	Rg_(EncoderSimulation_Free_Current_Amp)
 	//} motor;
 //};
+	//Use the CommonDrive_ prefix for SwerveEncoders_Simulator4 encoders
+	//and CommonSwivel_ prefix for Potentiometer_Tester4 to override these defaults
+	Rg_(Pot4_free_speed_rad) //radians per second of motor
+	Rg_(Pot4_stall_torque_NM) //Nm
+	Rg_(Pot4_gear_reduction)
+	Rg_(Pot4_gear_box_effeciency) //This will account for the friction
+	Rg_(Pot4_mass)
+	//Use SolidWorks and get the cube root of the volume which gives a rough diameter error on the side of larger
+	//divide the diameter for the radius
+	Rg_(Pot4_RadiusOfConcentratedMass)
+	//The dead zone defines the opposing force to be added to the mass we'll clip it down to match the velocity
+	Rg_(Pot4_dead_zone) //this is the amount of voltage to get motion can be tested
 #pragma endregion
 
 #pragma region _Controls Section_

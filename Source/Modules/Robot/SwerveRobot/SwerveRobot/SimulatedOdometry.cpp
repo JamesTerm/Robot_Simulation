@@ -1135,14 +1135,34 @@ private:
 	//Use SolidWorks and get the cube root of the volume which gives a rough diameter error on the side of larger
 	//divide the diameter for the radius
 	double m_RadiusOfConcentratedMass = Feet2Meters(4.0 * 0.5);
+	//The dead zone defines the opposing force to be added to the mass we'll clip it down to match the velocity
+	double m_dead_zone = 0.17; //this is the amount of voltage to get motion can be tested
 	double m_Time_s = 0.010;
 	double m_Heading=0.0;
 	size_t m_InstanceIndex = 0;  //for ease of debugging
 	#pragma endregion
 public:
-	virtual void Initialize(size_t index,const Framework::Base::asset_manager* props = NULL)
+	void Initialize(size_t index,const Framework::Base::asset_manager* props = NULL, 
+		const char* prefix = properties::registry_v1::csz_CommonSwivel_)
 	{
-		//TODO pull from properties, all hard coded for now
+		if (props)
+		{
+			using namespace ::properties::registry_v1;
+			std::string constructed_name;
+			#define GET_NUMBER(x,y) \
+			constructed_name = prefix, constructed_name += csz_##x; \
+			y = props->get_number(constructed_name.c_str(), y);
+			
+			GET_NUMBER(Pot4_free_speed_rad, m_free_speed_rad);
+			GET_NUMBER(Pot4_stall_torque_NM,m_stall_torque);
+			GET_NUMBER(Pot4_gear_reduction,m_gear_reduction);
+			GET_NUMBER(Pot4_gear_box_effeciency, m_gear_box_effeciency);
+			GET_NUMBER(Pot4_mass, m_mass);
+			GET_NUMBER(Pot4_RadiusOfConcentratedMass, m_RadiusOfConcentratedMass);
+			GET_NUMBER(Pot4_dead_zone, m_dead_zone);
+			//GET_NUMBER();
+			#undef GET_NUMBER
+		}
 		m_motor_wheel_model.SetMass(m_mass);
 		m_motor_wheel_model.SetAngularInertiaCoefficient(0.4);  //using a solid sphere
 		m_motor_wheel_model.SetRadiusOfConcentratedMass(m_RadiusOfConcentratedMass);
@@ -1166,8 +1186,6 @@ public:
 		//We could stop here if there was no friction and no gravity, but there is
 		//if (m_InstanceIndex == 1)
 		//	int x = 4;
-		const double dead_zone = 0.17;  //this is the amount of voltage to get motion can be tested
-		//The dead zone defines the opposing force to be added to the mass we'll clip it down to match the velocity
 		//as the equilibrium sets in to no motion
 		if (current_velocity != 0)
 		{
@@ -1183,7 +1201,7 @@ public:
 				//Now to convert into torque still in magnitude
 				const double adverse_torque_limit = m_motor_wheel_model.GetMomentofInertia() * adverse_accel_limit;
 				//clip adverse torque as-needed and restore the opposite sign (this makes it easier to add in the next step
-				adverse_torque = std::min(adverse_torque_limit, dead_zone * max_torque) * ((current_velocity > 0) ? -1.0 : 1.0);
+				adverse_torque = std::min(adverse_torque_limit, m_dead_zone * max_torque) * ((current_velocity > 0) ? -1.0 : 1.0);
 			}
 		}
 		return adverse_torque;
@@ -1303,6 +1321,23 @@ public:
 	virtual void Initialize(const Framework::Base::asset_manager* props = NULL)
 	{
 		//TODO get properties
+		Framework::Base::asset_manager DefaultMotorProps;
+		//TODO populate good default properties for drive here
+		if (props)
+		{
+			//This loads up the defaults first and then any scripted override
+			for (size_t i = 0; i < 4; i++)
+			{
+				m_Encoders[i].Initialize(i, &DefaultMotorProps, properties::registry_v1::csz_CommonDrive_);
+				m_Encoders[i].Initialize(i, props, properties::registry_v1::csz_CommonDrive_);
+			}
+		}
+		else
+		{
+			//We only have defaults
+			for (size_t i = 0; i < 4; i++)
+				m_Encoders[i].Initialize(i, &DefaultMotorProps, properties::registry_v1::csz_CommonDrive_);
+		}
 		m_Payload.SetMass(Pounds2Kilograms(148));
 	}
 	void SetVoltageCallback(std::function<SwerveVelocities()> callback)
