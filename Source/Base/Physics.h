@@ -288,16 +288,12 @@ public:
 		double VelocityDelta = AngularAcceleration * FrameDuration;
 		m_Velocity += VelocityDelta;
 	}
-	void ApplyFractionalTorque_depreciated(double torque, double FrameDuration, double RadialArmDistance = 1.0)
+	void ApplyFractionalTorque_depreciated(double torque, double FrameDuration, double Scaler = 1.0)
 	{
-		const double AngularAcceleration = (torque * RadialArmDistance / GetMomentofInertia());
+		//This is left for backward compatibility, where the scaler was mistaken for the radial arm distance
+		const double AngularAcceleration = (torque * Scaler / GetMomentofInertia());
 		double VelocityDelta = AngularAcceleration * FrameDuration;
 		m_Velocity += VelocityDelta;
-	}
-	void ApplyFractionalTorque_lever(double torque, double FrameDuration, double RadialArmDistance = 1.0)
-	{
-		//This interprets torque as being applied from lever arm, so moment of inertia doesn't apply
-		//solve for angular acceleration:  torque  = Fr TODO:  will need to work out the application use-case
 	}
 	double GetForceFromVelocity(double vDesiredVelocity,double DeltaTime_s)
 	{
@@ -390,6 +386,12 @@ public:
 		FrictionForce += GravityForce;
 		return FrictionForce;
 
+	}
+	double GetElasticCollision_FinalVelocity(double mb_velocity, double mb_mass) const
+	{
+		//This is an elastic equation that conserves momentum and kinetic energy, this will return the final velocity
+		//VAf = (Ma-Mb/Ma+Mb)VAi + (2Mb/Ma+Mb)VBi   and  VBf = (Mb-Ma/Ma+Mb)VBi + (2Mb/Ma+Mb)VAi
+		return (m_EntityMass - mb_mass / m_EntityMass + mb_mass) * m_Velocity + (2 * mb_mass / m_EntityMass + mb_mass) * mb_velocity;
 	}
 };
 #pragma endregion
@@ -692,7 +694,7 @@ public:
 	{
 		return m_AngularVelocity;
 	}
-	inline double GetAngularAccelerationDelta(double torque, double RadialArmDistance = 1.0)
+	inline double GetAngularAccelerationDelta(double torque, double Scaler = 1.0)
 	{
 		//This will give the acceleration delta given the torque which is: torque / AngularInertiaCoefficient * Mass
 
@@ -709,7 +711,7 @@ public:
 		double ret;
 		{
 			//Avoid division by zero... no radial arm distance no acceleration!
-			if (RadialArmDistance == 0)
+			if (Scaler == 0)
 			{
 				ret = 0;
 				return ret;
@@ -717,7 +719,7 @@ public:
 			//Doing it this way keeps the value of torque down to a reasonable level
 			// [Rick Notes]  What does a "Reasonable Level" mean?  Perhaps we should see the equation somewhere
 			// I forgot what the equation was and I get a bit lost.
-			double RadiusRatio(m_RadiusOfConcentratedMass*m_RadiusOfConcentratedMass / RadialArmDistance);
+			double RadiusRatio(m_RadiusOfConcentratedMass*m_RadiusOfConcentratedMass / Scaler);
 			assert(RadiusRatio != 0);  //no-one should be using a zero sized radius!
 			ret = (torque / (m_AngularInertiaCoefficient*m_EntityMass*RadiusRatio));
 		}
@@ -738,9 +740,9 @@ public:
 		//if (AccelerationDelta[1]!=0)
 		//	DebugOutput("Acc%f Vel%f\n",AccelerationDelta[1],m_LinearVelocity[1]);
 	}
-	void ApplyFractionalTorque(double torque, double FrameDuration, double RadialArmDistance = 1.0)
+	void ApplyFractionalTorque(double torque, double FrameDuration, double Scaler = 1.0)
 	{
-		double AccelerationDelta = GetAngularAccelerationDelta(torque, RadialArmDistance);
+		double AccelerationDelta = GetAngularAccelerationDelta(torque, Scaler);
 		double VelocityDelta = AccelerationDelta * FrameDuration;
 		m_AngularVelocity += VelocityDelta;
 	}
@@ -763,7 +765,7 @@ public:
 
 		double TorqueToApply;
 		Vec2D ForceToApply;
-		double RadialArmDistance;
+		double Scaler;
 
 		{
 			double A = atan2(point[1], point[0]);
@@ -772,9 +774,9 @@ public:
 			double N = L + M;
 
 			double ForceLength = sqrt((force[1] * force[1]) + (force[0] * force[0]));
-			RadialArmDistance = sqrt((point[1] * point[1]) + (point[0] * point[0]));
+			Scaler = sqrt((point[1] * point[1]) + (point[0] * point[0]));
 			//I've reserved a special case for ships which haven't specified  their radius size, in which case we simply factor out the radial arm too
-			if ((m_RadiusOfConcentratedMass == 1.0) && (RadialArmDistance > 1.0)) RadialArmDistance = 1.0;
+			if ((m_RadiusOfConcentratedMass == 1.0) && (Scaler > 1.0)) Scaler = 1.0;
 
 			//Fr = t   ... We should multiply force by the radial arm distance to get the torque
 			//but instead,  we pass it off to physics where the multiply gets applied directly against the Radius of Concentrated Mass
@@ -793,7 +795,7 @@ public:
 		ForceToApply = vecToCenter * (force * vecToCenter);
 
 		ApplyFractionalForce(ForceToApply, FrameDuration);
-		ApplyFractionalTorque(TorqueToApply, FrameDuration, RadialArmDistance);
+		ApplyFractionalTorque(TorqueToApply, FrameDuration, Scaler);
 
 	}
 	virtual Vec2D GetForceFromVelocity(	const Vec2D &vDesiredVelocity,	double DeltaTime_s	) const
