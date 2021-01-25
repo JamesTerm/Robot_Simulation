@@ -648,8 +648,8 @@ private:
 			PUT_NUMBER(Rotary_EncoderPulsesPerRevolution, val.encoder_pulses_per_revolution);
 			PUT_BOOL(Rotary_Arm_GainAssist_UsePID_Up_Only, val.use_pid_up_only);
 			//use this if we must work with talons as the readings are delayed (pid up only, since we don't have gravity issues)
-			PUT_NUMBER(Rotary_AverageReadingsCount, 2.0);
-			PUT_NUMBER(Rotary_Arm_GainAssist_VelocityPredictUp, 0.03);
+			//PUT_NUMBER(Rotary_AverageReadingsCount, 2.0);
+			//PUT_NUMBER(Rotary_Arm_GainAssist_VelocityPredictUp, 0.03);
 			//PUT_NUMBER(Rotary_PID)  //double[3]... append _p _i _d to the name for each element
 			PUT_NUMBER_suffix(Rotary_Arm_GainAssist_PID_Up, val._pid_swivel.p, _p);
 			PUT_NUMBER_suffix(Rotary_Arm_GainAssist_PID_Up, val._pid_swivel.i, _i);
@@ -684,10 +684,10 @@ private:
 			}
 			#pragma endregion
 			//PUT_NUMBER(Rotary_InverseMaxAccel, 0.0);
-			PUT_NUMBER(Rotary_InverseMaxDecel, 1.0/600.0);
+			//PUT_NUMBER(Rotary_InverseMaxDecel, 1.0/600.0);
 			//PUT_NUMBER(Rotary_InverseMaxDecel, val.InverseMaxDecel);
-			//PUT_NUMBER(Rotary_Positive_DeadZone, val.Positive_DeadZone);
-			//PUT_NUMBER(Rotary_Negative_DeadZone, val.Negative_DeadZone);
+			PUT_NUMBER(Rotary_Positive_DeadZone, 0.11);
+			PUT_NUMBER(Rotary_Negative_DeadZone, 0.11);
 			//PUT_NUMBER(Rotary_MinLimitRange, val.MinLimitRange);
 			//PUT_NUMBER(Rotary_MaxLimitRange, val.MaxLimitRange);
 			//PUT_NUMBER(Rotary_Feedback_DiplayRow, Rotary_.Feedback_DiplayRow);
@@ -700,7 +700,6 @@ private:
 			//PUT_BOOL(Rotary_EncoderReversed_Wheel, val.encoder_reversed_wheel); //bool
 			//Rotary Pot---------------------------------------------------------------
 			//PUT_NUMBER(Rotary_Pot_offset, val.pot_offset);
-			//PUT_NUMBER(Pot4_dead_zone, 0.14);
 		}
 		#pragma endregion
 

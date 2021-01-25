@@ -171,6 +171,7 @@ namespace registry_v1
 	Rg_(Pot4_RadiusOfConcentratedMass)
 	//The dead zone defines the opposing force to be added to the mass we'll clip it down to match the velocity
 	Rg_(Pot4_dead_zone) //this is the amount of voltage to get motion can be tested
+	Rg_(Pot4_anti_backlash_scaler) //Any momentum beyond the steady state will be consumed 1.0 max is full consumption
 #pragma endregion
 
 #pragma region _Controls Section_

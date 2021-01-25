@@ -1129,14 +1129,15 @@ private:
 	double m_free_speed_rad = 18730 * (1.0/60.0) * Pi2; //radians per second of motor
 	double m_stall_torque = 0.71;  //Nm
 	double m_gear_reduction = (1.0 / 81.0) * (3.0 / 7.0);
-	//This will account for the friction
+	//This will account for the friction, and the load torque lever arm
 	double m_gear_box_effeciency = 0.65;
-	double m_mass = Pounds2Kilograms(6.0);
+	double m_mass = Pounds2Kilograms(3.0);
 	//Use SolidWorks and get the cube root of the volume which gives a rough diameter error on the side of larger
 	//divide the diameter for the radius
 	double m_RadiusOfConcentratedMass = Feet2Meters(4.0 * 0.5);
 	//The dead zone defines the opposing force to be added to the mass we'll clip it down to match the velocity
-	double m_dead_zone = 0.17; //this is the amount of voltage to get motion can be tested
+	double m_dead_zone = 0.10; //this is the amount of voltage to get motion can be tested
+	double m_anti_backlash_scaler = 0.85; //Any momentum beyond the steady state will be consumed 1.0 max is full consumption
 	double m_Time_s = 0.010;
 	double m_Heading=0.0;
 	size_t m_InstanceIndex = 0;  //for ease of debugging
@@ -1160,6 +1161,7 @@ public:
 			GET_NUMBER(Pot4_mass, m_mass);
 			GET_NUMBER(Pot4_RadiusOfConcentratedMass, m_RadiusOfConcentratedMass);
 			GET_NUMBER(Pot4_dead_zone, m_dead_zone);
+			GET_NUMBER(Pot4_anti_backlash_scaler, m_anti_backlash_scaler);
 			//GET_NUMBER();
 			#undef GET_NUMBER
 		}
@@ -1177,7 +1179,7 @@ public:
 		const double torque = max_torque * speed_ratio * Voltage;
 		return torque;
 	}
-	double GetMechanicalRestaintTorque()
+	double GetMechanicalRestaintTorque(double Voltage)
 	{
 		double adverse_torque = 0.0;
 		const double max_torque = m_stall_torque * (1.0 / m_gear_reduction) * m_gear_box_effeciency;
@@ -1196,12 +1198,26 @@ public:
 			}
 			else if (m_Time_s > 0.0)  // no division by zero
 			{
+				adverse_torque = m_dead_zone * max_torque; //this is the minimum start
+
+				//Evaluate anti backlash, on deceleration the momentum of the payload that exceeds the current steady state
+				//will be consumed by the gearing, we apply a scaler to module the strength of this
+				const double steady_state_velocity = Voltage * m_free_speed_rad * m_gear_reduction; //for now not factoring in efficiency
+				//both the voltage and velocity must be in the same direction... then see if we have deceleration
+				if  ((steady_state_velocity * current_velocity > 0.0) && (fabs(current_velocity)>fabs(steady_state_velocity)))
+				{
+					//factor all in to evaluate note we restore direction at the end
+					const double anti_backlash_accel = (fabs(current_velocity) - fabs(steady_state_velocity)) / m_Time_s;
+					const double anti_backlash_torque = m_motor_wheel_model.GetMomentofInertia() * anti_backlash_accel;
+					//Backlash only kicks in when the excess momentum exceed the dead zone threshold
+					adverse_torque = std::max(anti_backlash_torque*m_anti_backlash_scaler,adverse_torque);
+				}
 				//just compute in magnitude, then restore the opposite direction of the velocity
 				const double adverse_accel_limit = fabs(current_velocity) / m_Time_s; //acceleration in radians enough to stop motion
 				//Now to convert into torque still in magnitude
 				const double adverse_torque_limit = m_motor_wheel_model.GetMomentofInertia() * adverse_accel_limit;
 				//clip adverse torque as-needed and restore the opposite sign (this makes it easier to add in the next step
-				adverse_torque = std::min(adverse_torque_limit, m_dead_zone * max_torque) * ((current_velocity > 0) ? -1.0 : 1.0);
+				adverse_torque = std::min(adverse_torque_limit, adverse_torque) * ((current_velocity > 0) ? -1.0 : 1.0);
 			}
 		}
 		return adverse_torque;
@@ -1211,7 +1227,7 @@ public:
 		//Note: these are broken up for SwerveEncoders_Simulator4 to obtain both torques before applying them
 		const double voltage_torque = GetTorqueFromVoltage(Voltage);
 		m_motor_wheel_model.ApplyFractionalTorque(voltage_torque, m_Time_s);
-		const double adverse_torque = GetMechanicalRestaintTorque();
+		const double adverse_torque = GetMechanicalRestaintTorque(Voltage);
 		m_motor_wheel_model.ApplyFractionalTorque(adverse_torque, m_Time_s);
 	}
 	double GetPotentiometerCurrentPosition() const
@@ -1382,7 +1398,7 @@ public:
 			//apply just like we do for the potentiometer 
 			m_Encoders[i].GetWheelModel_rw().ApplyFractionalTorque(Torque, dTime_s);
 			//Now that the velocity has taken effect we can add in the adverse torque
-			m_Encoders[i].GetWheelModel_rw().ApplyFractionalTorque(m_Encoders[i].GetMechanicalRestaintTorque(), dTime_s);
+			m_Encoders[i].GetWheelModel_rw().ApplyFractionalTorque(m_Encoders[i].GetMechanicalRestaintTorque(m_VoltageCallback().Velocity.AsArray[i]), dTime_s);
 			//finally update our odometry
 			m_CurrentVelocities_callback().Velocity.AsArray[i] = m_Encoders[i].GetWheelModel_rw().GetVelocity();
 		}
