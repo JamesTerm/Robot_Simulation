@@ -1240,12 +1240,12 @@ public:
 		const double torque = max_torque * speed_ratio * Voltage;
 		return torque;
 	}
-	double GetMechanicalRestaintTorque(double Voltage)
+	double GetMechanicalRestaintTorque(double Voltage, double current_velocity)
 	{
 		double adverse_torque = 0.0;
 		const double max_torque = m_stall_torque * (1.0 / m_gear_reduction) * m_gear_box_effeciency;
 		//grab the latest velocity now for what is next
-		const double current_velocity = m_motor_wheel_model.GetVelocity();
+		//const double current_velocity = m_motor_wheel_model.GetVelocity();
 		//We could stop here if there was no friction and no gravity, but there is
 		//if (m_InstanceIndex == 1)
 		//	int x = 4;
@@ -1288,7 +1288,7 @@ public:
 		//Note: these are broken up for SwerveEncoders_Simulator4 to obtain both torques before applying them
 		const double voltage_torque = GetTorqueFromVoltage(Voltage);
 		m_motor_wheel_model.ApplyFractionalTorque(voltage_torque, m_Time_s);
-		const double adverse_torque = GetMechanicalRestaintTorque(Voltage);
+		const double adverse_torque = GetMechanicalRestaintTorque(Voltage,m_motor_wheel_model.GetVelocity());
 		m_motor_wheel_model.ApplyFractionalTorque(adverse_torque, m_Time_s);
 	}
 	double GetPotentiometerCurrentPosition() const
@@ -1376,8 +1376,14 @@ public:
 		SwerveVelocities ForcesForPayload = m_CurrentVelocities_callback();
 		for (size_t i = 0; i < 4; i++)
 		{
-			const double Torque = m_Encoders[i].GetTorqueFromVoltage(m_VoltageCallback().Velocity.AsArray[i]);
-			m_Encoders[i].GetWheelModel_rw().ApplyFractionalTorque(m_Encoders[i].GetMechanicalRestaintTorque(m_VoltageCallback().Velocity.AsArray[i]), dTime_s);
+			const double Voltage = m_VoltageCallback().Velocity.AsArray[i];
+			double Torque = m_Encoders[i].GetTorqueFromVoltage(Voltage);
+			//m_Encoders[i].GetWheelModel_rw().ApplyFractionalTorque(m_Encoders[i].GetMechanicalRestaintTorque(m_VoltageCallback().Velocity.AsArray[i]), dTime_s);
+			//Work out the new velocity for this to apply correct torque
+			double predicted_veloity = m_Encoders[i].GetWheelModel_rw().GetVelocity();  //start with what we have and add in the new torque
+			double pv_AngularAcceleration = m_Encoders[i].GetWheelModel_rw().GetAngularAcceleration(Torque);
+			predicted_veloity += pv_AngularAcceleration * dTime_s;
+			Torque += m_Encoders[i].GetMechanicalRestaintTorque(Voltage,predicted_veloity);
 
 			//Since Torque = F X R we'll isolate force by dividing out the radius
 			const double Force = Torque / Inches2Meters(m_WheelDiameter_In * 0.5);
