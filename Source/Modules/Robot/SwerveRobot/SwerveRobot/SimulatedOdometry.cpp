@@ -1381,6 +1381,10 @@ public:
 
 			//Since Torque = F X R we'll isolate force by dividing out the radius
 			const double Force = Torque / Inches2Meters(m_WheelDiameter_In * 0.5);
+
+			//We'll try this another way to check since torque is also Ia if we isolate a, we can multiply by the radius for linear velocity force.
+			//const double Force  = (Torque / m_Encoders[i].GetWheelModel_rw().GetMomentofInertia()) * Inches2Meters(m_WheelDiameter_In * 0.5);
+
 			ForcesForPayload.Velocity.AsArray[i] = Force;
 			#if 0
 			m_Encoders[i].GetWheelModel_rw().ApplyFractionalTorque(Torque, dTime_s);
@@ -1398,28 +1402,41 @@ public:
 		const Vec2D last_payload_velocity = m_Payload.GetLinearVelocity();
 		const double last_payload_angular_velocity = m_Payload.GetAngularVelocity();
 		//We can now consume these forces into the payload
-		m_Payload.ApplyFractionalForce(Vec2D(m_Input.GetLocalVelocityX(), m_Input.GetLocalVelocityY()), dTime_s);
-		m_Payload.ApplyFractionalTorque(m_Input.GetAngularVelocity(), dTime_s);
+		//Note: each vector was averaged (and the multiply by 0.25 was the last operation)
+		m_Payload.ApplyFractionalForce(Vec2D(m_Input.GetLocalVelocityX()*4.0, m_Input.GetLocalVelocityY() * 4.0), dTime_s);
+		m_Payload.ApplyFractionalTorque(m_Input.GetAngularVelocity() * 4.0, dTime_s);
 		// we could m_Payload.TimeChangeUpdate() at some point
 		const Vec2D current_payload_velocity = m_Payload.GetLinearVelocity();
-		//printf("--%.2f--", current_payload_velocity.y());
+		//printf("--%.2f,", current_payload_velocity.y());
 		const double current_payload_angular_velocity = m_Payload.GetAngularVelocity();
 		//we'll want force so take acceleration from velocity deltas and multiply with the payloads mass
-		const Vec2D OutputForce(Vec2D(current_payload_velocity-last_payload_velocity)*m_Payload.GetMass());
-		const double OutputAngularForce = current_payload_angular_velocity - last_payload_angular_velocity * m_Payload.GetMass();
+		const Vec2D OutputForce(Vec2D(current_payload_velocity-last_payload_velocity)*m_Payload.GetMass()/dTime_s);
+		const double OutputAngularForce = current_payload_angular_velocity - last_payload_angular_velocity * m_Payload.GetMass()/dTime_s;
 		//divide the forces out to each swerve module, this we'll be passed back for the wheel torque
-		m_Output.UpdateVelocities(OutputForce.y(), OutputForce.x(), OutputAngularForce);
+		//m_Output.UpdateVelocities(OutputForce.y()*0.25, OutputForce.x() * 0.25, OutputAngularForce * 0.25);
+		//For now this is the most stable... whatever the payload linear velocity is, the wheels should reflect this... this works
+		//as long as we do not skid.  I may go back and work out converting it back
+		m_Output.UpdateVelocities(current_payload_velocity.y(), current_payload_velocity.x() , current_payload_angular_velocity);
 		//Now we can apply the torque to the wheel
 		for (size_t i = 0; i < 4; i++)
 		{
 			const double Force = m_Output.GetIntendedVelocitiesFromIndex(i);
 			const double Torque = Force * Inches2Meters(m_WheelDiameter_In * 0.5);
+			//if (i == 0)
+			//	printf("--%.2f--",Torque);
+			//The force is in linear velocity, change from linear to angular then multiple the moment of inertia
+			//const double LinearAccel = Force / m_Encoders[i].GetWheelModel_rw().GetMass() * dTime_s;  //divide by wheel mass
+			//const double AngularAccel = LinearAccel / Inches2Meters(m_WheelDiameter_In * 0.5);
+			//const double Torque = AngularAccel * m_Encoders[i].GetWheelModel_rw().GetMomentofInertia();
 			//apply just like we do for the potentiometer 
-			m_Encoders[i].GetWheelModel_rw().ApplyFractionalTorque(Torque, dTime_s);
+			//m_Encoders[i].GetWheelModel_rw().ApplyFractionalTorque(Torque, dTime_s);
+			m_Encoders[i].GetWheelModel_rw().SetVelocity(m_Output.GetIntendedVelocitiesFromIndex(i)/ Inches2Meters(m_WheelDiameter_In * 0.5));
 			//Now that the velocity has taken effect we can add in the adverse torque
 			const double LinearVelocity= m_Encoders[i].GetWheelModel_rw().GetVelocity() * m_Encoders[i].GetWheelModel_rw().GetRadiusOfConcentratedMass();
 			//if (i==0)
-			//	printf("--%.2f,%.2f,%.2f--",Force,Torque, Meters2Feet(LinearVelocity));
+			//	printf("--%.2f,%.2f,%.2f--",Force,Torque, LinearVelocity);
+			//if (i == 0)
+			//	printf("-%.2f--", LinearVelocity);
 			//disabled until we confirm it ready
 			#if 0
 			//finally update our odometry, note we work in linear velocity so we multiply by the wheel radius
