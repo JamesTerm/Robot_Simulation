@@ -1116,6 +1116,65 @@ public:
 	}
 };
 
+class COMMON_API Encoder_Tester
+{
+private:
+	#if 0
+	//This is still good for a lesser stress (keeping the latency disabled)
+	Encoder_Simulator m_LeftEncoder;
+	Encoder_Simulator m_RightEncoder;
+	#else
+	Encoder_Simulator2 m_LeftEncoder;
+	Encoder_Simulator2 m_RightEncoder;
+	#endif
+public:
+	Encoder_Tester() : m_LeftEncoder("LeftEncoder"), m_RightEncoder("RightEncoder")
+	{
+		m_LeftEncoder.Initialize(NULL);
+		m_RightEncoder.Initialize(NULL);
+	}
+	virtual void Initialize(const Framework::Base::asset_manager* props = NULL)
+	{
+		m_LeftEncoder.Initialize(props);
+		m_RightEncoder.Initialize(props);
+		//Cool way to add friction uneven to simulate 
+		//m_RightEncoder.SetFriction(0.8,0.12);
+	}
+	virtual void GetLeftRightVelocity(double& LeftVelocity, double& RightVelocity)
+	{
+		LeftVelocity = m_LeftEncoder.GetEncoderVelocity();
+		RightVelocity = m_RightEncoder.GetEncoderVelocity();
+	}
+	virtual void UpdateLeftRightVoltage(double LeftVoltage, double RightVoltage)
+	{
+		//LeftVoltage=GetTweakedVoltage(LeftVoltage);
+		//RightVoltage=GetTweakedVoltage(RightVoltage);
+		m_LeftEncoder.UpdateEncoderVoltage(LeftVoltage);
+		m_RightEncoder.UpdateEncoderVoltage(RightVoltage);
+	}
+	void SetTimeDelta(double dTime_s)
+	{
+		m_LeftEncoder.SetTimeDelta(dTime_s);
+		m_RightEncoder.SetTimeDelta(dTime_s);
+	}
+	void TimeChange()
+	{
+		m_LeftEncoder.TimeChange();
+		m_RightEncoder.TimeChange();
+	}
+	void SetLeftRightReverseDirectionEncoder(bool Left_reverseDirection,bool Right_reverseDirection)
+	{
+		m_LeftEncoder.SetReverseDirection(Left_reverseDirection),m_RightEncoder.SetReverseDirection(Right_reverseDirection);
+	}
+	void SetLeftRightScaler(double LeftScaler,double RightScaler)
+	{
+		m_LeftEncoder.SetEncoderScaler(LeftScaler),m_RightEncoder.SetEncoderScaler(RightScaler);
+	}
+};
+}
+#pragma endregion
+
+#pragma region _Simulation_
 class Potentiometer_Tester4
 {
 #pragma region _Description_
@@ -1258,62 +1317,6 @@ public:
 	}
 };
 
-class COMMON_API Encoder_Tester
-{
-private:
-	#if 0
-	//This is still good for a lesser stress (keeping the latency disabled)
-	Encoder_Simulator m_LeftEncoder;
-	Encoder_Simulator m_RightEncoder;
-	#else
-	Encoder_Simulator2 m_LeftEncoder;
-	Encoder_Simulator2 m_RightEncoder;
-	#endif
-public:
-	Encoder_Tester() : m_LeftEncoder("LeftEncoder"), m_RightEncoder("RightEncoder")
-	{
-		m_LeftEncoder.Initialize(NULL);
-		m_RightEncoder.Initialize(NULL);
-	}
-	virtual void Initialize(const Framework::Base::asset_manager* props = NULL)
-	{
-		m_LeftEncoder.Initialize(props);
-		m_RightEncoder.Initialize(props);
-		//Cool way to add friction uneven to simulate 
-		//m_RightEncoder.SetFriction(0.8,0.12);
-	}
-	virtual void GetLeftRightVelocity(double& LeftVelocity, double& RightVelocity)
-	{
-		LeftVelocity = m_LeftEncoder.GetEncoderVelocity();
-		RightVelocity = m_RightEncoder.GetEncoderVelocity();
-	}
-	virtual void UpdateLeftRightVoltage(double LeftVoltage, double RightVoltage)
-	{
-		//LeftVoltage=GetTweakedVoltage(LeftVoltage);
-		//RightVoltage=GetTweakedVoltage(RightVoltage);
-		m_LeftEncoder.UpdateEncoderVoltage(LeftVoltage);
-		m_RightEncoder.UpdateEncoderVoltage(RightVoltage);
-	}
-	void SetTimeDelta(double dTime_s)
-	{
-		m_LeftEncoder.SetTimeDelta(dTime_s);
-		m_RightEncoder.SetTimeDelta(dTime_s);
-	}
-	void TimeChange()
-	{
-		m_LeftEncoder.TimeChange();
-		m_RightEncoder.TimeChange();
-	}
-	void SetLeftRightReverseDirectionEncoder(bool Left_reverseDirection,bool Right_reverseDirection)
-	{
-		m_LeftEncoder.SetReverseDirection(Left_reverseDirection),m_RightEncoder.SetReverseDirection(Right_reverseDirection);
-	}
-	void SetLeftRightScaler(double LeftScaler,double RightScaler)
-	{
-		m_LeftEncoder.SetEncoderScaler(LeftScaler),m_RightEncoder.SetEncoderScaler(RightScaler);
-	}
-};
-
 class SwerveEncoders_Simulator4
 {
 #pragma region _Description_
@@ -1435,10 +1438,9 @@ public:
 		m_Payload.ResetVectors();
 	}
 };
-
-}
-#endif
+#endif  //If __UseLegacySimulation__
 #pragma endregion
+
 
 #pragma region _Simulated Odometry Internal_
 class SimulatedOdometry_Internal
@@ -1454,10 +1456,12 @@ private:
 		double swivel_max_speed[4];
 	} m_bypass_properties;
 	#ifdef __UseLegacySimulation__
-	Legacy::Potentiometer_Tester4 m_Potentiometers[4]; //simulate a real potentiometer for calibration testing
+	//Legacy::Potentiometer_Tester2 m_Potentiometers[4]; //simulate a real potentiometer for calibration testing
 	std::shared_ptr<Legacy::Encoder_Simulator2> m_Encoders[4];
 	//TODO move out of legacy and make this macro else to this, for now it is pilot pass through
-	Legacy::SwerveEncoders_Simulator4 m_EncoderSim4;
+
+	Potentiometer_Tester4 m_Potentiometers[4];
+	SwerveEncoders_Simulator4 m_EncoderSim4;
 	#endif
 	bool m_UseBypass = true;
 
