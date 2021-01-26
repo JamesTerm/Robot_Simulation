@@ -1,4 +1,6 @@
 #pragma once
+//need asset manager for properties
+#include "../../../../Base/AssetManager.h"
 
 namespace Module {
 	namespace Robot {
@@ -37,17 +39,48 @@ private:
 	double m_AngularVelocity = 0.0;
 };
 
+class Drive_Properties
+{
+private:
+	double m_TurningDiameter;  //distance from diagonal for 4WD or one set of 4 wheels for 6WD
+	double m_WheelBase;  //Length between wheels
+	double m_TrackWidth; //Width between wheels
+public:
+	void Init(const Framework::Base::asset_manager* asset_properties = nullptr);
+	//backward compatibility
+	void Init(Vec2D props)
+	{
+		m_WheelBase = props[0];
+		m_TrackWidth = props[1];
+		m_TurningDiameter = props.length();
+	}
+	double GetTurningDiameter() const
+	{
+		return m_TurningDiameter;
+	}
+	double GetWheelBase() const
+	{
+		return m_WheelBase;
+	}
+	double GetTrackWidth()
+	{
+		return m_TrackWidth;
+	}
+};
+
 class  Tank_Drive
 {
 public:
-	struct properties
+	void Init(const Framework::Base::asset_manager* asset_properties = nullptr)
 	{
-		double TurningDiameter;  //distance from diagonal for 4WD or one set of 4 wheels for 6WD
-		double WheelBase;  //Length between wheels
-		double TrackWidth; //Width between wheels
-	};
-	void SetProperties(const properties &props) { m_props = props; }
-	// Places the ship back at its initial position and resets all vectors
+		m_props.Init(asset_properties);
+	}
+	//backward compatibility
+	void Init(Vec2D props)
+	{
+		m_props.Init(props);
+	}
+		// Places the ship back at its initial position and resets all vectors
 	void ResetPos();
 	/// \param FWD forward desired velocity (negative is reverse) recommended units meters per second
 	/// \param RCW rotational velocity in radians per second (e.g. full rotation is 2 pi)
@@ -55,32 +88,42 @@ public:
 
 	double GetLeftVelocity() const { return m_LeftLinearVelocity; }
 	double GetRightVelocity() const { return m_RightLinearVelocity; }
+	const Drive_Properties& GetDriveProperties() const
+	{
+		return m_props;
+	}
 private:
 	double m_LeftLinearVelocity = 0.0, m_RightLinearVelocity = 0.0;
-	properties m_props;
+	Drive_Properties m_props;
 };
 
 class Inv_Tank_Drive
 {
 public:
-	struct properties
+	void Init(const Framework::Base::asset_manager* asset_properties = nullptr)
 	{
-		double TurningDiameter;  //distance from diagonal for 4WD or one set of 4 wheels for 6WD
-		double WheelBase;  //Length between wheels
-		double TrackWidth; //Width between wheels
-	};
-	void SetProperties(const properties &props) { m_props = props; }
+		m_props.Init(asset_properties);
+	}
+	//backward compatibility
+	void Init(Vec2D props)
+	{
+		m_props.Init(props);
+	}
 	void ResetPos();
 	//Given the current velocities from both sides interpret the linear and angular velocity
 	void InterpolateVelocities(double LeftLinearVelocity, double RightLinearVelocity);
 	double GetLocalVelocityX() const { return m_LocalVelocity_x; }
 	double GetLocalVelocityY() const { return m_LocalVelocity_y; }
 	double GetAngularVelocity() const { return m_AngularVelocity; }
+	const Drive_Properties& GetDriveProperties() const
+	{
+		return m_props;
+	}
 private:
 	double m_LocalVelocity_y=0.0;
 	double m_LocalVelocity_x=0.0;
 	double m_AngularVelocity=0.0;
-	properties m_props;
+	Drive_Properties m_props;
 };
 
 struct SwerveVelocities
@@ -110,13 +153,10 @@ struct SwerveVelocities
 class Swerve_Drive
 {
 public:
-	struct properties
+	void Init(const Framework::Base::asset_manager* asset_properties = nullptr)
 	{
-		double TurningDiameter;  //distance from diagonal for 4WD or one set of 4 wheels for 6WD
-		double WheelBase;  //Length between wheels
-		double TrackWidth; //Width between wheels
-	};
-	void SetProperties(const properties &props) { m_props = props; }
+		m_props.Init(asset_properties);
+	}
 	// Places the ship back at its initial position and resets all vectors
 	void ResetPos();
 
@@ -126,32 +166,37 @@ public:
 	void UpdateVelocities(double FWD, double STR, double RCW);
 
 	const SwerveVelocities &GetIntendedVelocities() const { return m_Velocities; }
+	const Drive_Properties& GetDriveProperties() const
+	{
+		return m_props;
+	}
 private:
 	SwerveVelocities m_Velocities;
-	properties m_props;
+	Drive_Properties m_props;
 };
 
 class Inv_Swerve_Drive
 {
 public:
-	struct properties
+	void Init(const Framework::Base::asset_manager* asset_properties = nullptr)
 	{
-		double TurningDiameter;  //distance from diagonal for 4WD or one set of 4 wheels for 6WD
-		double WheelBase;  //Length between wheels
-		double TrackWidth; //Width between wheels
-	};
-	void SetProperties(const properties &props) { m_props = props; }
+		m_props.Init(asset_properties);
+	}
 	void ResetPos();
 	//Given the current velocities from both sides interpret the linear and angular velocity
 	void InterpolateVelocities(const SwerveVelocities &Velocities);
 	double GetLocalVelocityX() const { return m_LocalVelocity_x; }
 	double GetLocalVelocityY() const { return m_LocalVelocity_y; }
 	double GetAngularVelocity() const { return m_AngularVelocity; }
+	const Drive_Properties& GetDriveProperties() const
+	{
+		return m_props;
+	}
 private:
 	double m_LocalVelocity_y = 0.0;
 	double m_LocalVelocity_x = 0.0;
 	double m_AngularVelocity = 0.0;
-	properties m_props;
+	Drive_Properties m_props;
 };
 
 #pragma region _future drives_

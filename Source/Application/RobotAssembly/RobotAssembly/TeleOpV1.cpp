@@ -136,27 +136,10 @@ public:
 		m_joystick.Init();
 
 		using namespace Module::Robot;
-		//setup some robot properties
-		using properties = Swerve_Drive::properties;
-		//We'll make a square robot for ease to interpret angles
-		Vec2D wheel_dimensions(Inches2Meters(24), Inches2Meters(24));
-		properties props =
-		{
-		wheel_dimensions.length(),	//distance from diagonal for 4WD
-		wheel_dimensions[0], //Length between wheels
-		wheel_dimensions[1] //Width between wheels
-		};
 		//Set the properties... this should be a one-time setup operation
-		m_robot.SetProperties(props);
-		//redundant but reserved to be different
-		Inv_Swerve_Drive::properties inv_props =
-		{
-		wheel_dimensions.length(),	//distance from diagonal for 4WD
-		wheel_dimensions[0], //Length between wheels
-		wheel_dimensions[1] //Width between wheels
-		};
+		m_robot.Init();
 		m_MotionControl2D.Initialize();
-		m_Entity_Input.SetProperties(inv_props);
+		m_Entity_Input.Init();
 		//Assume our robot's top speed is 12 fps
 		m_maxspeed = 12.0;
 		//I could omit, but I want to show no skid; however, we can reserve this if in practice the 2-3 degrees
@@ -165,7 +148,7 @@ public:
 		//We'll compute the max angular velocity to use in equation
 		//like with tank spinning in place needs to be half of spinning with full forward
 		//this time... no skid
-		m_max_heading_rad = (2 * Feet2Meters(m_maxspeed) / wheel_dimensions.length()) * skid;
+		m_max_heading_rad = (2 * Feet2Meters(m_maxspeed) / m_robot.GetDriveProperties().GetTurningDiameter()) * skid;
 		//Note: We'll skip properties for motion control since we have good defaults
 		#pragma region _optional linking of entity to motion control_
 		//Now to link up the callbacks for motion control:  Note we can link them up even if we are not using it

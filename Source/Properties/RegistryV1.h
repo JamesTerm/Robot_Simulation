@@ -169,6 +169,7 @@ namespace registry_v1
 	//Use SolidWorks and get the cube root of the volume which gives a rough diameter error on the side of larger
 	//divide the diameter for the radius
 	Rg_(Pot4_RadiusOfConcentratedMass)
+	Rg_(Pot4_AngularInertiaCoefficient)
 	//The dead zone defines the opposing force to be added to the mass we'll clip it down to match the velocity
 	Rg_(Pot4_dead_zone) //this is the amount of voltage to get motion can be tested
 	Rg_(Pot4_anti_backlash_scaler) //Any momentum beyond the steady state will be consumed 1.0 max is full consumption

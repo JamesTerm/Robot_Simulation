@@ -1135,6 +1135,7 @@ private:
 	//Use SolidWorks and get the cube root of the volume which gives a rough diameter error on the side of larger
 	//divide the diameter for the radius
 	double m_RadiusOfConcentratedMass = Feet2Meters(4.0 * 0.5);
+	double m_AngularInertiaCoefficient = 0.4;  //using a solid sphere (0.5 would be for disc or solid cylinder)
 	//The dead zone defines the opposing force to be added to the mass we'll clip it down to match the velocity
 	double m_dead_zone = 0.10; //this is the amount of voltage to get motion can be tested
 	double m_anti_backlash_scaler = 0.85; //Any momentum beyond the steady state will be consumed 1.0 max is full consumption
@@ -1160,13 +1161,14 @@ public:
 			GET_NUMBER(Pot4_gear_box_effeciency, m_gear_box_effeciency);
 			GET_NUMBER(Pot4_mass, m_mass);
 			GET_NUMBER(Pot4_RadiusOfConcentratedMass, m_RadiusOfConcentratedMass);
+			GET_NUMBER(Pot4_AngularInertiaCoefficient, m_AngularInertiaCoefficient);
 			GET_NUMBER(Pot4_dead_zone, m_dead_zone);
 			GET_NUMBER(Pot4_anti_backlash_scaler, m_anti_backlash_scaler);
 			//GET_NUMBER();
 			#undef GET_NUMBER
 		}
 		m_motor_wheel_model.SetMass(m_mass);
-		m_motor_wheel_model.SetAngularInertiaCoefficient(0.4);  //using a solid sphere
+		m_motor_wheel_model.SetAngularInertiaCoefficient(m_AngularInertiaCoefficient); 
 		m_motor_wheel_model.SetRadiusOfConcentratedMass(m_RadiusOfConcentratedMass);
 		m_InstanceIndex = index;
 	}
@@ -1328,7 +1330,7 @@ class SwerveEncoders_Simulator4
 private:
 	Potentiometer_Tester4 m_Encoders[4];
 	Framework::Base::PhysicsEntity_2D m_Payload;
-	std::function< SwerveVelocities()> m_CurrentVelocities_callback;
+	std::function< SwerveVelocities&()> m_CurrentVelocities_callback;
 	std::function<SwerveVelocities()> m_VoltageCallback;
 	Module::Robot::Inv_Swerve_Drive m_Input;
 	Module::Robot::Swerve_Drive m_Output;
@@ -1336,7 +1338,9 @@ private:
 public:
 	virtual void Initialize(const Framework::Base::asset_manager* props = NULL)
 	{
-		//TODO get properties
+		//TODO get properties for our local members
+		m_Input.Init(props);
+		m_Output.Init(props);
 		Framework::Base::asset_manager DefaultMotorProps;
 		//TODO populate good default properties for drive here
 		if (props)
@@ -1370,9 +1374,20 @@ public:
 		for (size_t i = 0; i < 4; i++)
 		{
 			const double Torque = m_Encoders[i].GetTorqueFromVoltage(m_VoltageCallback().Velocity.AsArray[i]);
+			m_Encoders[i].GetWheelModel_rw().ApplyFractionalTorque(m_Encoders[i].GetMechanicalRestaintTorque(m_VoltageCallback().Velocity.AsArray[i]), dTime_s);
+
 			//Since Torque = F X R we'll isolate force by dividing out the radius
 			const double Force = Torque / Inches2Meters(m_WheelDiameter_In * 0.5);
 			ForcesForPayload.Velocity.AsArray[i] = Force;
+			#if 0
+			m_Encoders[i].GetWheelModel_rw().ApplyFractionalTorque(Torque, dTime_s);
+			//Now that the velocity has taken effect we can add in the adverse torque
+			const double LinearVelocity = m_Encoders[i].GetWheelModel_rw().GetVelocity() * m_Encoders[i].GetWheelModel_rw().GetRadiusOfConcentratedMass();
+			m_CurrentVelocities_callback().Velocity.AsArray[i] = LinearVelocity;
+			//if (i==0)
+			//	printf("--%.2f--", LinearVelocity);
+			return;
+			#endif
 		}
 		//Now we can interpolate the force vectors with the same kinematics of the drive
 		m_Input.InterpolateVelocities(ForcesForPayload);
@@ -1384,6 +1399,7 @@ public:
 		m_Payload.ApplyFractionalTorque(m_Input.GetAngularVelocity(), dTime_s);
 		// we could m_Payload.TimeChangeUpdate() at some point
 		const Vec2D current_payload_velocity = m_Payload.GetLinearVelocity();
+		//printf("--%.2f--", current_payload_velocity.y());
 		const double current_payload_angular_velocity = m_Payload.GetAngularVelocity();
 		//we'll want force so take acceleration from velocity deltas and multiply with the payloads mass
 		const Vec2D OutputForce(Vec2D(current_payload_velocity-last_payload_velocity)*m_Payload.GetMass());
@@ -1398,12 +1414,17 @@ public:
 			//apply just like we do for the potentiometer 
 			m_Encoders[i].GetWheelModel_rw().ApplyFractionalTorque(Torque, dTime_s);
 			//Now that the velocity has taken effect we can add in the adverse torque
-			m_Encoders[i].GetWheelModel_rw().ApplyFractionalTorque(m_Encoders[i].GetMechanicalRestaintTorque(m_VoltageCallback().Velocity.AsArray[i]), dTime_s);
-			//finally update our odometry
-			m_CurrentVelocities_callback().Velocity.AsArray[i] = m_Encoders[i].GetWheelModel_rw().GetVelocity();
+			const double LinearVelocity= m_Encoders[i].GetWheelModel_rw().GetVelocity() * m_Encoders[i].GetWheelModel_rw().GetRadiusOfConcentratedMass();
+			//if (i==0)
+			//	printf("--%.2f,%.2f,%.2f--",Force,Torque, Meters2Feet(LinearVelocity));
+			//disabled until we confirm it ready
+			#if 0
+			//finally update our odometry, note we work in linear velocity so we multiply by the wheel radius
+			m_CurrentVelocities_callback().Velocity.AsArray[i] = LinearVelocity;
+			#endif
 		}
 	}
-	void SetCurrentVelocities_Callback(std::function<SwerveVelocities()> callback)
+	void SetCurrentVelocities_Callback(std::function<SwerveVelocities&()> callback)
 	{
 		m_CurrentVelocities_callback=callback;
 	}
@@ -1435,6 +1456,8 @@ private:
 	#ifdef __UseLegacySimulation__
 	Legacy::Potentiometer_Tester4 m_Potentiometers[4]; //simulate a real potentiometer for calibration testing
 	std::shared_ptr<Legacy::Encoder_Simulator2> m_Encoders[4];
+	//TODO move out of legacy and make this macro else to this, for now it is pilot pass through
+	Legacy::SwerveEncoders_Simulator4 m_EncoderSim4;
 	#endif
 	bool m_UseBypass = true;
 
@@ -1448,7 +1471,20 @@ private:
 			Rotation += Pi2;
 		return Rotation;
 	}
-
+	void SetHooks(bool enabled)
+	{
+		if (enabled)
+		{
+			m_EncoderSim4.SetCurrentVelocities_Callback(
+				[&]() -> SwerveVelocities &
+			{
+				return m_CurrentVelocities;
+			}
+			);
+		}
+		else
+			m_EncoderSim4.SetCurrentVelocities_Callback(nullptr);
+	}
 public:
 	void Init(const Framework::Base::asset_manager *props)
 	{
@@ -1498,6 +1534,7 @@ public:
 			m_Encoders[i]->Initialize(props);
 			m_Potentiometers[i].Initialize(i,props);
 		}
+		m_EncoderSim4.Initialize(props);
 		#endif
 		ResetPos();
 	}
@@ -1521,7 +1558,11 @@ public:
 	}
 	void ShutDown()
 	{
-		//reserved
+		SetHooks(false);
+	}
+	SimulatedOdometry_Internal()
+	{
+		SetHooks(true);
 	}
 	~SimulatedOdometry_Internal()
 	{
@@ -1531,6 +1572,7 @@ public:
 	{
 		//Input get it from client
 		m_VoltageCallback = callback;
+		m_EncoderSim4.SetVoltageCallback(callback);
 	}
 	//Run the simulation time-slice
 	void TimeSlice(double d_time_s)
@@ -1577,6 +1619,9 @@ public:
 				m_Encoders[i]->TimeChange();
 				m_CurrentVelocities.Velocity.AsArray[i] = m_Encoders[i]->GetEncoderVelocity();
 			}
+
+			//Ensure potentiometers are updated before calling sim4
+			m_EncoderSim4.TimeChange(d_time_s);
 			#else
 			//TODO reserved
 			//m_CurrentVelocities = m_VoltageCallback();

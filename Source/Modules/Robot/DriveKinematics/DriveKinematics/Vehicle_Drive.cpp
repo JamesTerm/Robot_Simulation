@@ -4,10 +4,36 @@
 //#include "../../../../Base/Vec2d.h"
 #include "../../../../Base/Misc.h"
 #include "Vehicle_Drive.h"
+#include "../../../../Properties/RegistryV1.h"
 
 
 using namespace Module::Robot;
-
+#pragma region _Drive Properties_
+void Drive_Properties::Init(const Framework::Base::asset_manager* asset_properties)
+{
+	Vec2D wheel_dimensions(Inches2Meters(24), Inches2Meters(24));
+	//defaults
+	m_WheelBase = wheel_dimensions[0];
+	m_TrackWidth = wheel_dimensions[1];
+	if (asset_properties)
+	{
+		using namespace ::properties::registry_v1;
+		using namespace Framework::Base;
+		std::string constructed_name;
+		//Default param in inches, then result is in meters	
+		#define GET_NUMBER_In2Meter(x,y) \
+				constructed_name = csz_##x; \
+				y = Inches2Meters(asset_properties->get_number(constructed_name.c_str(), Meters2Inches(y)));
+		GET_NUMBER_In2Meter(Drive_WheelBase_in, m_WheelBase);
+		GET_NUMBER_In2Meter(Drive_TrackWidth_in, m_TrackWidth);
+		wheel_dimensions[0] = m_WheelBase;
+		wheel_dimensions[1] = m_TrackWidth;
+	}
+	//finished with the macro
+	#undef GET_NUMBER_In2Meter
+	m_TurningDiameter = wheel_dimensions.length();
+}
+#pragma endregion
 #pragma region _Tank Drive_
   /***********************************************************************************************************************************/
  /*															Tank_Drive																*/
@@ -20,11 +46,11 @@ void Tank_Drive::ResetPos()
 
 void Tank_Drive::UpdateVelocities(double FWD, double RCW)
 {
-	const double D= m_props.TurningDiameter;
+	const double D= m_props.GetTurningDiameter();
 	//L is the vehicle’s wheelbase
-	const double L= m_props.WheelBase;
+	const double L= m_props.GetWheelBase();
 	//W is the vehicle’s track width
-	const double W= m_props.TrackWidth;
+	const double W= m_props.GetTrackWidth();
 	//For skid steering we need more speed to compensate
 	const double inv_skid=1.0/cos(atan2(L,W));
 	//Convert radians into revolutions per second
@@ -48,7 +74,7 @@ void Inv_Tank_Drive::ResetPos()
 
 void Inv_Tank_Drive::InterpolateVelocities(double LeftLinearVelocity, double RightLinearVelocity)
 {
-	const double D = m_props.TurningDiameter;
+	const double D = m_props.GetTurningDiameter();
 
 	//const double FWD = (LeftLinearVelocity*cos(1.0)+RightLinearVelocity*cos(1.0))/2.0;
 	const double FWD = (LeftLinearVelocity + RightLinearVelocity) * 0.5;
@@ -59,9 +85,9 @@ void Inv_Tank_Drive::InterpolateVelocities(double LeftLinearVelocity, double Rig
 	//const double HalfDimLength=GetWheelDimensions().length()/2;
 
 	//L is the vehicle’s wheelbase
-	const double L = m_props.WheelBase;
+	const double L = m_props.GetWheelBase();
 	//W is the vehicle’s track width
-	const double W = m_props.TrackWidth;
+	const double W = m_props.GetTrackWidth();
 
 	const double skid = cos(atan2(L, W));
 	const double omega = ((LeftLinearVelocity*skid) + (RightLinearVelocity*-skid)) * 0.5;
@@ -89,12 +115,12 @@ void Swerve_Drive::ResetPos()
 void Swerve_Drive::UpdateVelocities(double FWD, double STR, double RCW)
 {
 	//L is the vehicle’s wheelbase
-	const double L = m_props.WheelBase;
+	const double L = m_props.GetWheelBase();
 	//W is the vehicle’s track width
-	const double W = m_props.TrackWidth;
+	const double W = m_props.GetTrackWidth();
 
 	//const double R = sqrt((L*L)+(W*W));
-	const double R = m_props.TurningDiameter;
+	const double R = m_props.GetTurningDiameter();
 
 	//Allow around 2-3 degrees of freedom for rotation.  While manual control worked fine without it, it is needed for
 	//targeting goals (e.g. follow ship)
@@ -152,11 +178,11 @@ void Inv_Swerve_Drive::InterpolateVelocities(const SwerveVelocities &Velocities)
 {
 	const SwerveVelocities::uVelocity::Explicit &_ = Velocities.Velocity.Named;
 	//L is the vehicle’s wheelbase
-	const double L = m_props.WheelBase;
+	const double L = m_props.GetWheelBase();
 	//W is the vehicle’s track width
-	const double W = m_props.TrackWidth;
+	const double W = m_props.GetTrackWidth();
 
-	const double D = m_props.TurningDiameter;
+	const double D = m_props.GetTurningDiameter();
 
 	const double FWD = (_.sFR*cos(_.aFR) + _.sFL*cos(_.aFL) + _.sRL*cos(_.aRL) + _.sRR*cos(_.aRR))*0.25;
 

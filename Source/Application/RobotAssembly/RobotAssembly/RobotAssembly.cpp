@@ -52,20 +52,13 @@ public:
 
 		using namespace Module::Robot;
 		//setup some robot properties
-		using properties = Tank_Drive::properties;
 		//For 6WD the length is distance between the center wheels to one set of the outer wheels, this is because
 		//with the drop center only 4 wheels are touching at any given time (most of the time)
 		Vec2D wheel_dimensions(Inches2Meters(12), Inches2Meters(24));
 		//Note: In inch units the length of 12 and 24 is roughly 26.83 where it's the
 		//hypotenuse of a 12 24 triangle
-		properties props =
-		{
-		wheel_dimensions.length(),	//distance from diagonal for 4WD or one set of 4 wheels for 6WD
-		wheel_dimensions[0], //Length between wheels
-		wheel_dimensions[1] //Width between wheels
-		};
 		//Set the properties... this should be a one-time setup operation
-		m_robot.SetProperties(props);
+		m_robot.Init(wheel_dimensions);
 
 		//Assume our robot's top speed is 12 fps
 		m_maxspeed = 12.0;
@@ -167,21 +160,11 @@ public:
 
 		using namespace Module::Robot;
 		//setup some robot properties
-		using properties = Tank_Drive::properties;
 		//For 6WD see test 1 for more information
 		Vec2D wheel_dimensions(Inches2Meters(12), Inches2Meters(24));
-		properties props =
-		{
-		wheel_dimensions.length(),	//distance from diagonal for 4WD or one set of 4 wheels for 6WD
-		wheel_dimensions[0], //Length between wheels
-		wheel_dimensions[1] //Width between wheels
-		};
 		//Set the properties... this should be a one-time setup operation
-		m_robot.SetProperties(props);
-		Inv_Tank_Drive::properties *props2;
-		//This works, for test code but not recommended for actual code
-		props2 = (Inv_Tank_Drive::properties *)&props;
-		m_tank_steering.SetProperties(*props2);
+		m_robot.Init(wheel_dimensions);
+		m_tank_steering.Init(wheel_dimensions);
 
 		//Assume our robot's top speed is 12 fps
 		m_maxspeed = 12.0;
@@ -253,17 +236,8 @@ public:
 
 		using namespace Module::Robot;
 		//setup some robot properties
-		using properties = Swerve_Drive::properties;
-		//We'll make a square robot for ease to interpret angles
-		Vec2D wheel_dimensions(Inches2Meters(24), Inches2Meters(24));
-		properties props =
-		{
-		wheel_dimensions.length(),	//distance from diagonal for 4WD
-		wheel_dimensions[0], //Length between wheels
-		wheel_dimensions[1] //Width between wheels
-		};
 		//Set the properties... this should be a one-time setup operation
-		m_robot.SetProperties(props);
+		m_robot.Init();
 
 		//Assume our robot's top speed is 12 fps
 		m_maxspeed = 12.0;
@@ -273,7 +247,7 @@ public:
 		//We'll compute the max angular velocity to use in equation
 		//like with tank spinning in place needs to be half of spinning with full forward
 		//this time... no skid
-		m_max_heading_rad = (2 * Feet2Meters(m_maxspeed) / wheel_dimensions.length()) * skid;
+		m_max_heading_rad = (2 * Feet2Meters(m_maxspeed) / m_robot.GetDriveProperties().GetTurningDiameter()) * skid;
 	}
 	void operator()()
 	{
@@ -342,28 +316,16 @@ public:
 
 		using namespace Module::Robot;
 		//setup some robot properties
-		using properties = Swerve_Drive::properties;
-		//For test 3 for more information
-		Vec2D wheel_dimensions(Inches2Meters(24), Inches2Meters(24));
-		properties props =
-		{
-		wheel_dimensions.length(),	//distance from diagonal for 4WD
-		wheel_dimensions[0], //Length between wheels
-		wheel_dimensions[1] //Width between wheels
-		};
 		//Set the properties... this should be a one-time setup operation
-		m_robot.SetProperties(props);
-		Inv_Tank_Drive::properties *props2;
-		//This works, for test code but not recommended for actual code
-		props2 = (Inv_Tank_Drive::properties *)&props;
-		m_tank_steering.SetProperties(*props2);
+		m_robot.Init();
+		m_tank_steering.Init();
 
 		//Assume our robot's top speed is 12 fps
 		m_maxspeed = 12.0;
 		//see test 3 for more info on skid
 		const double skid = 1.0;
 		//See test 3 for more information
-		m_max_heading_rad = (2 * Feet2Meters(m_maxspeed) / wheel_dimensions.length()) * skid;
+		m_max_heading_rad = (2 * Feet2Meters(m_maxspeed) / m_robot.GetDriveProperties().GetTurningDiameter()) * skid;
 	}
 	void operator()()
 	{
@@ -574,7 +536,6 @@ public:
 			};
 		using namespace Module::Robot;
 		//setup some robot properties
-		using properties = Swerve_Drive::properties;
 		//We'll make a square robot for ease to interpret angles
 		Vec2D wheel_dimensions(Inches2Meters(24), Inches2Meters(24));
 		//Assume our robot's top speed is 12 fps
