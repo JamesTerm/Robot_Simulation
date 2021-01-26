@@ -1236,7 +1236,8 @@ public:
 		//All we do here is compute the torque to apply from the voltage
 		const double max_torque = m_stall_torque * (1.0 / m_gear_reduction) * m_gear_box_effeciency;
 		//The max torque is scaled from both the ratio of speed to max speed and the ratio of voltage itself
-		const double speed_ratio = 1.0 - (fabs(m_motor_wheel_model.GetVelocity()) / (m_free_speed_rad * m_gear_reduction));
+		const double speed_ratio = std::max(1.0 - 
+			(fabs(m_motor_wheel_model.GetVelocity()) / (m_free_speed_rad * m_gear_reduction * m_gear_box_effeciency)),0.0);
 		const double torque = max_torque * speed_ratio * Voltage;
 		return torque;
 	}
@@ -1259,7 +1260,7 @@ public:
 			}
 			else if (m_Time_s > 0.0)  // no division by zero
 			{
-				adverse_torque = m_dead_zone * max_torque; //this is the minimum start
+				adverse_torque = (1.0 - fabs(Voltage)) * (m_dead_zone * max_torque) ; //this is the minimum start
 
 				//Evaluate anti backlash, on deceleration the momentum of the payload that exceeds the current steady state
 				//will be consumed by the gearing, we apply a scaler to module the strength of this
@@ -1271,7 +1272,7 @@ public:
 					const double anti_backlash_accel = (fabs(current_velocity) - fabs(steady_state_velocity)) / m_Time_s;
 					const double anti_backlash_torque = m_motor_wheel_model.GetMomentofInertia() * anti_backlash_accel;
 					//Backlash only kicks in when the excess momentum exceed the dead zone threshold
-					adverse_torque = std::max(anti_backlash_torque*m_anti_backlash_scaler,adverse_torque);
+					adverse_torque += anti_backlash_torque*m_anti_backlash_scaler;
 				}
 				//just compute in magnitude, then restore the opposite direction of the velocity
 				const double adverse_accel_limit = fabs(current_velocity) / m_Time_s; //acceleration in radians enough to stop motion
@@ -1314,6 +1315,10 @@ public:
 	Framework::Base::PhysicsEntity_1D& GetWheelModel_rw() 
 	{
 		return m_motor_wheel_model;
+	}
+	double GetMaxSpeed() const
+	{
+		return m_free_speed_rad * m_gear_reduction;
 	}
 };
 
@@ -1380,10 +1385,12 @@ public:
 			double Torque = m_Encoders[i].GetTorqueFromVoltage(Voltage);
 			//m_Encoders[i].GetWheelModel_rw().ApplyFractionalTorque(m_Encoders[i].GetMechanicalRestaintTorque(m_VoltageCallback().Velocity.AsArray[i]), dTime_s);
 			//Work out the new velocity for this to apply correct torque
-			double predicted_veloity = m_Encoders[i].GetWheelModel_rw().GetVelocity();  //start with what we have and add in the new torque
+			double predicted_velocity = m_Encoders[i].GetWheelModel_rw().GetVelocity();  //start with what we have and add in the new torque
 			double pv_AngularAcceleration = m_Encoders[i].GetWheelModel_rw().GetAngularAcceleration(Torque);
-			predicted_veloity += pv_AngularAcceleration * dTime_s;
-			Torque += m_Encoders[i].GetMechanicalRestaintTorque(Voltage,predicted_veloity);
+			predicted_velocity += pv_AngularAcceleration * dTime_s;
+			//The predicted velocity cannot be greater than the max velocity
+			predicted_velocity = std::min(predicted_velocity , m_Encoders[i].GetMaxSpeed());
+			Torque += m_Encoders[i].GetMechanicalRestaintTorque(Voltage,predicted_velocity);
 
 			//Since Torque = F X R we'll isolate force by dividing out the radius
 			const double Force = Torque / Inches2Meters(m_WheelDiameter_In * 0.5);
@@ -1394,7 +1401,6 @@ public:
 			ForcesForPayload.Velocity.AsArray[i] = Force;
 			#if 0
 			m_Encoders[i].GetWheelModel_rw().ApplyFractionalTorque(Torque, dTime_s);
-			//Now that the velocity has taken effect we can add in the adverse torque
 			const double LinearVelocity = m_Encoders[i].GetWheelModel_rw().GetVelocity() * m_Encoders[i].GetWheelModel_rw().GetRadiusOfConcentratedMass();
 			m_CurrentVelocities_callback().Velocity.AsArray[i] = LinearVelocity;
 			//if (i==0)
