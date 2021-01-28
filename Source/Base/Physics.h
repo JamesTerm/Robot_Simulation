@@ -365,6 +365,15 @@ public:
 		double fc = IsZero(m_Velocity) ? m_StaticFriction : m_KineticFriction;
 		return (fc * m_EntityMass * gravity);
 	}
+	void SetStaticFriction(double coefficient)
+	{
+		m_StaticFriction = coefficient;
+	}
+	void SetKineticFriction(double coefficient)
+	{
+		m_KineticFriction = coefficient;
+	}
+
 	double GetFrictionalForce(double DeltaTime_s, double Ground = 0.0, double gravity = 9.80665, double BrakeResistence = 0.0) const
 	{
 		/// \param Brake is a brake coast parameter where if gravity pulls it down it can apply a scaler to slow down the reversed rate

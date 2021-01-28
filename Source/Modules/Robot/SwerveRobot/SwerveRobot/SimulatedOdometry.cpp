@@ -1347,6 +1347,7 @@ private:
 	#pragma region _member variables_
 	Potentiometer_Tester4 m_Encoders[4];
 	Framework::Base::PhysicsEntity_2D m_Payload;
+	Framework::Base::PhysicsEntity_1D m_Friction;  //apply friction to skid
 	std::function< SwerveVelocities&()> m_CurrentVelocities_callback;
 	std::function<SwerveVelocities()> m_VoltageCallback;
 	Module::Robot::Inv_Swerve_Drive m_Input;
@@ -1380,6 +1381,10 @@ public:
 		}
 		//TODO: We may want to add property to the mass
 		m_Payload.SetMass(Pounds2Kilograms(148));
+		m_Friction.SetMass(Pounds2Kilograms(148));
+		//May want friction coefficients as well
+		m_Friction.SetStaticFriction(1.0);  //rated from wheels
+		m_Friction.SetKineticFriction(0.5);  //not so easy to measure
 	}
 	void SetVoltageCallback(std::function<SwerveVelocities()> callback)
 	{
@@ -1387,6 +1392,7 @@ public:
 	}
 	void TimeChange(double dTime_s)
 	{
+		using namespace Framework::Base;
 		//Make sure the potentiometer angles are set in current velocities before calling in here
 		//TODO in this first iteration all forces are transferred in a non-skid state, but afterwards
 		//we should look into how to handle skid states
@@ -1415,8 +1421,8 @@ public:
 			//const double Force  = (Torque / encoder.GetWheelModel_rw().GetMomentofInertia()) * Inches2Meters(m_WheelDiameter_In * 0.5);
 
 			ForcesForPayload.Velocity.AsArray[i] = Force;
-			if (Voltage > 0.99)
-				int x = 4;
+			//if (Voltage > 0.99)
+			//	int x = 4;
 			#if 0
 			encoder.GetWheelModel_rw().ApplyFractionalTorque(Torque, dTime_s);
 			const double LinearVelocity = encoder.GetWheelModel_rw().GetVelocity() * encoder.GetGearReduction() *
@@ -1430,6 +1436,25 @@ public:
 		//Before we apply the forces grab the current velocities to compute the new forces
 		const Vec2D last_payload_velocity = m_Payload.GetLinearVelocity();
 		const double last_payload_angular_velocity = m_Payload.GetAngularVelocity();
+		//Check direction, while the controls may not take centripetal forces into consideration, or if in open loop and no feedback
+		//It is possible to skid, where the intended direction of travel doesn't match the existing, to simulate, we localize the
+		//the existing velocity to the new intended direction of travel, and then apply friction force to the x component which is force normal
+		//by the kinetic friction coefficient.  This has to clip as the x components velocity reaches zero
+		{
+			const Vec2D IntendedForces = Vec2D(m_Input.GetLocalVelocityX(),m_Input.GetLocalVelocityY());
+			Vec2D IntendedForces_normalized(m_Input.GetLocalVelocityX(), m_Input.GetLocalVelocityY());
+			double magnitude = IntendedForces_normalized.normalize();
+			//Use this heading to rotate our velocity to global
+			const double IntendedDirection=atan2(IntendedForces_normalized[0], IntendedForces_normalized[1]);
+			const Vec2D local_payload_velocity = m_Payload.GetLinearVelocity();
+			const Vec2D global_payload_velocity = LocalToGlobal(IntendedDirection, local_payload_velocity);
+			const double Skid_Velocity = global_payload_velocity.x();  //velocity to apply friction force to can be in either direction
+			m_Friction.SetVelocity(Skid_Velocity);
+			//now to get friction force to be applied to x component
+			const Vec2D global_friction_force(m_Friction.GetFrictionalForce(dTime_s), 0.0);
+			const Vec2D local_friction_force = GlobalToLocal(IntendedDirection, global_friction_force);
+			m_Payload.ApplyFractionalForce(local_friction_force, dTime_s);
+		}
 		//We can now consume these forces into the payload
 		//Note: each vector was averaged (and the multiply by 0.25 was the last operation)
 		m_Payload.ApplyFractionalForce(Vec2D(m_Input.GetLocalVelocityX(), m_Input.GetLocalVelocityY()), dTime_s);
@@ -1438,13 +1463,6 @@ public:
 		const Vec2D current_payload_velocity = m_Payload.GetLinearVelocity();
 		//printf("--%.2f,", current_payload_velocity.y());
 		const double current_payload_angular_velocity = m_Payload.GetAngularVelocity();
-		//we'll want force so take acceleration from velocity deltas and multiply with the payloads mass
-		const Vec2D OutputForce(Vec2D(current_payload_velocity-last_payload_velocity)*m_Payload.GetMass()/dTime_s);
-		const double OutputAngularForce = current_payload_angular_velocity - last_payload_angular_velocity * m_Payload.GetMass()/dTime_s;
-		//divide the forces out to each swerve module, this we'll be passed back for the wheel torque
-		//m_Output.UpdateVelocities(OutputForce.y()*0.25, OutputForce.x() * 0.25, OutputAngularForce * 0.25);
-		//For now this is the most stable... whatever the payload linear velocity is, the wheels should reflect this... this works
-		//as long as we do not skid.  I may go back and work out converting it back
 		m_Output.UpdateVelocities(current_payload_velocity.y(), current_payload_velocity.x() , current_payload_angular_velocity);
 		//Now we can apply the torque to the wheel
 		for (size_t i = 0; i < 4; i++)
@@ -1452,24 +1470,12 @@ public:
 			const double Force = m_Output.GetIntendedVelocitiesFromIndex(i);
 			const double Torque = Force * Inches2Meters(m_WheelDiameter_In * 0.5);
 			Potentiometer_Tester4& encoder = m_Encoders[i];
-			//if (i == 0)
-			//	printf("--%.2f--",Torque);
-			//The force is in linear velocity, change from linear to angular then multiple the moment of inertia
-			//const double LinearAccel = Force / m_Encoders[i].GetWheelModel_rw().GetMass() * dTime_s;  //divide by wheel mass
-			//const double AngularAccel = LinearAccel / Inches2Meters(m_WheelDiameter_In * 0.5);
-			//const double Torque = AngularAccel * m_Encoders[i].GetWheelModel_rw().GetMomentofInertia();
-			//apply just like we do for the potentiometer 
-			//m_Encoders[i].GetWheelModel_rw().ApplyFractionalTorque(Torque, dTime_s);
 			const double WheelVelocity_fromPayload = m_Output.GetIntendedVelocitiesFromIndex(i) / Inches2Meters(m_WheelDiameter_In * 0.5);
 			//To set the velocity directly it works with motor velocity so we'll need to apply the inverse gear ratio
 			m_Encoders[i].GetWheelModel_rw().SetVelocity(WheelVelocity_fromPayload * (1.0/encoder.GetGearReduction()));
 			//Now that the velocity has taken effect we can add in the adverse torque
 			const double WheelVelocity= encoder.GetWheelModel_rw().GetVelocity() * encoder.GetGearReduction();
 			const double LinearVelocity = WheelVelocity * Inches2Meters(m_WheelDiameter_In * 0.5);
-			//if (i==0)
-			//	printf("--%.2f,%.2f,%.2f--",Force,Torque, LinearVelocity);
-			//if (i == 0)
-			//	printf("-%.2f--", LinearVelocity);
 			//disabled until we confirm it ready
 			#if 0
 			//finally update our odometry, note we work in linear velocity so we multiply by the wheel radius
