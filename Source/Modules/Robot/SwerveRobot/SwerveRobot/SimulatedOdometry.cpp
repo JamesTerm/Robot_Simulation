@@ -1241,46 +1241,49 @@ public:
 		const double torque = max_torque * speed_ratio;
 		return torque;
 	}
-	double GetMechanicalRestaintTorque(double Voltage, double current_velocity)
+	double GetMechanicalRestaintTorque(double Voltage, double next_current_velocity)
 	{
 		double adverse_torque = 0.0;
 		const double max_torque = m_stall_torque;
 		//Compute adverse torque as the equilibrium sets in to no motion, note the current velocity is motor velocity (no reduction)
 		//as this will be easier to read
-		if (current_velocity != 0)
+		if (next_current_velocity != 0)
 		{
 			//Don't have this mess with small increments, friction will take the final bite here
-			if (fabs(current_velocity) < 0.01)
+			if (fabs(next_current_velocity) < 0.01)
 			{
 				m_motor_wheel_model.ResetVectors();
 			}
 			else if (m_Time_s > 0.0)  // no division by zero
 			{
+				//May want to provide properties to control how much dead-zone torque to blend
+				//Found a straight constant gives correct result, but have to adjust mass to get correct latency
 				#if 0
-				adverse_torque = (1.0 - fabs(Voltage)) * (m_dead_zone * max_torque) ; //this is the minimum start
+				const double dead_zone_torque = m_dead_zone * max_torque;
+				adverse_torque = (1.0 - fabs(0.6*Voltage)) * dead_zone_torque + (0.4*Voltage)* dead_zone_torque; //this is the minimum start
 				#else
 				adverse_torque = (m_dead_zone * max_torque); //this is the minimum start
 				#endif
 
 				//Evaluate anti backlash, on deceleration the momentum of the payload that exceeds the current steady state
 				//will be consumed by the gearing, we apply a scaler to module the strength of this
-				//Note: this could work without reduction if current_velocity didn't have it as well, but it is easier to read with it in
+				//Note: this could work without reduction if next_current_velocity didn't have it as well, but it is easier to read with it in
 				const double steady_state_velocity = Voltage * m_free_speed_rad; //for now not factoring in efficiency
 				//both the voltage and velocity must be in the same direction... then see if we have deceleration
-				if  ((steady_state_velocity * current_velocity > 0.0) && (fabs(current_velocity)>fabs(steady_state_velocity)))
+				if  ((steady_state_velocity * next_current_velocity > 0.0) && (fabs(next_current_velocity)>fabs(steady_state_velocity)))
 				{
 					//factor all in to evaluate note we restore direction at the end
-					const double anti_backlash_accel = (fabs(current_velocity) - fabs(steady_state_velocity)) / m_Time_s;
+					const double anti_backlash_accel = (fabs(next_current_velocity) - fabs(steady_state_velocity)) / m_Time_s;
 					const double anti_backlash_torque = m_motor_wheel_model.GetMomentofInertia() * anti_backlash_accel;
 					//Backlash only kicks in when the excess momentum exceed the dead zone threshold
 					adverse_torque += anti_backlash_torque*m_anti_backlash_scaler;
 				}
 				//just compute in magnitude, then restore the opposite direction of the velocity
-				const double adverse_accel_limit = fabs(current_velocity) / m_Time_s; //acceleration in radians enough to stop motion
+				const double adverse_accel_limit = fabs(next_current_velocity) / m_Time_s; //acceleration in radians enough to stop motion
 				//Now to convert into torque still in magnitude
 				const double adverse_torque_limit = m_motor_wheel_model.GetMomentofInertia() * adverse_accel_limit;
 				//clip adverse torque as-needed and restore the opposite sign (this makes it easier to add in the next step
-				adverse_torque = std::min(adverse_torque_limit, adverse_torque) * ((current_velocity > 0) ? -1.0 : 1.0);
+				adverse_torque = std::min(adverse_torque_limit, adverse_torque) * ((next_current_velocity > 0) ? -1.0 : 1.0);
 			}
 		}
 		return adverse_torque;
