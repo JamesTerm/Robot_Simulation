@@ -235,7 +235,7 @@ public:
 			m_PotentiometerProps = *props;
 		Ship_1D::Initialize(&m_PotentiometerProps);
 	}
-	virtual void Initialize(const Framework::Base::asset_manager* props = NULL)
+	virtual void Initialize(size_t index, const Framework::Base::asset_manager* props = NULL)
 	{
 		#pragma region _setup get vars_
 		double ftest = 0.0;  //use to test if an asset exists
@@ -1190,11 +1190,9 @@ private:
 	double m_gear_reduction = (1.0 / 81.0) * (3.0 / 7.0);
 	//This will account for the friction, and the load torque lever arm
 	double m_gear_box_effeciency = 0.65;
-	double m_mass = Pounds2Kilograms(3.0);
-	//Use SolidWorks and get the cube root of the volume which gives a rough diameter error on the side of larger
-	//divide the diameter for the radius
-	double m_RadiusOfConcentratedMass = Feet2Meters(4.0 * 0.5);
-	double m_AngularInertiaCoefficient = 0.4;  //using a solid sphere (0.5 would be for disc or solid cylinder)
+	double m_mass = Pounds2Kilograms(1.0);  //just motor
+	double m_RadiusOfConcentratedMass = Inches2Meters(1.12);  //just the motor's diameter
+	double m_AngularInertiaCoefficient = 0.5;  //solid cylinder
 	//The dead zone defines the opposing force to be added to the mass we'll clip it down to match the velocity
 	double m_dead_zone = 0.10; //this is the amount of voltage to get motion can be tested
 	double m_anti_backlash_scaler = 0.85; //Any momentum beyond the steady state will be consumed 1.0 max is full consumption
@@ -1233,24 +1231,22 @@ public:
 	}
 	double GetTorqueFromVoltage(double Voltage)
 	{
-		//All we do here is compute the torque to apply from the voltage
-		const double max_torque = m_stall_torque * (1.0 / m_gear_reduction) * m_gear_box_effeciency;
-		//The max torque is scaled from both the ratio of speed to max speed and the ratio of voltage itself
-		const double speed_ratio = std::max(1.0 - 
-			(fabs(m_motor_wheel_model.GetVelocity()) / (m_free_speed_rad * m_gear_reduction * m_gear_box_effeciency)),0.0);
-		const double torque = max_torque * speed_ratio * Voltage;
+		//Compute the torque to apply from the speed of a scaled voltage curve of a scaled max torque; 
+		//Note: the motor curve max torque is scaled
+		//Important: The only one voltage factor here will establish the direction of torque
+		const double max_torque = m_stall_torque * Voltage;
+		//The speed ratio is a ratio of speed to "max speed" of a voltage scaled motor curve and must only be magnitude
+		const double speed_ratio = fabs(Voltage)>0.0 ? 
+			std::max(1.0-(fabs(m_motor_wheel_model.GetVelocity()) / (m_free_speed_rad * fabs(Voltage))),0.0) : 0.0;
+		const double torque = max_torque * speed_ratio;
 		return torque;
 	}
 	double GetMechanicalRestaintTorque(double Voltage, double current_velocity)
 	{
 		double adverse_torque = 0.0;
-		const double max_torque = m_stall_torque * (1.0 / m_gear_reduction) * m_gear_box_effeciency;
-		//grab the latest velocity now for what is next
-		//const double current_velocity = m_motor_wheel_model.GetVelocity();
-		//We could stop here if there was no friction and no gravity, but there is
-		//if (m_InstanceIndex == 1)
-		//	int x = 4;
-		//as the equilibrium sets in to no motion
+		const double max_torque = m_stall_torque;
+		//Compute adverse torque as the equilibrium sets in to no motion, note the current velocity is motor velocity (no reduction)
+		//as this will be easier to read
 		if (current_velocity != 0)
 		{
 			//Don't have this mess with small increments, friction will take the final bite here
@@ -1260,11 +1256,16 @@ public:
 			}
 			else if (m_Time_s > 0.0)  // no division by zero
 			{
+				#if 0
 				adverse_torque = (1.0 - fabs(Voltage)) * (m_dead_zone * max_torque) ; //this is the minimum start
+				#else
+				adverse_torque = (m_dead_zone * max_torque); //this is the minimum start
+				#endif
 
 				//Evaluate anti backlash, on deceleration the momentum of the payload that exceeds the current steady state
 				//will be consumed by the gearing, we apply a scaler to module the strength of this
-				const double steady_state_velocity = Voltage * m_free_speed_rad * m_gear_reduction; //for now not factoring in efficiency
+				//Note: this could work without reduction if current_velocity didn't have it as well, but it is easier to read with it in
+				const double steady_state_velocity = Voltage * m_free_speed_rad; //for now not factoring in efficiency
 				//both the voltage and velocity must be in the same direction... then see if we have deceleration
 				if  ((steady_state_velocity * current_velocity > 0.0) && (fabs(current_velocity)>fabs(steady_state_velocity)))
 				{
@@ -1301,7 +1302,7 @@ public:
 		double PositionDisplacement;
 		m_motor_wheel_model.TimeChangeUpdate(m_Time_s, PositionDisplacement);
 		//No normalizing here, we represent the actual position!
-		m_Heading += PositionDisplacement;
+		m_Heading += PositionDisplacement * m_gear_reduction;  //velocity is motor, so convert to output rate with the gear reduction
 	}
 	//This is broken up so that the real interface does not have to pass time
 	void SetTimeDelta(double dTime_s) 
@@ -1316,9 +1317,13 @@ public:
 	{
 		return m_motor_wheel_model;
 	}
-	double GetMaxSpeed() const
+	double GetMaxSpeed(bool with_reduction=false) const
 	{
-		return m_free_speed_rad * m_gear_reduction;
+		return m_free_speed_rad * (with_reduction?m_gear_reduction:1.0);
+	}
+	double GetGearReduction() const
+	{
+		return m_gear_reduction;
 	}
 };
 
@@ -1336,6 +1341,7 @@ class SwerveEncoders_Simulator4
 	//lower limit (weight * kinetic CoF) this can flip it back to static CoF mode.
 #pragma endregion
 private:
+	#pragma region _member variables_
 	Potentiometer_Tester4 m_Encoders[4];
 	Framework::Base::PhysicsEntity_2D m_Payload;
 	std::function< SwerveVelocities&()> m_CurrentVelocities_callback;
@@ -1343,6 +1349,7 @@ private:
 	Module::Robot::Inv_Swerve_Drive m_Input;
 	Module::Robot::Swerve_Drive m_Output;
 	double m_WheelDiameter_In=4.0;
+	#pragma endregion
 public:
 	virtual void Initialize(const Framework::Base::asset_manager* props = NULL)
 	{
@@ -1350,22 +1357,25 @@ public:
 		m_Input.Init(props);
 		m_Output.Init(props);
 		Framework::Base::asset_manager DefaultMotorProps;
-		//TODO populate good default properties for drive here
+		using namespace properties::registry_v1;
+		
 		if (props)
 		{
+			m_WheelDiameter_In = props->get_number(csz_Drive_WheelDiameter_in,m_WheelDiameter_In);
 			//This loads up the defaults first and then any scripted override
 			for (size_t i = 0; i < 4; i++)
 			{
-				m_Encoders[i].Initialize(i, &DefaultMotorProps, properties::registry_v1::csz_CommonDrive_);
-				m_Encoders[i].Initialize(i, props, properties::registry_v1::csz_CommonDrive_);
+				m_Encoders[i].Initialize(i, &DefaultMotorProps, csz_CommonDrive_);
+				m_Encoders[i].Initialize(i, props, csz_CommonDrive_);
 			}
 		}
 		else
 		{
 			//We only have defaults
 			for (size_t i = 0; i < 4; i++)
-				m_Encoders[i].Initialize(i, &DefaultMotorProps, properties::registry_v1::csz_CommonDrive_);
+				m_Encoders[i].Initialize(i, &DefaultMotorProps, csz_CommonDrive_);
 		}
+		//TODO: We may want to add property to the mass
 		m_Payload.SetMass(Pounds2Kilograms(148));
 	}
 	void SetVoltageCallback(std::function<SwerveVelocities()> callback)
@@ -1382,29 +1392,33 @@ public:
 		for (size_t i = 0; i < 4; i++)
 		{
 			const double Voltage = m_VoltageCallback().Velocity.AsArray[i];
-			double Torque = m_Encoders[i].GetTorqueFromVoltage(Voltage);
-			//m_Encoders[i].GetWheelModel_rw().ApplyFractionalTorque(m_Encoders[i].GetMechanicalRestaintTorque(m_VoltageCallback().Velocity.AsArray[i]), dTime_s);
+			Potentiometer_Tester4& encoder = m_Encoders[i];
+			double Torque = encoder.GetTorqueFromVoltage(Voltage);
+			//encoder.GetWheelModel_rw().ApplyFractionalTorque(encoder.GetMechanicalRestaintTorque(m_VoltageCallback().Velocity.AsArray[i]), dTime_s);
 			//Work out the new velocity for this to apply correct torque
-			double predicted_velocity = m_Encoders[i].GetWheelModel_rw().GetVelocity();  //start with what we have and add in the new torque
-			double pv_AngularAcceleration = m_Encoders[i].GetWheelModel_rw().GetAngularAcceleration(Torque);
+			double predicted_velocity = encoder.GetWheelModel_rw().GetVelocity();  //start with what we have and add in the new torque
+			double pv_AngularAcceleration = encoder.GetWheelModel_rw().GetAngularAcceleration(Torque);
 			predicted_velocity += pv_AngularAcceleration * dTime_s;
-			//The predicted velocity cannot be greater than the max velocity
-			predicted_velocity = std::min(predicted_velocity , m_Encoders[i].GetMaxSpeed());
-			Torque += m_Encoders[i].GetMechanicalRestaintTorque(Voltage,predicted_velocity);
+			//The predicted velocity cannot be greater than the max velocity, (no reduction applied)
+			predicted_velocity = std::min(predicted_velocity , encoder.GetMaxSpeed());
+			Torque += encoder.GetMechanicalRestaintTorque(Voltage,predicted_velocity);
 
+			//To translate for torque at wheel, we first need to apply the mechanical advantage of the inverse gear reduction
+			//Then extract the force applied
 			//Since Torque = F X R we'll isolate force by dividing out the radius
-			const double Force = Torque / Inches2Meters(m_WheelDiameter_In * 0.5);
+			const double Force = (Torque * (1.0/encoder.GetGearReduction()) ) / Inches2Meters(m_WheelDiameter_In * 0.5);
 
 			//We'll try this another way to check since torque is also Ia if we isolate a, we can multiply by the radius for linear velocity force.
-			//const double Force  = (Torque / m_Encoders[i].GetWheelModel_rw().GetMomentofInertia()) * Inches2Meters(m_WheelDiameter_In * 0.5);
+			//const double Force  = (Torque / encoder.GetWheelModel_rw().GetMomentofInertia()) * Inches2Meters(m_WheelDiameter_In * 0.5);
 
 			ForcesForPayload.Velocity.AsArray[i] = Force;
+			if (Voltage > 0.99)
+				int x = 4;
 			#if 0
-			m_Encoders[i].GetWheelModel_rw().ApplyFractionalTorque(Torque, dTime_s);
-			const double LinearVelocity = m_Encoders[i].GetWheelModel_rw().GetVelocity() * m_Encoders[i].GetWheelModel_rw().GetRadiusOfConcentratedMass();
+			encoder.GetWheelModel_rw().ApplyFractionalTorque(Torque, dTime_s);
+			const double LinearVelocity = encoder.GetWheelModel_rw().GetVelocity() * encoder.GetGearReduction() *
+				Inches2Meters(m_WheelDiameter_In * 0.5);
 			m_CurrentVelocities_callback().Velocity.AsArray[i] = LinearVelocity;
-			//if (i==0)
-			//	printf("--%.2f--", LinearVelocity);
 			return;
 			#endif
 		}
@@ -1415,8 +1429,8 @@ public:
 		const double last_payload_angular_velocity = m_Payload.GetAngularVelocity();
 		//We can now consume these forces into the payload
 		//Note: each vector was averaged (and the multiply by 0.25 was the last operation)
-		m_Payload.ApplyFractionalForce(Vec2D(m_Input.GetLocalVelocityX()*4.0, m_Input.GetLocalVelocityY() * 4.0), dTime_s);
-		m_Payload.ApplyFractionalTorque(m_Input.GetAngularVelocity() * 4.0, dTime_s);
+		m_Payload.ApplyFractionalForce(Vec2D(m_Input.GetLocalVelocityX(), m_Input.GetLocalVelocityY()), dTime_s);
+		m_Payload.ApplyFractionalTorque(m_Input.GetAngularVelocity(), dTime_s);
 		// we could m_Payload.TimeChangeUpdate() at some point
 		const Vec2D current_payload_velocity = m_Payload.GetLinearVelocity();
 		//printf("--%.2f,", current_payload_velocity.y());
@@ -1434,6 +1448,7 @@ public:
 		{
 			const double Force = m_Output.GetIntendedVelocitiesFromIndex(i);
 			const double Torque = Force * Inches2Meters(m_WheelDiameter_In * 0.5);
+			Potentiometer_Tester4& encoder = m_Encoders[i];
 			//if (i == 0)
 			//	printf("--%.2f--",Torque);
 			//The force is in linear velocity, change from linear to angular then multiple the moment of inertia
@@ -1442,9 +1457,12 @@ public:
 			//const double Torque = AngularAccel * m_Encoders[i].GetWheelModel_rw().GetMomentofInertia();
 			//apply just like we do for the potentiometer 
 			//m_Encoders[i].GetWheelModel_rw().ApplyFractionalTorque(Torque, dTime_s);
-			m_Encoders[i].GetWheelModel_rw().SetVelocity(m_Output.GetIntendedVelocitiesFromIndex(i)/ Inches2Meters(m_WheelDiameter_In * 0.5));
+			const double WheelVelocity_fromPayload = m_Output.GetIntendedVelocitiesFromIndex(i) / Inches2Meters(m_WheelDiameter_In * 0.5);
+			//To set the velocity directly it works with motor velocity so we'll need to apply the inverse gear ratio
+			m_Encoders[i].GetWheelModel_rw().SetVelocity(WheelVelocity_fromPayload * (1.0/encoder.GetGearReduction()));
 			//Now that the velocity has taken effect we can add in the adverse torque
-			const double LinearVelocity= m_Encoders[i].GetWheelModel_rw().GetVelocity() * m_Encoders[i].GetWheelModel_rw().GetRadiusOfConcentratedMass();
+			const double WheelVelocity= encoder.GetWheelModel_rw().GetVelocity() * encoder.GetGearReduction();
+			const double LinearVelocity = WheelVelocity * Inches2Meters(m_WheelDiameter_In * 0.5);
 			//if (i==0)
 			//	printf("--%.2f,%.2f,%.2f--",Force,Torque, LinearVelocity);
 			//if (i == 0)
@@ -1485,11 +1503,11 @@ private:
 		double swivel_max_speed[4];
 	} m_bypass_properties;
 	#ifdef __UseLegacySimulation__
-	//Legacy::Potentiometer_Tester2 m_Potentiometers[4]; //simulate a real potentiometer for calibration testing
+	Legacy::Potentiometer_Tester2 m_Potentiometers[4]; //simulate a real potentiometer for calibration testing
 	std::shared_ptr<Legacy::Encoder_Simulator2> m_Encoders[4];
 	//TODO move out of legacy and make this macro else to this, for now it is pilot pass through
 
-	Potentiometer_Tester4 m_Potentiometers[4];
+	//Potentiometer_Tester4 m_Potentiometers[4];   disabled until it is fixed
 	SwerveEncoders_Simulator4 m_EncoderSim4;
 	#endif
 	bool m_UseBypass = true;
