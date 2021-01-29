@@ -44,6 +44,19 @@ void TimeSlice(Module::Robot::SwerveRobot& robot)
 	robot.SimulatorTimeSlice(0.010);
 	robot.TimeSlice(0.010); //update a time slice
 }
+void Stop(Module::Robot::SwerveRobot& robot)
+{
+	for (size_t i = 0; i < 200; i++)
+	{
+		robot.SetLinearVelocity_local(0.0, 0.0);  //stop
+		TimeSlice(robot); //update a time slice
+		//cout("position=%.2f, x=%.2f\n", Meters2Feet( _robot.GetCurrentPosition().y()), Meters2Feet( _robot.GetCurrentPosition().x()));
+		cout("angle=%.2f,position y=%.2f\n", RAD_2_DEG(robot.GetCurrentVelocities().Velocity.AsArray[4]), Meters2Feet(robot.GetCurrentPosition().y()));
+	}
+	cout("------------------------------------------------------ Stop\n");
+
+}
+
 void strafe_test(Module::Robot::SwerveRobot &robot)
 {
 	//Test strafing back and forth, test with simple motion control and bypass rotary system to debug swerve management
@@ -73,9 +86,16 @@ void up_down_test(Module::Robot::SwerveRobot& robot)
 	}
 	cout("------------------------------------------------------ down\n");
 
-	for (size_t i = 0; i < 16; i++)
+	#if 1
+	const size_t no_iterations = 16;
+	const double velocity = 1.0;
+	#else
+	const size_t no_iterations = 100;
+	const double velocity = 3.128;
+	#endif
+	for (size_t i = 0; i < no_iterations; i++)
 	{
-		robot.SetLinearVelocity_local(1.0, 0.0);  //simple move up forward
+		robot.SetLinearVelocity_local(velocity, 0.0);  //simple move up forward
 		TimeSlice(robot); //update a time slice
 		//cout("position=%.2f, x=%.2f\n", Meters2Feet( _robot.GetCurrentPosition().y()), Meters2Feet( _robot.GetCurrentPosition().x()));
 		cout("angle=%.2f,position y=%.2f\n", RAD_2_DEG(robot.GetCurrentVelocities().Velocity.AsArray[4]), Meters2Feet(robot.GetCurrentPosition().y()));
@@ -127,6 +147,8 @@ void strafe_box_test(Module::Robot::SwerveRobot& robot, bool reverse_x=false)
 			Meters2Feet(robot.GetCurrentPosition().x()), Meters2Feet(robot.GetCurrentPosition().y()));
 	}
 	cout("------------------------------------------------------ box down\n");
+
+	//Stop(robot);
 	for (size_t i = 0; i < eoi; i++)
 	{
 		robot.SetLinearVelocity_local(0.0, x_mult * -1.0);  //simple move left
@@ -168,8 +190,8 @@ int main()
 	{
 		using namespace properties::registry_v1;
 		//pick what we want to test... s is speed for encoder, a is angle for potentiometer
-		//const char* const prefix = csz_sFL_;
-		const char* const prefix = csz_aFL_;
+		const char* const prefix = csz_sFL_;
+		//const char* const prefix = csz_aFL_;
 		std::string constructed_name=prefix;
 		constructed_name += csz_Rotary_PID_Console_Dump;
 		properties.put_bool(constructed_name.c_str(), true);

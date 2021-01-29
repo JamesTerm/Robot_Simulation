@@ -125,15 +125,29 @@ void Swerve_Drive::UpdateVelocities(double FWD, double STR, double RCW)
 	//Allow around 2-3 degrees of freedom for rotation.  While manual control worked fine without it, it is needed for
 	//targeting goals (e.g. follow ship)
 
-	double RPS = RCW / Pi2;
-	RCW = RPS * (Pi * R);  //R is really diameter
+	//RCW (Rotate ClockWise) is angular velocity in radians, and will be converted to linear velocity (unrolled into a line)
+	const double RPS = RCW / Pi2; //rotations per second
+	const double rotation_linear = RPS * (Pi * R);  //R is really diameter
 
-	const double A = STR - RCW * (L / R);
-	const double B = STR + RCW * (L / R);
-	const double C = FWD - RCW * (W / R);
-	const double D = FWD + RCW * (W / R);
+	//Provide component variables for each quad vector, this can be reduced to half since
+	//The same values can be shared like so:
+	//      ^
+	//      RCW---> (as linear)      .  \
+	// / BD | BC \                  /    .
+	// |----+----||-->--STR->       .    /    
+	// \ AD | AC /|RCW               \  .
+	//  --------- V
+
+	//Each component starts with the common position velocity vector and then add the rotation in linear form scaled down by 
+	//how close the wheel's position is to perpendicular tangent of the turning diameter's circle
+	const double A = STR - rotation_linear * (L / R);   //X component of rear wheels
+	const double B = STR + rotation_linear * (L / R);   //X component of front wheels
+	const double C = FWD - rotation_linear * (W / R);   //Y component of starboard side
+	const double D = FWD + rotation_linear * (W / R);   //Y component of port side
 	SwerveVelocities::uVelocity::Explicit& _ = m_Velocities.Velocity.Named;
 
+	//With our X and Y components get the magnitude and direction of each vector:
+	//Starting with magnitude via distance formula (a.k.a. Pythagorean theorem)
 	_.sFL = sqrt((B * B) + (D * D));
 	_.sFR = sqrt((B * B) + (C * C));
 	_.sRL = sqrt((A * A) + (D * D));
@@ -143,15 +157,15 @@ void Swerve_Drive::UpdateVelocities(double FWD, double STR, double RCW)
 	//we cannot compute the trajectory and should not update them, this will avoid
 	//unwanted changes when stick is idle and robot should coast
 	//Note: when adding together to check they must not be negative otherwise they could cancel each other out
-	if (!IsZero(fabs(FWD) + fabs(STR) + fabs(RCW)))
+	if (!IsZero(fabs(FWD) + fabs(STR) + fabs(rotation_linear)))
 	{
-		_.aFL = atan2(B, D);
+		_.aFL = atan2(B, D);  //Note: atan2 works where 0 points right, so we swap parameters to have 0 point up
 		_.aFR = atan2(B, C);
 		_.aRL = atan2(A, D);
 		_.aRR = atan2(A, C);
 
-		//the angle velocities can be sensitive so if the RCW is zero then we should have a zero tolerance test
-		if (RCW == 0.0)
+		//the angle velocities can be sensitive so if the rotation_linear is zero then we should have a zero tolerance test
+		if (rotation_linear == 0.0)
 		{
 			_.aFL = IsZero(_.aFL) ? 0.0 : _.aFL;
 			_.aFR = IsZero(_.aFR) ? 0.0 : _.aFR;
@@ -160,11 +174,11 @@ void Swerve_Drive::UpdateVelocities(double FWD, double STR, double RCW)
 		}
 	}
 	#if 0
-	DOUT2("%f %f %f",FWD,STR,RCW);
+	DOUT2("%f %f %f",FWD,STR,rotation_linear);
 	DOUT4("%f %f %f %f",_.sFL,_.sFR,_.sRL,_.sRR);
 	DOUT5("%f %f %f %f",_.aFL,_.aFR,_.aRL,_.aRR);
 	#endif
-	//DOUT4("%f %f %f",FWD,STR,RCW);  //Test accuracy
+	//DOUT4("%f %f %f",FWD,STR,rotation_linear);  //Test accuracy
 
 }
 #pragma endregion

@@ -1350,8 +1350,42 @@ private:
 	Framework::Base::PhysicsEntity_1D m_Friction;  //apply friction to skid
 	std::function< SwerveVelocities&()> m_CurrentVelocities_callback;
 	std::function<SwerveVelocities()> m_VoltageCallback;
-	Module::Robot::Inv_Swerve_Drive m_Input;
-	Module::Robot::Swerve_Drive m_Output;
+	Inv_Swerve_Drive m_Input;
+	class SwerveDrive_Plus : public Swerve_Drive
+	{
+	private:
+		SwerveVelocities m_FromExistingOutput;
+	public:
+		const SwerveVelocities &UpdateFromExisting(double FWD, double STR, double RCW,const SwerveVelocities &CurrentVelocities)
+		{
+			using namespace Framework::Base;
+			//Essentially there is a common vector that has to work with the wheel angles from current velocities. Because the wheel 
+			//angles can be reversed we have to approach this per each wheel angle.  The result is that the magnitude that occupies the
+			//same direction will be preserved, and the rest will be discarded to friction. We'll also have to be mindful the direction
+			//may be opposite in which case we reverse the sign to keep the same direction.
+			//First we let the kinematics we inherit from work like before, and then work from those quad vectors
+			Swerve_Drive::UpdateVelocities(FWD, STR, RCW);
+			for (size_t i = 0; i < 4; i++)
+			{
+				//This next part is tricky... we take our projected vector and rotate it to a global view using the direction of our actual
+				//wheel angle.  Everything that exists in the Y component will be what we consume... X will be discarded
+				const Vec2D projected_vector_local(0,GetIntendedVelocitiesFromIndex(i));  //local magnitude pointing up
+				const double projected_vector_heading = GetSwerveVelocitiesFromIndex(i);
+				//point it in it's current direction
+				const Vec2D projected_vector_global = LocalToGlobal(projected_vector_heading,projected_vector_local);
+				//Point it back locally to the direction of our actual wheel angle
+				const double actual_vector_heading = CurrentVelocities.Velocity.AsArray[i + 4];
+				const Vec2D actual_vector_local = GlobalToLocal(actual_vector_heading, projected_vector_global);
+				//We have our velocity in the Y component, now to evaluate if it needs to be reversed
+				const double IsReversed = fabs(projected_vector_heading) - fabs(actual_vector_heading) > Pi / 2 ? -1.0 : 1.0;
+				//Now to populate our result
+				m_FromExistingOutput.Velocity.AsArray[i] = actual_vector_local.y() * IsReversed;
+				m_FromExistingOutput.Velocity.AsArray[i + 4] = CurrentVelocities.Velocity.AsArray[i + 4];  //pedantic
+			}
+			return m_FromExistingOutput;
+		}
+	};
+	SwerveDrive_Plus m_Output;
 	double m_WheelDiameter_In=4.0;
 	#pragma endregion
 public:
@@ -1463,14 +1497,15 @@ public:
 		const Vec2D current_payload_velocity = m_Payload.GetLinearVelocity();
 		//printf("--%.2f,", current_payload_velocity.y());
 		const double current_payload_angular_velocity = m_Payload.GetAngularVelocity();
-		m_Output.UpdateVelocities(current_payload_velocity.y(), current_payload_velocity.x() , current_payload_angular_velocity);
+		const SwerveVelocities &AdjustedToExisting=m_Output.UpdateFromExisting(current_payload_velocity.y(), current_payload_velocity.x(), 
+			current_payload_angular_velocity,ForcesForPayload);
 		//Now we can apply the torque to the wheel
 		for (size_t i = 0; i < 4; i++)
 		{
 			const double Force = m_Output.GetIntendedVelocitiesFromIndex(i);
 			const double Torque = Force * Inches2Meters(m_WheelDiameter_In * 0.5);
 			Potentiometer_Tester4& encoder = m_Encoders[i];
-			const double WheelVelocity_fromPayload = m_Output.GetIntendedVelocitiesFromIndex(i) / Inches2Meters(m_WheelDiameter_In * 0.5);
+			const double WheelVelocity_fromPayload = AdjustedToExisting.Velocity.AsArray[i] / Inches2Meters(m_WheelDiameter_In * 0.5);
 			//To set the velocity directly it works with motor velocity so we'll need to apply the inverse gear ratio
 			m_Encoders[i].GetWheelModel_rw().SetVelocity(WheelVelocity_fromPayload * (1.0/encoder.GetGearReduction()));
 			//Now that the velocity has taken effect we can add in the adverse torque
