@@ -33,7 +33,8 @@ namespace Module {
 
 #pragma region _CalibrationTesting_
 //I do not want to use any legacy code for the new simulation
-#ifdef __UseLegacySimulation__
+//TODO put macro back once everything is working properly
+#if 1
 namespace Legacy {
 //Note:  This section really belongs with the simulated odometry; however, given the legacy dependency on ship 1D and properties
 //it is cleaner to keep the code intact in the order of dependencies, and rewrite a better updated simulation there
@@ -1576,11 +1577,20 @@ private:
 		double swivel_max_speed[4];
 	} m_bypass_properties;
 	#ifdef __UseLegacySimulation__
+	//TODO move out of legacy 
+	#if 1
 	Legacy::Potentiometer_Tester2 m_Potentiometers[4]; //simulate a real potentiometer for calibration testing
+	#else
+	Potentiometer_Tester4 m_Potentiometers[4];
+	#endif
 	std::shared_ptr<Legacy::Encoder_Simulator2> m_Encoders[4];
-	//TODO move out of legacy and make this macro else to this, for now it is pilot pass through
-
-	//Potentiometer_Tester4 m_Potentiometers[4];   disabled until it is fixed
+	#else
+	//Once pot4 is working properly we can take this out
+	#if 1
+	Legacy::Potentiometer_Tester2 m_Potentiometers[4];
+	#else
+	Potentiometer_Tester4 m_Potentiometers[4];
+	#endif
 	SwerveEncoders_Simulator4 m_EncoderSim4;
 	#endif
 	bool m_UseBypass = true;
@@ -1597,6 +1607,7 @@ private:
 	}
 	void SetHooks(bool enabled)
 	{
+		#ifndef __UseLegacySimulation__
 		if (enabled)
 		{
 			m_EncoderSim4.SetCurrentVelocities_Callback(
@@ -1608,6 +1619,7 @@ private:
 		}
 		else
 			m_EncoderSim4.SetCurrentVelocities_Callback(nullptr);
+		#endif
 	}
 public:
 	void Init(const Framework::Base::asset_manager *props)
@@ -1656,10 +1668,13 @@ public:
 			else
 				m_Encoders[i] = std::make_shared<Legacy::Encoder_Simulator2>();
 			m_Encoders[i]->Initialize(props);
-			m_Potentiometers[i].Initialize(i,props);
 		}
+		#else
 		m_EncoderSim4.Initialize(props);
 		#endif
+		for (size_t i = 0; i < 4; i++)
+			m_Potentiometers[i].Initialize(i, props);
+
 		ResetPos();
 	}
 	void ResetPos()
@@ -1696,7 +1711,9 @@ public:
 	{
 		//Input get it from client
 		m_VoltageCallback = callback;
+		#ifndef __UseLegacySimulation__
 		m_EncoderSim4.SetVoltageCallback(callback);
+		#endif
 	}
 	//Run the simulation time-slice
 	void TimeSlice(double d_time_s)
@@ -1723,10 +1740,8 @@ public:
 		}
 		else
 		{
-			#ifdef __UseLegacySimulation__
 			SwerveVelocities CurrentVoltage;
 			CurrentVoltage = m_VoltageCallback();
-
 			for (size_t i = 0; i < 4; i++)
 			{
 				//We'll put the pot update first in case the simulation factors in the direction (probably shouldn't matter though)
@@ -1737,18 +1752,21 @@ public:
 				//m_current_position[i] = NormalizeRotation2(m_Potentiometers[i].GetPotentiometerCurrentPosition());
 				m_current_position[i] = m_Potentiometers[i].GetPotentiometerCurrentPosition();
 				m_CurrentVelocities.Velocity.AsArray[i + 4] = m_current_position[i];
+			}
 
+			#ifdef __UseLegacySimulation__
+
+			for (size_t i = 0; i < 4; i++)
+			{
 				m_Encoders[i]->SetTimeDelta(d_time_s);
 				m_Encoders[i]->UpdateEncoderVoltage(CurrentVoltage.Velocity.AsArray[i]);
 				m_Encoders[i]->TimeChange();
 				m_CurrentVelocities.Velocity.AsArray[i] = m_Encoders[i]->GetEncoderVelocity();
 			}
 
+			#else
 			//Ensure potentiometers are updated before calling sim4
 			m_EncoderSim4.TimeChange(d_time_s);
-			#else
-			//TODO reserved
-			//m_CurrentVelocities = m_VoltageCallback();
 			#endif
 		}
 	}

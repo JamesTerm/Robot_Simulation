@@ -682,11 +682,11 @@ private:
 				const double gear_box_effeciency = 0.65;
 				//I'm going to be more conservative and give more mass to account for the weight bearing on the wheel
 				//const double mass = Pounds2Kilograms * 3.06;
-				const double mass = Pounds2Kilograms * 6.0;
+				const double mass = Pounds2Kilograms * 1.0;
 				Framework::Base::PhysicsEntity_1D motor_wheel_model;
 				motor_wheel_model.SetMass(mass);
-				motor_wheel_model.SetAngularInertiaCoefficient(0.4);  //using a solid sphere
-				motor_wheel_model.SetRadiusOfConcentratedMass(Feet2Meters(4.42*0.5));
+				motor_wheel_model.SetAngularInertiaCoefficient(0.5);  //Just motor
+				motor_wheel_model.SetRadiusOfConcentratedMass(Inches2Meters(1.12));
 				// t=Ia 
 				//I=sum(m*r^2) or sum(AngularCoef*m*r^2)
 				const double MaxAccel_simulation = motor_wheel_model.GetAngularAcceleration(stall_torque * (1.0/gear_reduction) * gear_box_effeciency);
