@@ -157,7 +157,7 @@ void Swerve_Drive::UpdateVelocities(double FWD, double STR, double RCW)
 	//we cannot compute the trajectory and should not update them, this will avoid
 	//unwanted changes when stick is idle and robot should coast
 	//Note: when adding together to check they must not be negative otherwise they could cancel each other out
-	if (!IsZero(fabs(FWD) + fabs(STR) + fabs(rotation_linear)))
+	if (!IsZero(fabs(FWD) + fabs(STR) + fabs(RCW)))
 	{
 		_.aFL = atan2(B, D);  //Note: atan2 works where 0 points right, so we swap parameters to have 0 point up
 		_.aFR = atan2(B, C);

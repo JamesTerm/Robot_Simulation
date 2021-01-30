@@ -598,13 +598,13 @@ private:
 			PUT_BOOL(Rotary_UseAggressiveStop, val.use_aggressive_stop); //bool
 			PUT_BOOL(Rotary_EncoderReversed_Wheel, val.encoder_reversed_wheel); //bool
 
-			PUT_NUMBER(Pot4_anti_backlash_scaler,0.5);
+			PUT_NUMBER(Pot4_anti_backlash_scaler,0.0);
 			PUT_NUMBER(Pot4_dead_zone, 0.13); //see how this relates to speed loss constant
 			PUT_NUMBER(Pot4_free_speed_rad, 5880 * (1.0 / 60.0) * Pi2);
 			PUT_NUMBER(Pot4_gear_box_effeciency, 0.9);
 			PUT_NUMBER(Pot4_gear_reduction, 1.0 / 9.0);
-			//PUT_NUMBER(csz_Pot4_mass)  This is mostly the same as pot 4 (the wheel mass not the payload)
-			PUT_NUMBER(Pot4_RadiusOfConcentratedMass, Inches2Meters(wheel_diameter_Andromeda_in * 0.5));  //Wheel radius
+			PUT_NUMBER(Pot4_mass, Pounds2Kilograms(3.0));
+			PUT_NUMBER(Pot4_RadiusOfConcentratedMass, Inches2Meters(1.12));  //Motor radius
 			PUT_NUMBER(Pot4_AngularInertiaCoefficient, 0.5);  //using a solid cylinder or disc)
 			PUT_NUMBER(Pot4_stall_torque_NM, 3.36);
 		}

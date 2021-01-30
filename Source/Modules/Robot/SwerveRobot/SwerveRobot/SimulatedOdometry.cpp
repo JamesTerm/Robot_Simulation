@@ -1365,6 +1365,12 @@ private:
 			//may be opposite in which case we reverse the sign to keep the same direction.
 			//First we let the kinematics we inherit from work like before, and then work from those quad vectors
 			Swerve_Drive::UpdateVelocities(FWD, STR, RCW);
+			//If the wheel angles are not know, then grab then grab them from existing
+			if (IsZero(fabs(FWD) + fabs(STR) + fabs(RCW)))
+			{
+				for (size_t i = 0; i < 4; i++)
+					SetVelocitiesFromIndex(i + 4, CurrentVelocities.Velocity.AsArray[i + 4]);
+			}
 			for (size_t i = 0; i < 4; i++)
 			{
 				//This next part is tricky... we take our projected vector and rotate it to a global view using the direction of our actual
@@ -1376,8 +1382,13 @@ private:
 				//Point it back locally to the direction of our actual wheel angle
 				const double actual_vector_heading = CurrentVelocities.Velocity.AsArray[i + 4];
 				const Vec2D actual_vector_local = GlobalToLocal(actual_vector_heading, projected_vector_global);
+				//TODO see if there is ever a need to reverse the direction, there is a case where 2 wheels on one side are
+				//opposite causing the velocity to go half speed (not sure if that is here though)
+				const double IsReversed = 1.0;
+
 				//We have our velocity in the Y component, now to evaluate if it needs to be reversed
-				const double IsReversed = fabs(projected_vector_heading) - fabs(actual_vector_heading) > Pi / 2 ? -1.0 : 1.0;
+				//const double IsReversed = fabs(projected_vector_heading) - fabs(actual_vector_heading) > Pi / 2 ? -1.0 : 1.0;
+
 				//Now to populate our result
 				m_FromExistingOutput.Velocity.AsArray[i] = actual_vector_local.y() * IsReversed;
 				m_FromExistingOutput.Velocity.AsArray[i + 4] = CurrentVelocities.Velocity.AsArray[i + 4];  //pedantic
@@ -1484,10 +1495,28 @@ public:
 			const Vec2D global_payload_velocity = LocalToGlobal(IntendedDirection, local_payload_velocity);
 			const double Skid_Velocity = global_payload_velocity.x();  //velocity to apply friction force to can be in either direction
 			m_Friction.SetVelocity(Skid_Velocity);
+			const double friction_x = m_Friction.GetFrictionalForce(dTime_s);
+			double friction_y = 0.0;
+			{
+				double combined_velocity_magnitude=0.0;
+				for (size_t i = 0; i < 4; i++)
+					combined_velocity_magnitude += m_CurrentVelocities_callback().Velocity.AsArray[i];
+				//while we are here... if we are stopped then we need to do the same for the y Component
+				if (IsZero(combined_velocity_magnitude,0.01))
+				{
+					m_Friction.SetVelocity(global_payload_velocity.y());
+					friction_y = m_Friction.GetFrictionalForce(dTime_s);
+				}
+			}
 			//now to get friction force to be applied to x component
-			const Vec2D global_friction_force(m_Friction.GetFrictionalForce(dTime_s), 0.0);
+			const Vec2D global_friction_force(friction_x, friction_y);
 			const Vec2D local_friction_force = GlobalToLocal(IntendedDirection, global_friction_force);
 			m_Payload.ApplyFractionalForce(local_friction_force, dTime_s);
+			//Same goes for the angular velocity as this should not be sliding around
+			if (IsZero(m_Payload.GetAngularVelocity(), 0.01))
+			{
+				m_Payload.SetAngularVelocity(0.0);
+			}
 		}
 		//We can now consume these forces into the payload
 		//Note: each vector was averaged (and the multiply by 0.25 was the last operation)
@@ -1502,8 +1531,8 @@ public:
 		//Now we can apply the torque to the wheel
 		for (size_t i = 0; i < 4; i++)
 		{
-			const double Force = m_Output.GetIntendedVelocitiesFromIndex(i);
-			const double Torque = Force * Inches2Meters(m_WheelDiameter_In * 0.5);
+			//const double Force = m_Output.GetIntendedVelocitiesFromIndex(i);
+			//const double Torque = Force * Inches2Meters(m_WheelDiameter_In * 0.5);
 			Potentiometer_Tester4& encoder = m_Encoders[i];
 			const double WheelVelocity_fromPayload = AdjustedToExisting.Velocity.AsArray[i] / Inches2Meters(m_WheelDiameter_In * 0.5);
 			//To set the velocity directly it works with motor velocity so we'll need to apply the inverse gear ratio
@@ -1512,7 +1541,7 @@ public:
 			const double WheelVelocity= encoder.GetWheelModel_rw().GetVelocity() * encoder.GetGearReduction();
 			const double LinearVelocity = WheelVelocity * Inches2Meters(m_WheelDiameter_In * 0.5);
 			//disabled until we confirm it ready
-			#if 0
+			#if 1
 			//finally update our odometry, note we work in linear velocity so we multiply by the wheel radius
 			m_CurrentVelocities_callback().Velocity.AsArray[i] = LinearVelocity;
 			#endif

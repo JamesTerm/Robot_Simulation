@@ -159,7 +159,7 @@ public:
 	}
 	// Places the ship back at its initial position and resets all vectors
 	void ResetPos();
-
+	void SetVelocitiesFromIndex(size_t index,double value) { m_Velocities.Velocity.AsArray[index]=value; }
 	double GetIntendedVelocitiesFromIndex(size_t index) const { return m_Velocities.Velocity.AsArray[index]; }
 	double GetSwerveVelocitiesFromIndex(size_t index) const { return m_Velocities.Velocity.AsArray[index+4]; }
 	//Overload this for optimal time between the update and position to avoid oscillation
