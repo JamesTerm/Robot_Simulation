@@ -673,6 +673,7 @@ private:
 			PUT_NUMBER(Ship_1D_MaxAccelForward, 75.0);
 			#pragma region _Simulation Acceleraton_
 			{
+				#pragma region _for Pot2 only_
 				//In here we compute the acceleration of the simulation, our motion profile can be less than this but not more otherwise we overshoot
 				//I'll write out each variable so that we can tweak the final value and compare against actual
 				//For start we are using a 775pro motor with its rated torque
@@ -689,8 +690,18 @@ private:
 				motor_wheel_model.SetRadiusOfConcentratedMass(Inches2Meters(1.12));
 				// t=Ia 
 				//I=sum(m*r^2) or sum(AngularCoef*m*r^2)
-				const double MaxAccel_simulation = motor_wheel_model.GetAngularAcceleration(stall_torque * (1.0/gear_reduction) * gear_box_effeciency);
+				const double MaxAccel_simulation = motor_wheel_model.GetAngularAcceleration(stall_torque * (1.0 / gear_reduction) * gear_box_effeciency);
 				PUT_NUMBER(Ship_1D_MaxAccel_simulation, MaxAccel_simulation);
+				#pragma endregion
+
+				//Note: we have some adjusted properties for Pot4 in here, so we keep these separate from Pot 2
+				PUT_NUMBER(Pot4_stall_torque_NM, 0.71);
+				PUT_NUMBER(Pot4_gear_reduction, (1.0 / 81.0)* (3.0 / 7.0));
+				PUT_NUMBER(Pot4_gear_box_effeciency, 0.65);
+				//These are difficult to tune, especially the radius of concentrated mass, but dictate the rate acceleration
+				PUT_NUMBER(Pot4_mass, 0.34);
+				PUT_NUMBER(Pot4_AngularInertiaCoefficient,Pounds2Kilograms(0.5));  //solid cylinder
+				PUT_NUMBER(Pot4_RadiusOfConcentratedMass, Inches2Meters(0.25)); //these are tuned via spread sheet
 			}
 			#pragma endregion
 			//PUT_NUMBER(Rotary_InverseMaxAccel, 0.0);

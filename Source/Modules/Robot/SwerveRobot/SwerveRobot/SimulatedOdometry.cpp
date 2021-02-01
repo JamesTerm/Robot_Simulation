@@ -24,17 +24,17 @@
 //Tweak properties for ideal ride in the example script
 //Ensure pot simulator is unlimited
 
-//Keep enabled until we have a better simulator
-#define __UseLegacySimulation__
+//Keep around if the new simulation has issues
+//#define __UseLegacySimulation__
 
 #pragma endregion
 namespace Module {
 	namespace Robot {
 
-#pragma region _CalibrationTesting_
+#pragma region _Legacy CalibrationTesting_
 //I do not want to use any legacy code for the new simulation
 //TODO put macro back once everything is working properly
-#if 1
+#ifdef __UseLegacySimulation__
 namespace Legacy {
 //Note:  This section really belongs with the simulated odometry; however, given the legacy dependency on ship 1D and properties
 //it is cleaner to keep the code intact in the order of dependencies, and rewrite a better updated simulation there
@@ -1173,6 +1173,7 @@ public:
 	}
 };
 }
+#else
 #pragma endregion
 
 #pragma region _Simulation_
@@ -1577,20 +1578,10 @@ private:
 		double swivel_max_speed[4];
 	} m_bypass_properties;
 	#ifdef __UseLegacySimulation__
-	//TODO move out of legacy 
-	#if 1
 	Legacy::Potentiometer_Tester2 m_Potentiometers[4]; //simulate a real potentiometer for calibration testing
-	#else
-	Potentiometer_Tester4 m_Potentiometers[4];
-	#endif
 	std::shared_ptr<Legacy::Encoder_Simulator2> m_Encoders[4];
 	#else
-	//Once pot4 is working properly we can take this out
-	#if 1
-	Legacy::Potentiometer_Tester2 m_Potentiometers[4];
-	#else
 	Potentiometer_Tester4 m_Potentiometers[4];
-	#endif
 	SwerveEncoders_Simulator4 m_EncoderSim4;
 	#endif
 	bool m_UseBypass = true;
