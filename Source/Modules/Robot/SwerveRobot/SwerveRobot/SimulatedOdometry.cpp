@@ -1499,6 +1499,8 @@ public:
 			m_Friction.SetVelocity(Skid_Velocity);
 			const double friction_x = m_Friction.GetFrictionalForce(dTime_s);
 			double friction_y = 0.0;
+			//Test for friction Y (only when controls for Y are idle)
+			if (IntendedForces.y()==0.0)
 			{
 				double combined_velocity_magnitude=0.0;
 				for (size_t i = 0; i < 4; i++)
