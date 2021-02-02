@@ -1494,13 +1494,15 @@ public:
 			//Use this heading to rotate our velocity to global
 			const double IntendedDirection=atan2(IntendedForces_normalized[0], IntendedForces_normalized[1]);
 			const Vec2D local_payload_velocity = m_Payload.GetLinearVelocity();
+			//Note: this global isn't global like coordinates on the field, this is the current velocity rotated to align with the
+			//intended velocity, I may want to rename this to be more clear.  None of this ever works with global field orientation
 			const Vec2D global_payload_velocity = LocalToGlobal(IntendedDirection, local_payload_velocity);
 			const double Skid_Velocity = global_payload_velocity.x();  //velocity to apply friction force to can be in either direction
 			m_Friction.SetVelocity(Skid_Velocity);
 			const double friction_x = m_Friction.GetFrictionalForce(dTime_s);
 			double friction_y = 0.0;
 			//Test for friction Y (only when controls for Y are idle)
-			if (IntendedForces.y()==0.0)
+			if (IsZero(IntendedForces.y(),0.01))
 			{
 				double combined_velocity_magnitude=0.0;
 				for (size_t i = 0; i < 4; i++)
