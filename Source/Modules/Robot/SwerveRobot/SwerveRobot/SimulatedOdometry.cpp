@@ -1517,9 +1517,31 @@ public:
 			const Vec2D local_friction_force = GlobalToLocal(IntendedDirection, global_friction_force);
 			m_Payload.ApplyFractionalForce(local_friction_force, dTime_s);
 			//Same goes for the angular velocity as this should not be sliding around
-			if (IsZero(m_Payload.GetAngularVelocity(), 0.01))
+			if (IsZero(m_Input.GetAngularVelocity(), 0.01)&&(m_Payload.GetAngularVelocity()!=0.00))
 			{
-				m_Payload.SetAngularVelocity(0.0);
+				const double AngularVelocity = m_Payload.GetAngularVelocity();
+				//Avoid small fractions by putting a bite in the threshold
+				if (fabs(AngularVelocity) < 0.0001)
+				{
+					m_Payload.SetAngularVelocity(0.0);
+				}
+				else
+				{
+					//The way to think of this is that in space something could spin forever and it is friction that would stop it
+					//lack of friction (like a top or something on bearings demonstrates this as well) once the robot spins it is
+					//the friction of the wheels that stops the spin.  To be compatible to our units of force (which work with KMS i.e. meters)
+					//we convert our angular velocity into linear compute this force and scale back down
+					//force = mass * acceleration, acceleration = vel_a-vel_b, vel = distance / time
+					//proof... using 1 for time distance a is 3 and distance b is 2.    3-2 (meters) a =1 meters per second square
+					//for radians, for now let's assume Pi * D= 2.   1/D(3-2)= 1/D  so we can scale this back down to radians, where D is the turning diameter
+					const double turning_diameter = m_Input.GetDriveProperties().GetTurningDiameter();
+					const double to_linear = Pi * turning_diameter;
+					const double rot_linear = AngularVelocity * to_linear;
+					assert(turning_diameter != 0.0);  //sanity check
+					m_Friction.SetVelocity(rot_linear);
+					const double friction_rot = m_Friction.GetFrictionalForce(dTime_s) / to_linear; //as radians
+					m_Payload.ApplyFractionalTorque(friction_rot, dTime_s);
+				}
 			}
 		}
 		//We can now consume these forces into the payload
