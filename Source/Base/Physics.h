@@ -359,10 +359,23 @@ public:
 		}
 		return ForceToApply;
 	}
-	__inline double GetForceNormal(double gravity = 9.80665) const
+	__inline double GetForceNormal(double gravity = 9.80665, int mode=2, double tolerance=0.001) const
 	{
+		//mode 0 = use static, mode 1 use kinetic, mode 2 auto, based on velocity
 		//for now there is little tolerance to become kinetic, but we may want more
-		double fc = IsZero(m_Velocity) ? m_StaticFriction : m_KineticFriction;
+		double fc=1.0;
+		switch (mode)
+		{
+		case 0:
+			fc = m_StaticFriction;
+			break;
+		case 1:
+			fc = m_KineticFriction;
+			break;
+		case 2:
+			fc = IsZero(m_Velocity, tolerance) ? m_StaticFriction : m_KineticFriction;
+			break;
+		}
 		return (fc * m_EntityMass * gravity);
 	}
 	void SetStaticFriction(double coefficient)
@@ -374,13 +387,15 @@ public:
 		m_KineticFriction = coefficient;
 	}
 
-	double GetFrictionalForce(double DeltaTime_s, double Ground = 0.0, double gravity = 9.80665, double BrakeResistence = 0.0) const
+	double GetFrictionalForce(double DeltaTime_s, int mode=2, double tolerance=0.001 , double Ground = 0.0, double gravity = 9.80665, double BrakeResistence = 0.0) const
 	{
+		/// \param mode- mode 0 = use static, mode 1 use kinetic, mode 2 auto, based on velocity
+		/// \param tolerance- by default there is little tolerance to become kinetic, so this can be adjusted
 		/// \param Brake is a brake coast parameter where if gravity pulls it down it can apply a scaler to slow down the reversed rate
 		/// where 0 is full stop and 1 is full coast (range is 0 - 1)
 
 		if (!DeltaTime_s) return 0.0;  //since we divide by time avoid division by zero
-		double NormalForce = GetForceNormal(gravity) * cos(Ground);
+		double NormalForce = GetForceNormal(gravity,mode) * cos(Ground);
 		const double StoppingForce = (fabs(m_Velocity) * m_EntityMass) / DeltaTime_s;
 		NormalForce = std::min(StoppingForce, NormalForce); //friction can never be greater than the stopping force
 		double GravityForce = (m_EntityMass * gravity * sin(Ground));
