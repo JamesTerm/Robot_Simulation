@@ -138,31 +138,73 @@ private:
 				else
 					return Module::Localization::Entity2D::GetCurrentHeading();
 			}
-		}	m_Entity;
 
+			Vector2D GetCurrentPosition(bool velocity_only) const
+			{
+				if (m_SupportOdometryPosition && !velocity_only)
+				{
+					const Vec2D will_fix = m_pParent->m_robot.GetCurrentPosition();
+					const Vector2D result = { will_fix.x(), will_fix.y() };
+					return result;
+				}
+				else
+					return Module::Localization::Entity2D::GetCurrentPosition();
+			}
+			double GetCurrentHeading(bool velocity_only) const
+			{
+				if (m_SupportOdometryHeading && !velocity_only)
+					return m_pParent->m_robot.GetCurrentHeading();
+				else
+					return Module::Localization::Entity2D::GetCurrentHeading();
+			}
+
+		}	m_Entity;
+		Module::Robot::SwerveRobot& m_robot;
+
+		bool Get_SupportOdometryPosition() const
+		{
+			return m_robot.Get_SupportOdometryPosition();
+		}
+		bool Get_SupportOdometryHeading() const
+		{
+			return m_robot.Get_SupportOdometryHeading();
+		}
 	public:
-		AdvancedOdometry(Test_Swerve_Properties* parent) : m_Entity(parent),m_pParent(parent)
+		AdvancedOdometry(Test_Swerve_Properties* parent) : m_Entity(parent),m_pParent(parent),m_robot(parent->m_robot)
 		{
 		}
 		void Init(const Framework::Base::asset_manager* asset_properties = nullptr)
 		{
-			Module::Robot::SwerveRobot& robot = m_pParent->m_robot;
 			//if we have position odometry hooked, we'll use it instead
-			if (robot.Get_SupportOdometryPosition())
+			if (Get_SupportOdometryPosition())
 			{
 				m_Entity.SetSupportOdometryPosition(true);
-				robot.Set_GetCurrentPosition([&]() -> Vec2D
+				m_robot.Set_GetCurrentPosition([&]() -> Vec2D
 				{
-					return robot.Get_OdometryCurrentPosition();
+					return m_robot.Get_OdometryCurrentPosition();
 				});
 			}
-			if (robot.Get_SupportOdometryHeading())
+			if (Get_SupportOdometryHeading())
 			{
 				m_Entity.SetSupportOdometryHeading(true);
-				robot.Set_GetCurrentHeading([&]()
+				m_robot.Set_GetCurrentHeading([&]()
 				{
-					return robot.Get_OdometryCurrentHeading();
+					return m_robot.Get_OdometryCurrentHeading();
 				});
+			}
+		}
+		void UpdateVariables()
+		{
+			using namespace Module::Localization;
+			if (Get_SupportOdometryHeading())
+			{
+				SmartDashboard::PutNumber("predicted_Heading", RAD_2_DEG(m_Entity.GetCurrentHeading(true)));
+			}
+			if (Get_SupportOdometryPosition())
+			{
+				Entity2D::Vector2D position = m_Entity.GetCurrentPosition(true);
+				SmartDashboard::PutNumber("predicted_X_ft", Meters2Feet(position.x));
+				SmartDashboard::PutNumber("predicted_Y_ft", Meters2Feet(position.y));
 			}
 		}
 		Module::Localization::Entity2D& GetEntity()
@@ -178,6 +220,7 @@ private:
 	}
 	void UpdateVariables()
 	{
+		m_Advanced_Odometry.UpdateVariables();
 		Module::Localization::Entity2D &entity = GetEntity();
 		using namespace Module::Localization;
 		const Entity2D::Vector2D linear_velocity = entity.GetCurrentVelocity();
