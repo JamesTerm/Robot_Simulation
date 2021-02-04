@@ -25,6 +25,15 @@ public:
 	void TimeSlice(double d_time_s);
 	//Output: contains the current speeds and positions of any given moment of time
 	const SwerveVelocities &GetCurrentVelocities() const;
+	//Output: optional advanced sensors for localization
+	//If our simulation supports providing localization through vision
+	bool Sim_SupportVision() const;
+	//This gives best guess, may simulate latency or delay in updates
+	Vec2D Vision_GetCurrentPosition() const;
+	//If our simulation supports providing localization through gyro magnetometer blend
+	bool Sim_SupportHeading() const;
+	//This should be very accurate not latent but may be subjected to simulate a glitch in shifted heading
+	double GyroMag_GetCurrentHeading() const;
 private:
 	std::shared_ptr<SimulatedOdometry_Internal> m_simulator;
 };

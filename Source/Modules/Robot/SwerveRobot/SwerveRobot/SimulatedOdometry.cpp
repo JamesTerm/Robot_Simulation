@@ -1597,6 +1597,7 @@ public:
 class SimulatedOdometry_Internal
 {
 private:
+	#pragma region _member vars_
 	SwerveVelocities m_CurrentVelocities;
 	std::function<SwerveVelocities()> m_VoltageCallback;
 	double m_maxspeed = Feet2Meters(12.0); //max velocity forward in meters per second
@@ -1612,9 +1613,29 @@ private:
 	#else
 	Potentiometer_Tester4 m_Potentiometers[4];
 	SwerveEncoders_Simulator4 m_EncoderSim4;
+
+	class AdvancedSensors
+	{
+	private:
+		SimulatedOdometry_Internal* m_pParent;
+		Vec2D m_current_position;
+		double m_current_heading = 0.0;
+	public:
+		AdvancedSensors(SimulatedOdometry_Internal* parent) : m_pParent(parent)
+		{
+		}
+		Vec2D Vision_GetCurrentPosition() const
+		{
+			return m_current_position;
+		}
+		double GyroMag_GetCurrentHeading() const
+		{
+			return m_current_heading;
+		}
+	} m_AdvancedSensors=this;
 	#endif
 	bool m_UseBypass = true;
-
+	#pragma endregion
 	inline double NormalizeRotation2(double Rotation)
 	{
 		const double Pi2 = M_PI * 2.0;
@@ -1795,6 +1816,40 @@ public:
 		//Output: contains the current speeds and positions of any given moment of time
 		return m_CurrentVelocities;
 	}
+	#pragma region _advanced_sensor_methods_
+	bool Sim_SupportVision() const
+	{
+		#ifdef __UseLegacySimulation__
+		return false;
+		#else
+		return true;
+		#endif
+	}
+	Vec2D Vision_GetCurrentPosition() const
+	{
+		#ifdef __UseLegacySimulation__
+		return Vec2D(0, 0);
+		#else
+		return m_AdvancedSensors.Vision_GetCurrentPosition();
+		#endif
+	}
+	bool Sim_SupportHeading() const
+	{
+		#ifdef __UseLegacySimulation__
+		return false;
+		#else
+		return true;
+		#endif
+	}
+	double GyroMag_GetCurrentHeading() const
+	{
+		#ifdef __UseLegacySimulation__
+		return 0.0;
+		#else
+		return m_AdvancedSensors.GyroMag_GetCurrentHeading();
+		#endif
+	}
+	#pragma endregion
 };
 #pragma endregion
 #pragma region _wrapper methods_
@@ -1826,6 +1881,21 @@ const SwerveVelocities &SimulatedOdometry::GetCurrentVelocities() const
 {
 	return m_simulator->GetCurrentVelocities();
 }
-
+bool SimulatedOdometry::Sim_SupportVision() const
+{
+	return m_simulator->Sim_SupportVision();
+}
+Vec2D SimulatedOdometry::Vision_GetCurrentPosition() const
+{
+	return m_simulator->Vision_GetCurrentPosition();
+}
+bool SimulatedOdometry::Sim_SupportHeading() const
+{
+	return m_simulator->Sim_SupportHeading();
+}
+double SimulatedOdometry::GyroMag_GetCurrentHeading() const
+{
+	return m_simulator->GyroMag_GetCurrentHeading();
+}
 #pragma endregion
 }}

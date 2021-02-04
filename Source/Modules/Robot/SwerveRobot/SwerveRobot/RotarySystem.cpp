@@ -1288,7 +1288,7 @@ public:
 	{
 		m_VoltageCallback = callback;
 	}
-	void SetOdometryCallback(std::function<double()> callback)
+	void SetOdometryVelocityCallback(std::function<double()> callback)
 	{
 		m_OdometryCallack = callback;
 	}
@@ -1380,7 +1380,7 @@ public:
 	{
 		m_VoltageCallback = callback;
 	}
-	void SetOdometryCallback(std::function<double()> callback)
+	void SetOdometryVelocityCallback(std::function<double()> callback)
 	{
 		m_OdometryCallack = callback;
 	}
@@ -1434,9 +1434,9 @@ void RotarySystem_Position::Set_UpdateCurrentVoltage(std::function<void(double n
 {
 	m_rotary_system->Set_UpdateCurrentVoltage(callback);
 }
-void RotarySystem_Position::SetOdometryCallback(std::function<double()> callback)
+void RotarySystem_Position::SetOdometryVelocityCallback(std::function<double()> callback)
 {
-	m_rotary_system->SetOdometryCallback(callback);
+	m_rotary_system->SetOdometryVelocityCallback(callback);
 }
 void RotarySystem_Position::SetExternal_PID_Monitor_Callback(std::function<PID_Monitor_proto> callback)
 {
@@ -1472,9 +1472,9 @@ void RotarySystem_Velocity::Set_UpdateCurrentVoltage(std::function<void(double n
 {
 	m_rotary_system->Set_UpdateCurrentVoltage(callback);
 }
-void RotarySystem_Velocity::SetOdometryCallback(std::function<double()> callback)
+void RotarySystem_Velocity::SetOdometryVelocityCallback(std::function<double()> callback)
 {
-	m_rotary_system->SetOdometryCallback(callback);
+	m_rotary_system->SetOdometryVelocityCallback(callback);
 }
 void RotarySystem_Velocity::SetExternal_PID_Monitor_Callback(std::function<PID_Monitor_proto> callback)
 {
