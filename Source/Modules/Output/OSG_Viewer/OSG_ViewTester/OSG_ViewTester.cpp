@@ -43,12 +43,15 @@ static void DisplayHelp()
 		"cls\n"
 		"Zoom <size usually 100>\n"
 		"test <test name or number>\n"
+		"init <--use to display entities\n"
 		"start\n"
 		"stop\n"
 		"pos <feet x> <feet y> \n"
 		"vel <index> <degrees>\n"
 		"turn <degrees>\n"
 		"heading <degrees>\n"
+		"select <entity to manipulate>\n"
+		"keyboard <turn on test=1>\n"
 		"Help (displays this)\n"
 		"\nType \"Quit\" at anytime to exit this application\n"
 	);
@@ -68,6 +71,7 @@ class EntityTest
 private:
 	Entity_UI m_Robot;
 	Entity_UI::Entity_State m_current_state = {};
+	bool m_TestKeyboard = false;
 public:
 	void init()
 	{
@@ -89,6 +93,14 @@ public:
 	Entity_UI &As_EntityUI()
 	{
 		return m_Robot;
+	}
+	bool Get_TestingKeyboard() const
+	{
+		return m_TestKeyboard;
+	}
+	void Set_TestingKeyboard(bool test)
+	{
+		m_TestKeyboard = test;
 	}
 };
 
@@ -153,11 +165,14 @@ private:
 				{
 					//any updates can go here to the current state
 					//--- here  (optional)
-					//we can get an idea of how the keyboard state works by adding the state multipliers to the position
-					//and attitude
-					m_Entity.get_current_state_rw().Att_r = m_Keyboard.GetState().bits.m_Z * M_PI;
-					m_Entity.get_current_state_rw().Pos_m.x = (m_Keyboard.GetState().bits.m_X * Feet2Meters(3.0)) + Feet2Meters(5);
-					m_Entity.get_current_state_rw().Pos_m.y = m_Keyboard.GetState().bits.m_Y * Feet2Meters(3.0);
+					if (m_Entity.Get_TestingKeyboard())
+					{
+						//we can get an idea of how the keyboard state works by adding the state multipliers to the position
+						//and attitude
+						m_Entity.get_current_state_rw().Att_r = m_Keyboard.GetState().bits.m_Z * M_PI;
+						m_Entity.get_current_state_rw().Pos_m.x = (m_Keyboard.GetState().bits.m_X * Feet2Meters(3.0)) + Feet2Meters(5);
+						m_Entity.get_current_state_rw().Pos_m.y = m_Keyboard.GetState().bits.m_Y * Feet2Meters(3.0);
+					}
 				}
 				//give the robot its time slice to process them
 				m_Robot.As_SwerveRobot_UI().TimeChange(dTime_s);
@@ -236,6 +251,11 @@ bool CommandLineInterface()
 	OSG_Viewer viewer_test;  //setup our viewer now
 	viewer_test.init();
 	EntityManager em(viewer_test);
+	enum class selection
+	{
+		eRobot,
+		eEntity
+	} m_selection=selection::eRobot;
 	while (prompt(), cin.getline(input_line, 128))
 	{
 		//init args
@@ -269,21 +289,72 @@ bool CommandLineInterface()
 			}
 			else if (!_strnicmp(input_line, "pos", 3))
 			{
-				em.As_SwerveRobotTest().get_current_state_rw().Pos_m.x = Feet2Meters(atof(str_1));
-				em.As_SwerveRobotTest().get_current_state_rw().Pos_m.y = Feet2Meters(atof(str_2));
+				switch (m_selection)
+				{
+				case selection::eRobot:
+					em.As_SwerveRobotTest().get_current_state_rw().Pos_m.x = Feet2Meters(atof(str_1));
+					em.As_SwerveRobotTest().get_current_state_rw().Pos_m.y = Feet2Meters(atof(str_2));
+					break;
+				case selection::eEntity:
+					em.As_EntityTest().get_current_state_rw().Pos_m.x = Feet2Meters(atof(str_1));
+					em.As_EntityTest().get_current_state_rw().Pos_m.y = Feet2Meters(atof(str_2));
+					break;
+				}
 			}
 			else if (!_strnicmp(input_line, "vel", 3))
 			{
-				size_t index = atoi(str_1);
-				em.As_SwerveRobotTest().get_current_state_rw().SwerveVelocitiesFromIndex[index] = DEG_2_RAD(atof(str_2));
+				if (m_selection == selection::eRobot)
+				{
+					size_t index = atoi(str_1);
+					em.As_SwerveRobotTest().get_current_state_rw().SwerveVelocitiesFromIndex[index] = DEG_2_RAD(atof(str_2));
+				}
+				else
+					printf("Current selection not supported\n");
 			}
 			else if (!_strnicmp(input_line, "turn", 4))
 			{
-				em.As_SwerveRobotTest().get_current_state_rw().Att_r = DEG_2_RAD(atof(str_1));
+				switch (m_selection)
+				{
+				case selection::eRobot:
+					em.As_SwerveRobotTest().get_current_state_rw().Att_r = DEG_2_RAD(atof(str_1));
+					break;
+				case selection::eEntity:
+					em.As_EntityTest().get_current_state_rw().Att_r = DEG_2_RAD(atof(str_1));
+					break;
+				}
 			}
 			else if (!_strnicmp(input_line, "heading", 6))
 			{
-				em.As_SwerveRobotTest().get_current_state_rw().IntendedOrientation = DEG_2_RAD(atof(str_1));
+				switch (m_selection)
+				{
+				case selection::eRobot:
+					em.As_SwerveRobotTest().get_current_state_rw().IntendedOrientation = DEG_2_RAD(atof(str_1));
+					break;
+				case selection::eEntity:
+					em.As_EntityTest().get_current_state_rw().IntendedOrientation = DEG_2_RAD(atof(str_1));
+					break;
+				}
+			}
+			else if (!_strnicmp(input_line, "select", 3))
+			{
+				size_t index = atoi(str_1);
+				m_selection = (selection)index;
+				const char* entity = "unknown";
+				switch (m_selection)
+				{
+				case selection::eRobot:
+					entity = "Swerve Robot";
+					break;
+				case selection::eEntity:
+					entity = "Entity";
+					break;
+				}
+				printf("selection=%s\n",entity);
+			}
+			else if (!_strnicmp(input_line, "keyboard", 3))
+			{
+				size_t index = atoi(str_1);
+				em.As_EntityTest().Set_TestingKeyboard(index == 0 ? false : true);
 			}
 			else if (!_strnicmp(input_line, "Exit", 4))
 			{
