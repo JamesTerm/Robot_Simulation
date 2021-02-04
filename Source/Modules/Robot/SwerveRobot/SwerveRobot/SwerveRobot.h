@@ -49,7 +49,9 @@ public:
 
 	//accessors ------
 	Vec2D GetCurrentPosition() const;
+	const Vec2D &Get_OdometryCurrentPosition() const; //allow client to access odometry method for position to hook (if supported see Get_SupportOdometryPosition)
 	double GetCurrentHeading() const;
+	double Get_OdometryCurrentHeading() const; //allow client to access odometry method of heading as well
 	const SwerveVelocities &GetCurrentVelocities() const;  //access to odometry readings
 	const SwerveVelocities &GetSimulatedVelocities() const; //explicit access to simulations velocities
 	const SwerveVelocities &GetCurrentVoltages() const;    //access to voltage writings
@@ -58,6 +60,8 @@ public:
 	bool GetIsDrivenLinear() const; //returns if its driving or driven (false by default)
 	bool GetIsDrivenAngular() const; //returns if its driving or driven (false by default)
 	double Get_IntendedOrientation() const; //Get set point heading where 0 is north in radians
+	bool Get_SupportOdometryPosition() const; //provide query of vision support
+	bool Get_SupportOdometryHeading() const; //same for heading 
 
 	//callbacks ------
 	//Linker callbacks:  This will link a type of entity object to be updated with the output of this module to the input

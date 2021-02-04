@@ -16,6 +16,7 @@ namespace registry_v1
 #define Rg_(x) const char * const csz_##x = #x;
 
 	Rg_(Build_bypass_simulation)
+	Rg_(Build_hook_simulation)
 
 #pragma region _prefix section_
 	//instance named prefix for each wheel front, and rear... of left and right, left is port side, right starboard

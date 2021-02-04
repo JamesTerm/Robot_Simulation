@@ -1588,6 +1588,11 @@ public:
 			m_Encoders[i].ResetPos();
 		m_Payload.ResetVectors();
 	}
+	const Framework::Base::PhysicsEntity_2D& GetPayload() const
+	{
+		//read access for advanced sensors to use
+		return m_Payload;
+	}
 };
 #endif  //If __UseLegacySimulation__
 #pragma endregion
@@ -1623,6 +1628,25 @@ private:
 	public:
 		AdvancedSensors(SimulatedOdometry_Internal* parent) : m_pParent(parent)
 		{
+		}
+		void TimeSlice(double d_time_s)
+		{
+			using namespace Framework::Base;
+			//grab our velocities
+			const Framework::Base::PhysicsEntity_2D& payload = m_pParent->m_EncoderSim4.GetPayload();
+			const double AngularVelocity = payload.GetAngularVelocity();
+			//update our heading
+			m_current_heading += AngularVelocity * d_time_s;
+			//With latest heading we can adjust our position delta to proper heading
+			const Vec2D local_velocity = payload.GetLinearVelocity();
+			const Vec2D global_velocity = LocalToGlobal(m_current_heading, local_velocity);
+			//Now we can advance with the global
+			m_current_position += global_velocity * d_time_s;
+		}
+		void Reset()
+		{
+			m_current_position = Vec2D(0.0, 0.0);
+			m_current_heading = 0.0;
 		}
 		Vec2D Vision_GetCurrentPosition() const
 		{
@@ -1733,6 +1757,7 @@ public:
 				m_Potentiometers[i].ResetPos();
 			}
 			#else
+			m_AdvancedSensors.Reset();
 			#endif
 		}
 	}
@@ -1808,6 +1833,7 @@ public:
 			#else
 			//Ensure potentiometers are updated before calling sim4
 			m_EncoderSim4.TimeChange(d_time_s);
+			m_AdvancedSensors.TimeSlice(d_time_s);
 			#endif
 		}
 	}

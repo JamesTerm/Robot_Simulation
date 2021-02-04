@@ -54,7 +54,44 @@ private:
 	#pragma region _member variables_
 	Framework::Base::asset_manager m_properties;
 	properties::script_loader m_script_loader;
-	Module::Localization::Entity2D m_Entity;
+	class LocalizationOverride : public	Module::Localization::Entity2D
+	{
+	private:
+		Test_Swerve_Properties* m_pParent;
+		bool m_SupportOdometryHeading=false;
+		bool m_SupportOdometryPosition = false;
+	public:
+		LocalizationOverride(Test_Swerve_Properties *parent) : m_pParent(parent)
+		{
+		}
+		void SetSupportOdometryHeading(bool use_it)
+		{
+			m_SupportOdometryHeading = use_it;
+		}
+		void SetSupportOdometryPosition(bool use_it)
+		{
+			m_SupportOdometryPosition = use_it;
+		}
+
+		virtual Vector2D GetCurrentPosition() const
+		{
+			if (m_SupportOdometryPosition)
+			{
+				const Vec2D will_fix= m_pParent->m_robot.GetCurrentPosition();
+				const Vector2D result = { will_fix.x(), will_fix.y() };
+				return result;
+			}
+			else
+				return Module::Localization::Entity2D::GetCurrentPosition();
+		}
+		virtual double GetCurrentHeading() const
+		{
+			if (m_SupportOdometryHeading)
+				return m_pParent->m_robot.GetCurrentHeading();
+			else
+				return Module::Localization::Entity2D::GetCurrentHeading();
+		}
+	}	m_Entity=this;
 	//Here we can choose which motion control to use, this works because the interface
 	//between them remain (mostly) identical
 	Module::Input::dx_Joystick m_joystick;  //Note: always late binding, so we can aggregate direct easy here
@@ -399,6 +436,23 @@ public:
 		m_script_loader.load_script(m_properties);
 		InitControllers();
 		m_robot.Init(&m_properties);
+		//if we have position odometry hooked, we'll use it instead
+		if (m_robot.Get_SupportOdometryPosition())
+		{
+			m_Entity.SetSupportOdometryPosition(true);
+			m_robot.Set_GetCurrentPosition([&]() -> Vec2D
+			{
+				return m_robot.Get_OdometryCurrentPosition();
+			});
+		}
+		if (m_robot.Get_SupportOdometryHeading())
+		{
+			m_Entity.SetSupportOdometryHeading(true);
+			m_robot.Set_GetCurrentHeading([&]()
+			{ 
+				return m_robot.Get_OdometryCurrentHeading();
+			});
+		}
 		m_viewer.init();
 		m_RobotUI.Initialize();
 		m_FieldCentricDrive = m_properties.get_bool(properties::registry_v1::csz_Drive_UseFieldCentric, false);

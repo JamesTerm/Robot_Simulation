@@ -791,6 +791,7 @@ public:
 		//compatible, as the bypass simulation option itself is
 		#if 1
 		assets.put_bool(csz_Build_bypass_simulation, false);
+		assets.put_bool(csz_Build_hook_simulation, true);  //false for real robot
 		#else
 		assets.put_bool(csz_Build_bypass_simulation, true);
 		#endif

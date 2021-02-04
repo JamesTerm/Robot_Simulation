@@ -37,8 +37,8 @@ public:
 		double x, y;
 	};
 	Vector2D GetCurrentVelocity() const;  //returns the current velocity in raw global form
-	Vector2D GetCurrentPosition() const;  //returns x y coordinates of current position
-	double GetCurrentHeading() const;  //returns heading where 0 is north in radians
+	virtual Vector2D GetCurrentPosition() const;  //returns x y coordinates of current position
+	virtual double GetCurrentHeading() const;  //returns heading where 0 is north in radians
 	double GetCurrentAngularVelocity() const; //radians per second
 
 private:
