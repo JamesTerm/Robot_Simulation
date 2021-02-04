@@ -52,6 +52,7 @@ static void DisplayHelp()
 		"heading <degrees>\n"
 		"select <entity to manipulate>\n"
 		"keyboard <turn on test=1>\n"
+		"props <bind to override=1> \n"
 		"Help (displays this)\n"
 		"\nType \"Quit\" at anytime to exit this application\n"
 	);
@@ -71,6 +72,14 @@ class EntityTest
 private:
 	Entity_UI m_Robot;
 	Entity_UI::Entity_State m_current_state = {};
+	using Vector2D = Entity_UI::Vector2D;
+	//properties
+	std::string m_entity_name="localizaion_retical";
+	Vector2D m_Dimensions = { 0.25,0.25 };            //x-width, y-length in meters
+	Vector2D m_Character_Dimensions = {3.0,1.0};  //font dimensions
+	const char* m_TextImage = "-O-";
+	Entity_UI::Entity_Properties m_props = {m_entity_name,m_Dimensions,m_Character_Dimensions,m_TextImage};
+	//----------
 	bool m_TestKeyboard = false;
 public:
 	void init()
@@ -101,6 +110,15 @@ public:
 	void Set_TestingKeyboard(bool test)
 	{
 		m_TestKeyboard = test;
+	}
+	void BindProperties(bool hook_override)
+	{
+		if (hook_override)
+		{
+			m_Robot.SetProperties_Callback([&]() {return m_props; });
+		}
+		else
+			m_Robot.SetProperties_Callback(nullptr);
 	}
 };
 
@@ -355,6 +373,11 @@ bool CommandLineInterface()
 			{
 				size_t index = atoi(str_1);
 				em.As_EntityTest().Set_TestingKeyboard(index == 0 ? false : true);
+			}
+			else if (!_strnicmp(input_line, "props", 5))
+			{
+				size_t index = atoi(str_1);
+				em.As_EntityTest().BindProperties(index == 0 ? false : true);
 			}
 			else if (!_strnicmp(input_line, "Exit", 4))
 			{

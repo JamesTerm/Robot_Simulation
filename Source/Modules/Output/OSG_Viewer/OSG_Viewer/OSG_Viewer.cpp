@@ -4448,6 +4448,12 @@ protected:
 			osgText::Text *Text = dynamic_cast<osgText::Text *>(draw);
 			if (Text)
 			{
+				//See if we have our instance here:
+				if (Text == m_Text)
+				{
+					//ensure text has latest... will implicitly check for changes
+					Text->setText(m_TextImage);
+				}
 				//Note copy it for the vec... since it is volatile there is only one read to it now
 				osg::Vec2d Position = m_EntityProperties_Interface->GetPos_m();
 				double Heading = m_EntityProperties_Interface->GetAtt_r();
@@ -5079,7 +5085,7 @@ public:
 	using Entity_State = Entity_UI::Entity_State;
 	static Entity_State DefaultRobotState()
 	{
-		static Entity_State::Vector2D Pos_m;
+		static Entity_UI::Vector2D Pos_m;
 		static double IntendedOrientation;
 		Entity_State ret =
 		{ Pos_m,  0,
@@ -5089,26 +5095,21 @@ public:
 	}
 	#pragma endregion
 	#pragma region _entity properties_
-	struct Entity_Properties
-	{
-		//EPI references these
-		std::string &entity_name;     //EPIrrksa
-		Vec2D &Dimensions;            //EPIrrksa   x-width, y-length in meters
-		Vec2D &Character_Dimensions;  //EPIrrksa
-		std::string text_image;
-	};
+	using Entity_Properties = Module::Output::Entity_UI::Entity_Properties;
 	//Note: this makes it possible to not need a callback, and provides a good template for new client code
 	static Entity_Properties DefaultRobotProps()
 	{
 		static std::string entity_name = "default";
-		static Vec2D Dimensions = Vec2D(0.5,0.5);  //width, length (this is how it is in TestShip.lua)
-		static Vec2D Character_Dimensions = Vec2D(7.0, 2.0);  //width, length (font chars not robot's (27.5, 19.5))
-
+		const Vec2D Dimensions = Vec2D(0.5,0.5);  //width, length (this is how it is in TestShip.lua)
+		const Vec2D Character_Dimensions = Vec2D(7.0, 2.0);  //width, length (font chars not robot's (27.5, 19.5))
+		using Vector2D = Module::Output::Entity_UI::Vector2D;
+		static Vector2D s_Dimensions={ Dimensions.x(),Dimensions.y() };
+		static Vector2D s_Character_Dimenstion = { Character_Dimensions.x(),Character_Dimensions.y() };
 		Entity_Properties ret =
 		{
 			entity_name,
-			Dimensions,
-			Character_Dimensions,
+			s_Dimensions,
+			s_Character_Dimenstion,
 			"/^\\\n-||X||-"
 		};
 		return ret;
@@ -5120,6 +5121,7 @@ private:
 	std::function<Entity_State()> m_Entity = DefaultRobotState;
 	std::function<Entity_Properties()> m_Entity_props = DefaultRobotProps;
 	mutable Vec2D m_Pos_m;  //for backward compatibility
+	mutable Vec2D m_Dimensions; //---same
 	mutable double m_IntendedOrientation;
 	#pragma endregion
 	#pragma region _EntityPropertiesInterface_
@@ -5144,7 +5146,7 @@ protected: //from EntityPropertiesInterface
 		{
 			//setup our actor
 			m_Actor = new Actor_Text(m_Entity_props().text_image.c_str());
-			m_Actor->GetCharacterDimensions() = m_Entity_props().Character_Dimensions;
+			m_Actor->GetCharacterDimensions() = Vec2D(m_Entity_props().Character_Dimensions.x, m_Entity_props().Character_Dimensions.y);
 			//This can be removed if we do not want to see this image
 			m_Actor->Init_IntendedOrientation();
 			//Bind the EPI with its actor
@@ -5155,12 +5157,17 @@ protected: //from EntityPropertiesInterface
 			//since we are calling directly here... do not need to call this
 			//m_Actor->UpdateScene_Additional(geode, true); //Add any additional nodes
 		}
+		else
+		{
+			m_Actor->GetTextImage() = m_Entity_props().text_image.c_str();
+			m_Actor->GetCharacterDimensions() = Vec2D(m_Entity_props().Character_Dimensions.x, m_Entity_props().Character_Dimensions.y);
+		}
 	}
 	//Implement with our callback, not going to force a coupling with entity 2D
 	virtual const Vec2D &GetPos_m() const
 	{
 		//Note: this is backward compatible so I am not too worried about the conversion
-		Entity_State::Vector2D Pos_m = m_Entity().Pos_m;
+		Entity_UI::Vector2D Pos_m = m_Entity().Pos_m;
 		m_Pos_m = Vec2D(Pos_m.x, Pos_m.y);
 		return m_Pos_m;
 	}
@@ -5174,7 +5181,9 @@ protected: //from EntityPropertiesInterface
 	}
 	virtual const Vec2D &GetDimensions() const
 	{
-		return m_Entity_props().Dimensions;
+		Entity_UI::Vector2D Dimensions = m_Entity_props().Dimensions;
+		m_Dimensions = Vec2D(Dimensions.x, Dimensions.y);
+		return m_Dimensions;
 	}
 	virtual const double &GetIntendedOrientation() const
 	{
@@ -5188,10 +5197,13 @@ public:
 	{
 		m_Entity = callback;
 	}
-	//TODO expose Entity_Properties
+
 	void SetEntity_props_Callback(std::function<Entity_Properties()> callback)
 	{
-		m_Entity_props = callback;
+		if (callback)
+			m_Entity_props = callback;
+		else
+			m_Entity_props = DefaultRobotProps;
 	}
 	//Be sure to set callback before initialize
 	virtual void Initialize()
@@ -6420,6 +6432,11 @@ void Entity_UI::SetEntity_Callback(std::function<Entity_State()> callback)
 {
 	m_Robot->SetEntity_Callback(callback);
 }
+void Entity_UI::SetProperties_Callback(std::function<Entity_Properties()> callback)
+{
+	m_Robot->SetEntity_props_Callback(callback);
+}
+
 void Entity_UI::UpdateScene(void *geode, bool AddOrRemove)
 {
 	m_Robot->As_EPI().UpdateScene((osg::Geode *)geode, AddOrRemove);
