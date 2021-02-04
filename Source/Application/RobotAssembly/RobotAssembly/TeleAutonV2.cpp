@@ -54,44 +54,6 @@ private:
 	#pragma region _member variables_
 	Framework::Base::asset_manager m_properties;
 	properties::script_loader m_script_loader;
-	class LocalizationOverride : public	Module::Localization::Entity2D
-	{
-	private:
-		Test_Swerve_Properties* m_pParent;
-		bool m_SupportOdometryHeading=false;
-		bool m_SupportOdometryPosition = false;
-	public:
-		LocalizationOverride(Test_Swerve_Properties *parent) : m_pParent(parent)
-		{
-		}
-		void SetSupportOdometryHeading(bool use_it)
-		{
-			m_SupportOdometryHeading = use_it;
-		}
-		void SetSupportOdometryPosition(bool use_it)
-		{
-			m_SupportOdometryPosition = use_it;
-		}
-
-		virtual Vector2D GetCurrentPosition() const
-		{
-			if (m_SupportOdometryPosition)
-			{
-				const Vec2D will_fix= m_pParent->m_robot.GetCurrentPosition();
-				const Vector2D result = { will_fix.x(), will_fix.y() };
-				return result;
-			}
-			else
-				return Module::Localization::Entity2D::GetCurrentPosition();
-		}
-		virtual double GetCurrentHeading() const
-		{
-			if (m_SupportOdometryHeading)
-				return m_pParent->m_robot.GetCurrentHeading();
-			else
-				return Module::Localization::Entity2D::GetCurrentHeading();
-		}
-	}	m_Entity=this;
 	//Here we can choose which motion control to use, this works because the interface
 	//between them remain (mostly) identical
 	Module::Input::dx_Joystick m_joystick;  //Note: always late binding, so we can aggregate direct easy here
@@ -135,18 +97,95 @@ private:
 
 	bool m_IsStreaming = false;
 	bool m_FieldCentricDrive = false;
+	class AdvancedOdometry
+	{
+	private:
+		Test_Swerve_Properties* m_pParent;
+		class LocalizationOverride : public	Module::Localization::Entity2D
+		{
+		private:
+			Test_Swerve_Properties* m_pParent;
+			bool m_SupportOdometryHeading = false;
+			bool m_SupportOdometryPosition = false;
+		public:
+			LocalizationOverride(Test_Swerve_Properties* parent) : m_pParent(parent)
+			{
+			}
+			void SetSupportOdometryHeading(bool use_it)
+			{
+				m_SupportOdometryHeading = use_it;
+			}
+			void SetSupportOdometryPosition(bool use_it)
+			{
+				m_SupportOdometryPosition = use_it;
+			}
+
+			virtual Vector2D GetCurrentPosition() const
+			{
+				if (m_SupportOdometryPosition)
+				{
+					const Vec2D will_fix = m_pParent->m_robot.GetCurrentPosition();
+					const Vector2D result = { will_fix.x(), will_fix.y() };
+					return result;
+				}
+				else
+					return Module::Localization::Entity2D::GetCurrentPosition();
+			}
+			virtual double GetCurrentHeading() const
+			{
+				if (m_SupportOdometryHeading)
+					return m_pParent->m_robot.GetCurrentHeading();
+				else
+					return Module::Localization::Entity2D::GetCurrentHeading();
+			}
+		}	m_Entity;
+
+	public:
+		AdvancedOdometry(Test_Swerve_Properties* parent) : m_Entity(parent),m_pParent(parent)
+		{
+		}
+		void Init(const Framework::Base::asset_manager* asset_properties = nullptr)
+		{
+			Module::Robot::SwerveRobot& robot = m_pParent->m_robot;
+			//if we have position odometry hooked, we'll use it instead
+			if (robot.Get_SupportOdometryPosition())
+			{
+				m_Entity.SetSupportOdometryPosition(true);
+				robot.Set_GetCurrentPosition([&]() -> Vec2D
+				{
+					return robot.Get_OdometryCurrentPosition();
+				});
+			}
+			if (robot.Get_SupportOdometryHeading())
+			{
+				m_Entity.SetSupportOdometryHeading(true);
+				robot.Set_GetCurrentHeading([&]()
+				{
+					return robot.Get_OdometryCurrentHeading();
+				});
+			}
+		}
+		Module::Localization::Entity2D& GetEntity()
+		{
+			return m_Entity;
+		}
+	} m_Advanced_Odometry=this;
 	#pragma endregion
 
+	Module::Localization::Entity2D& GetEntity()
+	{
+		return m_Advanced_Odometry.GetEntity();
+	}
 	void UpdateVariables()
 	{
-		Module::Localization::Entity2D &entity = m_Entity;
+		Module::Localization::Entity2D &entity = GetEntity();
 		using namespace Module::Localization;
 		const Entity2D::Vector2D linear_velocity = entity.GetCurrentVelocity();
 		Vec2D velocity_normalized(linear_velocity.x, linear_velocity.y);
 		double magnitude = velocity_normalized.normalize();
 		//Entity variables-------------------------------------------
 		SmartDashboard::PutNumber("Velocity", Meters2Feet(magnitude));
-		SmartDashboard::PutNumber("Rotation Velocity", m_Entity.GetCurrentAngularVelocity());
+		SmartDashboard::PutNumber("Rotation Velocity", GetEntity().GetCurrentAngularVelocity());
 		Entity2D::Vector2D position = entity.GetCurrentPosition();
 		SmartDashboard::PutNumber("X_ft", Meters2Feet(position.x));
 		m_current_state.bits.Pos_m.x = position.x;
@@ -261,7 +300,7 @@ private:
 		//Update the predicted motion for this time slice
 		m_robot.SimulatorTimeSlice(dTime_s);
 		m_robot.TimeSlice(dTime_s);
-		m_Entity.TimeSlice(dTime_s);
+		GetEntity().TimeSlice(dTime_s);
 		UpdateVariables();
 	}
 
@@ -298,21 +337,21 @@ private:
 			#pragma region _Robot Entity Linking_
 			//Now to link up the callbacks for the robot motion control:  Note we can link them up even if we are not using it
 			m_robot.Set_UpdateGlobalVelocity([&](const Vec2D &new_velocity)
-			{	m_Entity.SetLinearVelocity_global(new_velocity.y(), new_velocity.x());
+			{	GetEntity().SetLinearVelocity_global(new_velocity.y(), new_velocity.x());
 			});
 			m_robot.Set_UpdateHeadingVelocity([&](double new_velocity)
-			{	m_Entity.SetAngularVelocity(new_velocity);
+			{	GetEntity().SetAngularVelocity(new_velocity);
 			});
 			m_robot.Set_GetCurrentPosition([&]() -> Vec2D
 			{
 				//This is a bit annoying, but for the sake of keeping modules independent (not dependent on vector objects)
 				//its worth the hassle
-				Vec2D ret = Vec2D(m_Entity.GetCurrentPosition().x, m_Entity.GetCurrentPosition().y);
+				Vec2D ret = Vec2D(GetEntity().GetCurrentPosition().x, GetEntity().GetCurrentPosition().y);
 				return ret;
 			});
 			m_robot.Set_GetCurrentHeading([&]() -> double
 			{
-				return m_Entity.GetCurrentHeading();
+				return GetEntity().GetCurrentHeading();
 			});
 			m_robot.SetExternal_Velocity_PID_Monitor_Callback(
 				[](double Voltage, double  CurrentVelocity, double  Encoder_Velocity, double  ErrorOffset, double  CalibratedScaler)
@@ -406,7 +445,7 @@ public:
 	}
 	void Reset()
 	{
-		m_Entity.Reset();
+		GetEntity().Reset();
 		m_robot.Reset();
 		m_Keyboard.Reset();
 	}
@@ -436,23 +475,7 @@ public:
 		m_script_loader.load_script(m_properties);
 		InitControllers();
 		m_robot.Init(&m_properties);
-		//if we have position odometry hooked, we'll use it instead
-		if (m_robot.Get_SupportOdometryPosition())
-		{
-			m_Entity.SetSupportOdometryPosition(true);
-			m_robot.Set_GetCurrentPosition([&]() -> Vec2D
-			{
-				return m_robot.Get_OdometryCurrentPosition();
-			});
-		}
-		if (m_robot.Get_SupportOdometryHeading())
-		{
-			m_Entity.SetSupportOdometryHeading(true);
-			m_robot.Set_GetCurrentHeading([&]()
-			{ 
-				return m_robot.Get_OdometryCurrentHeading();
-			});
-		}
+		m_Advanced_Odometry.Init(&m_properties);
 		m_viewer.init();
 		m_RobotUI.Initialize();
 		m_FieldCentricDrive = m_properties.get_bool(properties::registry_v1::csz_Drive_UseFieldCentric, false);
