@@ -29,7 +29,7 @@
 #endif
 #endif
 
-#define __TestPID__
+//#define __TestPID__
 
 #ifndef __TestPID__
 #define cout(x,...) printf(x,__VA_ARGS__);
@@ -179,6 +179,29 @@ void Test_Turn(Module::Robot::SwerveRobot& robot)
 	cout("------------------------------------------------------ turn 45\n");
 }
 
+void Test_Centripetal(Module::Robot::SwerveRobot& robot)
+{
+	for (size_t i = 0; i < 100; i++)
+	{
+		robot.SetLinearVelocity_local(3.12, 0.0);  //up to top speed
+		TimeSlice(robot); //update a time slice
+		//cout("position=%.2f, x=%.2f\n", Meters2Feet( _robot.GetCurrentPosition().y()), Meters2Feet( _robot.GetCurrentPosition().x()));
+		cout("angle=%.2f,position y=%.2f\n", RAD_2_DEG(robot.GetCurrentVelocities().Velocity.AsArray[4]), Meters2Feet(robot.GetCurrentPosition().y()));
+	}
+	cout("------------------------------------------------------ up 45\n");
+	for (size_t i = 0; i < 50; i++)
+	{
+		robot.SetAngularVelocity(8.0);
+		TimeSlice(robot); //update a time slice
+		//cout("heading=%.2f\n", RAD_2_DEG( _robot.GetCurrentHeading()));
+		cout("pos[%.2f,%.2f],heading =%.2f,gyro=%.2f,e=%.2f\n", 
+			Meters2Feet(robot.GetCurrentPosition().x()), Meters2Feet(robot.GetCurrentPosition().y()), RAD_2_DEG(robot.GetCurrentHeading()),
+			RAD_2_DEG(robot.Get_OdometryCurrentHeading()), Meters2Feet(robot.GetCurrentVelocities().Velocity.AsArray[0])
+		);
+	}
+	cout("------------------------------------------------------ turn fast\n");
+
+}
 int main()
 {
 	using namespace Module::Robot;
@@ -206,21 +229,23 @@ int main()
 	_robot.Init(&properties);
 	#endif
 	_robot.SetAngularVelocity(0.0);
-
 	#if 1
+	Test_Centripetal(_robot);
+	#endif
+	#if 0
 	up_down_test(_robot);
 	strafe_test(_robot);
 	#endif
-	#if 1
+	#if 0
 	Test_Turn(_robot);
 	#endif
-	#if 1
+	#if 0
 	strafe_box_test(_robot);
 	strafe_box_test(_robot);
 	strafe_box_test(_robot,true);
 	strafe_box_test(_robot,true);
 	#endif
-	#if 1
+	#if 0
 	diagonal_test(_robot,1.6,1.0, 32);
 	stop_test(_robot, 32);
 	#endif
