@@ -382,7 +382,7 @@ public:
 	}
 	void Init(const Framework::Base::asset_manager *asset_properties)
 	{
-		if (asset_properties->get_bool(properties::registry_v1::csz_Build_hook_simulation,false))
+		if ((asset_properties) && (asset_properties->get_bool(properties::registry_v1::csz_Build_hook_simulation,false)))
 		{
 			if (m_Simulation.Sim_SupportHeading())
 			{
