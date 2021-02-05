@@ -22,6 +22,7 @@
 #include "../../../Modules/Robot/SwerveRobot/SwerveRobot/SwerveRobot.h"
 #include "../../../Modules/Output/OSG_Viewer/OSG_Viewer/OSG_Viewer.h"
 #include "../../../Modules/Output/OSG_Viewer/OSG_Viewer/SwerveRobot_UI.h"
+#include "../../../Modules/Output/OSG_Viewer/OSG_Viewer/Entity_UI.h"
 #include "../../../Modules/Output/OSG_Viewer/OSG_Viewer/Keyboard_State.h"
 #include "../../../Modules/Output/SmartDashboard_PID_Monitor.h"
 #include "../../../Properties/script_loader.h"
@@ -160,6 +161,52 @@ private:
 
 		}	m_Entity;
 		Module::Robot::SwerveRobot& m_robot;
+		class target_retical
+		{
+		private:
+			using Entity_UI = Module::Output::Entity_UI;
+			Entity_UI m_TargetUI;
+			Entity_UI::Entity_State m_current_state = {};
+			using Vector2D = Entity_UI::Vector2D;
+			//properties
+			std::string m_entity_name = "localizaion_retical";
+			Vector2D m_Dimensions = { 0.25,0.25 };            //x-width, y-length in meters
+			Vector2D m_Character_Dimensions = { 3.0,1.0 };  //font dimensions
+			const char* m_TextImage = "-O-";
+			Entity_UI::Entity_Properties m_props = { m_entity_name,m_Dimensions,m_Character_Dimensions,m_TextImage };
+			bool m_EnableTarget = false;
+		public:
+			void init()
+			{
+				//Anytime robot needs updates link it to our current state
+				m_TargetUI.SetEntity_Callback([&]() {	return m_current_state;	});
+				m_TargetUI.SetProperties_Callback([&]() {return m_props; });
+				//Good to go... now initialize the robot
+				m_TargetUI.Initialize();
+				m_EnableTarget = true;
+			}
+
+			void UpdateState_Position(double xpos,double ypos)
+			{
+				m_current_state.Pos_m.x = xpos;
+				m_current_state.Pos_m.y = ypos;
+			}
+			void UpdateState_Heading(double heading)
+			{
+				m_current_state.Att_r = heading;
+				m_current_state.IntendedOrientation = heading;  //for now keep the same
+			}
+			void TimeSliceLoop(double dTime_s)
+			{
+				m_TargetUI.TimeChange(dTime_s);
+			}
+			void UpdateScene(void* geode)
+			{
+				if (m_EnableTarget)
+					m_TargetUI.UpdateScene(geode, true);
+			}
+
+		} m_target;
 
 		bool Get_SupportOdometryPosition() const
 		{
@@ -175,9 +222,11 @@ private:
 		}
 		void Init(const Framework::Base::asset_manager* asset_properties = nullptr)
 		{
+			size_t tally = 0;
 			//if we have position odometry hooked, we'll use it instead
 			if (Get_SupportOdometryPosition())
 			{
+				tally++;
 				m_Entity.SetSupportOdometryPosition(true);
 				m_robot.Set_GetCurrentPosition([&]() -> Vec2D
 				{
@@ -186,30 +235,44 @@ private:
 			}
 			if (Get_SupportOdometryHeading())
 			{
+				tally++;
 				m_Entity.SetSupportOdometryHeading(true);
 				m_robot.Set_GetCurrentHeading([&]()
 				{
 					return m_robot.Get_OdometryCurrentHeading();
 				});
 			}
+			if (tally == 2)
+				m_target.init();
 		}
 		void UpdateVariables()
 		{
 			using namespace Module::Localization;
 			if (Get_SupportOdometryHeading())
 			{
-				SmartDashboard::PutNumber("predicted_Heading", RAD_2_DEG(m_Entity.GetCurrentHeading(true)));
+				const double heading = m_Entity.GetCurrentHeading(true);
+				SmartDashboard::PutNumber("predicted_Heading", RAD_2_DEG(heading));
+				m_target.UpdateState_Heading(heading);
 			}
 			if (Get_SupportOdometryPosition())
 			{
 				Entity2D::Vector2D position = m_Entity.GetCurrentPosition(true);
 				SmartDashboard::PutNumber("predicted_X_ft", Meters2Feet(position.x));
 				SmartDashboard::PutNumber("predicted_Y_ft", Meters2Feet(position.y));
+				m_target.UpdateState_Position(position.x, position.y);
 			}
 		}
 		Module::Localization::Entity2D& GetEntity()
 		{
 			return m_Entity;
+		}
+		void TimeSliceLoop(double dTime_s)
+		{
+			m_target.TimeSliceLoop(dTime_s);
+		}
+		void UpdateScene(void* geode)
+		{
+			m_target.UpdateScene(geode);
 		}
 	} m_Advanced_Odometry=this;
 	#pragma endregion
@@ -345,6 +408,12 @@ private:
 		m_robot.TimeSlice(dTime_s);
 		GetEntity().TimeSlice(dTime_s);
 		UpdateVariables();
+		m_Advanced_Odometry.TimeSliceLoop(dTime_s);
+	}
+	void UpdateScene(void* geode)
+	{
+		m_RobotUI.UpdateScene(geode, true);
+		m_Advanced_Odometry.UpdateScene(geode);
 	}
 
 	void SetUpHooks(bool enable)
@@ -354,7 +423,7 @@ private:
 		{
 			#pragma region _UI Callbacks_
 			OSG_Viewer &viewer = m_viewer;
-			viewer.SetSceneCallback([&](void *rootNode, void *geode) { m_RobotUI.UpdateScene(geode, true); });
+			viewer.SetSceneCallback([&](void *rootNode, void *geode) { UpdateScene(geode); });
 			//Anytime robot needs updates link it to our current state
 			m_RobotUI.SetSwerveRobot_Callback([&]() {	return m_current_state.bits; });
 			//When viewer updates a frame
