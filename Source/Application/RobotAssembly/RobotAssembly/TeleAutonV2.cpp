@@ -206,8 +206,9 @@ private:
 					m_TargetUI.UpdateScene(geode, true);
 			}
 
-		} m_target;
-
+		} ;
+		std::shared_ptr<target_retical> m_target=nullptr;
+		bool m_Build_sim_prediction_vars = false;
 		bool Get_SupportOdometryPosition() const
 		{
 			return m_robot.Get_SupportOdometryPosition();
@@ -222,6 +223,9 @@ private:
 		}
 		void Init(const Framework::Base::asset_manager* asset_properties = nullptr)
 		{
+			using namespace properties::registry_v1;
+			if ((asset_properties) && (asset_properties->get_bool(csz_Build_sim_prediction_vars, false)))
+				m_Build_sim_prediction_vars = true;
 			size_t tally = 0;
 			//if we have position odometry hooked, we'll use it instead
 			if (Get_SupportOdometryPosition())
@@ -243,7 +247,13 @@ private:
 				});
 			}
 			if (tally == 2)
-				m_target.init();
+			{
+				if ((asset_properties) && (asset_properties->get_bool(csz_Build_sim_target_reticle, false)))
+				{
+					m_target = std::make_shared< target_retical>();
+					m_target->init();
+				}
+			}
 		}
 		void UpdateVariables()
 		{
@@ -251,15 +261,21 @@ private:
 			if (Get_SupportOdometryHeading())
 			{
 				const double heading = m_Entity.GetCurrentHeading(true);
-				SmartDashboard::PutNumber("predicted_Heading", RAD_2_DEG(heading));
-				m_target.UpdateState_Heading(heading);
+				if (m_Build_sim_prediction_vars)
+					SmartDashboard::PutNumber("predicted_Heading", RAD_2_DEG(heading));
+				if (m_target)
+					m_target->UpdateState_Heading(heading);
 			}
 			if (Get_SupportOdometryPosition())
 			{
 				Entity2D::Vector2D position = m_Entity.GetCurrentPosition(true);
-				SmartDashboard::PutNumber("predicted_X_ft", Meters2Feet(position.x));
-				SmartDashboard::PutNumber("predicted_Y_ft", Meters2Feet(position.y));
-				m_target.UpdateState_Position(position.x, position.y);
+				if (m_Build_sim_prediction_vars)
+				{
+					SmartDashboard::PutNumber("predicted_X_ft", Meters2Feet(position.x));
+					SmartDashboard::PutNumber("predicted_Y_ft", Meters2Feet(position.y));
+				}
+				if (m_target)
+					m_target->UpdateState_Position(position.x, position.y);
 			}
 		}
 		Module::Localization::Entity2D& GetEntity()
@@ -268,11 +284,13 @@ private:
 		}
 		void TimeSliceLoop(double dTime_s)
 		{
-			m_target.TimeSliceLoop(dTime_s);
+			if (m_target)
+				m_target->TimeSliceLoop(dTime_s);
 		}
 		void UpdateScene(void* geode)
 		{
-			m_target.UpdateScene(geode);
+			if (m_target)
+				m_target->UpdateScene(geode);
 		}
 	} m_Advanced_Odometry=this;
 	#pragma endregion

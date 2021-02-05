@@ -17,6 +17,8 @@ namespace registry_v1
 
 	Rg_(Build_bypass_simulation)
 	Rg_(Build_hook_simulation)
+	Rg_(Build_sim_prediction_vars)
+	Rg_(Build_sim_target_reticle)
 
 #pragma region _prefix section_
 	//instance named prefix for each wheel front, and rear... of left and right, left is port side, right starboard
