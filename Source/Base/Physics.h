@@ -718,7 +718,14 @@ public:
 	{
 		return m_AngularVelocity;
 	}
-	inline double GetAngularAccelerationDelta(double torque, double Scaler = 1.0)
+	__inline double GetMomentofInertia()
+	{
+		//I=sum(m*r^2) or sum(AngularCoef*m*r^2)
+		const double ROCM_square = m_RadiusOfConcentratedMass * m_RadiusOfConcentratedMass;
+		double ret = (m_AngularInertiaCoefficient * m_EntityMass * ROCM_square);
+		return ret;
+	}
+	__inline double GetAngularAccelerationDelta(double torque, double Scaler = 1.0)
 	{
 		//This will give the acceleration delta given the torque which is: torque / AngularInertiaCoefficient * Mass
 

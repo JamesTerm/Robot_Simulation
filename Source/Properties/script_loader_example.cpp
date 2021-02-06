@@ -399,15 +399,16 @@ private:
 		#pragma region _ship 2d props_
 		//Ship props:
 		const double Mass = 25; //Weight kg
-		const double MaxAccelLeft = 20; 
-		const double MaxAccelRight = 20;
+		//Note: MaxAccel Left and Right also control centripetal force
+		const double MaxAccelLeft = Drive_MaxAccel;
+		const double MaxAccelRight = Drive_MaxAccel;
 		const double MaxAccelForward = Drive_MaxAccel; 
 		const double MaxAccelReverse = Drive_MaxAccel;
 		const double MaxAccelForward_High = Drive_MaxAccel * 2; 
 		const double MaxAccelReverse_High = Drive_MaxAccel * 2;
 		const double MaxTorqueYaw = gMaxTorqueYaw; //Note Bradley had 0.78 reduction to get the feel
-		const double MaxTorqueYaw_High = gMaxTorqueYaw * 5;
-		const double MaxTorqueYaw_SetPoint = gMaxTorqueYaw * 2;
+		const double MaxTorqueYaw_High = gMaxTorqueYaw;
+		const double MaxTorqueYaw_SetPoint = gMaxTorqueYaw * 10.0;
 		const double MaxTorqueYaw_SetPoint_High = gMaxTorqueYaw * 10;
 		const double rotation_tolerance = Deg2Rad * 2;
 		const double rotation_distance_scaler = 1.0;

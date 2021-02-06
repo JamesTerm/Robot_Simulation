@@ -1488,6 +1488,7 @@ public:
 		//Note: each vector was averaged (and the multiply by 0.25 was the last operation)
 		m_Payload.ApplyFractionalForce(Vec2D(m_Input.GetLocalVelocityX(), m_Input.GetLocalVelocityY()), dTime_s);
 		m_Payload.ApplyFractionalTorque(m_Input.GetAngularVelocity(), dTime_s);
+		//printf("|pay_t=%.2f|", m_Input.GetAngularVelocity());
 
 		//Check direction, while the controls may not take centripetal forces into consideration, or if in open loop and no feedback
 		//It is possible to skid, where the intended direction of travel doesn't match the existing, to simulate, we localize the
@@ -1506,6 +1507,7 @@ public:
 			const double Skid_Velocity = aligned_to_Intended_velocity.x();  //velocity to apply friction force to can be in either direction
 			m_Friction.SetVelocity(Skid_Velocity);
 			const double friction_x = m_Friction.GetFrictionalForce(dTime_s,0);
+			//printf("|fnx=%.2f|",friction_x);
 			double friction_y = 0.0;
 			//Test for friction Y (only when controls for Y are idle)
 			if (IsZero(IntendedForces.y(),0.01))

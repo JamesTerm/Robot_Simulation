@@ -700,7 +700,7 @@ protected:
 		//Note: if the speed is too high and the torque restraint is too low the ship will "wobble" because it trying to to go a faster speed that it
 		//can "brake" for... ideally a little wobble is reasonable and this is isControlled by a good balance between desired speed and torque restraints
 
-		double TorqueToApply = PhysicsToUse.ComputeRestrainedTorque(Torque, TorqueRestraint, dTime_s);
+		const double TorqueToApply = PhysicsToUse.ComputeRestrainedTorque(Torque, TorqueRestraint, dTime_s);
 
 		#if 0  //This case is only for test purposes (I will eventually remove)
 		PhysicsToUse.ApplyTorque(TorqueToApply);
@@ -708,12 +708,74 @@ protected:
 		PhysicsToUse.ApplyFractionalTorque(TorqueToApply, dTime_s, m_RadialArmDefault);
 		#endif
 	}
+	void CentripetalForceManagement(Vec2D& LocalForce, double& LocalTorque, double TorqueRestraint, double dTime_s)
+	{
+		//This makes adjustments to prevent excessive centripetal forces
+		//TODO make a property for this as a blending strength where 0 bypasses operation, as some cases may not need it
+		//One way to conceptually address this is to evaluate the angular velocity, and linear velocity, in the same units
+		//by summing them.  Compare the blend ratio against the intended blend ratio.  One way to visualize this is that we sum
+		//both for the overall magnitude and as a vector the direction is the ratio.  Like this we scale the magnitude down to
+		//max restraint and switch its direction to match the intended ratio.
+		//const double TorqueToApply = m_Physics.ComputeRestrainedTorque(LocalTorque, TorqueRestraint, dTime_s);
+		//printf("|x=%.2f,y=%.2f,t=%.2f|",LocalForce.x(),LocalForce.y(), TorqueToApply);
+		if ((m_LockShipHeadingToOrientation) && (m_SimFlightMode) && (m_StabilizeRotation))
+		{
+			const Ship_Props& props = m_ShipProperties.GetShipProps();
+			//first gather the intended ratio's to see if we need to interact
+			Vec2D velocity_normalized = m_RequestedVelocity;
+			double linear_velocity_magnitude = velocity_normalized.normalize();
+			const double intended_position_ratio = linear_velocity_magnitude / props.ENGAGED_MAX_SPEED;
+			const double intended_angular_ratio = m_rotAccel_rad_s / props.dHeading;
+			//only when the sum of both exceed the max of 1.0 should we take action
+			if (intended_position_ratio + intended_angular_ratio > 1.0)
+			{
+				const double normalize_scaler = 1.0 / (intended_position_ratio + intended_angular_ratio);
+				//These are our new setpoint velocities
+				const double normalized_position = intended_position_ratio * normalize_scaler;
+				const double normalized_angular = intended_angular_ratio * normalize_scaler;
+				//Now to compute new forces
+				//The position has to be computed with this new force first to capture the direction its changed to at this moment
+				 //Apply force now
+				Vec2D LocalVelocity = GlobalToLocal(GetAtt_r(), m_Physics.GetLinearVelocity());
+				LocalVelocity += (LocalForce / m_Physics.GetMass() )* dTime_s;
+				
+				//Now to capture the velocity normalized
+				velocity_normalized = LocalVelocity;
+				linear_velocity_magnitude = velocity_normalized.normalize();
+				const double velocity_delta = linear_velocity_magnitude - (normalized_position * props.ENGAGED_MAX_SPEED);
+				//We only slow it down, otherwise we leave it alone
+				if (velocity_delta > 0)
+				{
+					const double accel = velocity_delta / dTime_s;
+					const double force = accel * m_Physics.GetMass();
+					//now to restore direction, in the opposite way
+					const Vec2D AdjustedForce = velocity_normalized * -force;
+					//printf("|adjx=%.2f,adjy=%.2f,f=%.2f|", AdjustedForce.x(), AdjustedForce.y(), force);
+					LocalForce = AdjustedForce;
+				}
+				const double angular_velocity_delta = fabs(m_Physics.GetAngularVelocity()) - (normalized_angular * props.dHeading);
+				//printf("|w=%.2f|", m_Physics.GetAngularVelocity());
+				if (angular_velocity_delta > 0)
+				{
+					const double accel = angular_velocity_delta / dTime_s;
+					const double torque = accel * m_Physics.GetMomentofInertia();
+					const double AdjustedTorque = -torque * ((m_Physics.GetAngularVelocity() > 0.0) ? 1.0: -1.0);
+					//printf("|f=%.2f|", AdjustedTorque);
+					LocalTorque = AdjustedTorque;
+				}
+				//printf("|pos=%.2f,ang=%.2f++pos=%.2f,ang=%.2f|", normalized_position, normalized_angular, position_ratio, angular_ratio);
+			}
+		}
+	}
 	void ApplyThrusters(PhysicsEntity_2D &PhysicsToUse, const Vec2D &LocalForce, double LocalTorque, double TorqueRestraint, double dTime_s)
 	{
 		///Putting force and torque together will make it possible to translate this into actual force with position
 		//assert(IsLocallyControlled());
+		//Last chance to make adjustments test centripetal force
+		Vec2D adjust_LocalForce = LocalForce;
+		CentripetalForceManagement(adjust_LocalForce, LocalTorque, TorqueRestraint, dTime_s);
 		 //Apply force
-		Vec2D ForceToApply = LocalToGlobal(GetAtt_r(), LocalForce);
+		Vec2D ForceToApply = LocalToGlobal(GetAtt_r(), adjust_LocalForce);
 		PhysicsToUse.ApplyFractionalForce(ForceToApply, dTime_s);
 		// Apply Torque
 		ApplyTorqueThrusters(PhysicsToUse, LocalTorque, TorqueRestraint, dTime_s);
@@ -1377,6 +1439,14 @@ public:
 		m_LockShipHeadingToOrientation = LockShipHeadingToOrientation;
 		m_rotAccel_rad_s = Acceleration;
 	}
+	void SetRequestedAngularVelocity(double Velocity_rad, bool LockShipHeadingToOrientation)
+	{
+		//Note: m_rotAccel_rad_s is used for velocity when m_StabilizeRotation is used
+		if (m_StabilizeRotation)
+			SetCurrentAngularAcceleration(Velocity_rad, LockShipHeadingToOrientation);
+		else
+			assert(false);
+	}
 	void SetIntendedOrientation(double IntendedOrientation, bool Absolute = true)
 	{
 		///This is used by AI controller (this will have LockShipHeadingToOrientation set to false)
@@ -1593,7 +1663,7 @@ void MotionControl2D::SetLinearVelocity_global(double north, double east)
 }
 void MotionControl2D::SetAngularVelocity(double clockwise)
 {
-	m_MotionControl2D->SetCurrentAngularAcceleration(clockwise,true);
+	m_MotionControl2D->SetRequestedAngularVelocity(clockwise,true);
 }
 //AI methods: ---------------------------------------------------------------------------
 void MotionControl2D::SetIntendedOrientation(double intended_orientation, bool absolute)
