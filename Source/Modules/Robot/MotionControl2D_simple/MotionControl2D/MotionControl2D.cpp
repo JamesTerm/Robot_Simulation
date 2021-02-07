@@ -19,6 +19,8 @@
 
 #include "MotionControl2D.h"
 
+//#define __UseBypass__
+
 namespace Module {
 	namespace Robot	{
 		namespace Simple {
@@ -258,8 +260,11 @@ public:
 	void TimeSlice(double d_time_s)
 	{
 		//keep public small and compact
+		#ifndef __UseBypass__
 		process_slice(d_time_s);
-		//process_bypass(d_time_s);
+		#else
+		process_bypass(d_time_s);
+		#endif
 	}
 
 	void SetProperties(const properties &props)
