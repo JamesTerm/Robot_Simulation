@@ -550,7 +550,7 @@ private:
 			PNy(Rotation_Tolerance,rotation_tolerance);
 			//PNy(Rotation_ToleranceConsecutiveCount,rotation_tolerance_count);
 			PNy(Rotation_TargetDistanceScaler,rotation_distance_scaler);
-
+			PNy(CentripetalGuard_Blend,0.65);
 			#undef PN_
 			#undef PNy
 		}

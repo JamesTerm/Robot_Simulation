@@ -115,6 +115,7 @@ public:
 		//This applies linear blended scale against the current distance based on current velocity
 		//default using 1.0 will produce no change
 		double Rotation_TargetDistanceScaler;
+		double CentripetalGuard_Blend;
 	};
 	#pragma endregion
 	enum eThrustState { TS_AfterBurner_Brake = 0, TS_Brake, TS_Coast, TS_Thrust, TS_AfterBurner, TS_NotVisible };
@@ -639,7 +640,9 @@ protected:
 			//double Rotation_ToleranceConsecutiveCount;
 			0.0,  //disabled by default using  0.0
 			//double Rotation_TargetDistanceScaler;
-			1.0
+			1.0,
+			//double Centripetal Guard blend
+			0.5
 		};
 	}
 protected:
@@ -731,6 +734,8 @@ protected:
 			//only when the sum of both exceed the max of 1.0 should we take action
 			if (intended_position_ratio + intended_angular_ratio > 1.0)
 			{
+				const double Blend = props.CentripetalGuard_Blend;
+				const double inv_Blend = 1.0 - Blend;
 				const double normalize_scaler = 1.0 / (intended_position_ratio + intended_angular_ratio);
 				//These are our new setpoint velocities
 				const double normalized_position = intended_position_ratio * normalize_scaler;
@@ -764,7 +769,8 @@ protected:
 					const double force = accel * Mass;
 					//now to restore direction, in the opposite way
 					const Vec2D AdjustedForce = velocity_normalized * force;
-					LocalForce = m_Physics.ComputeRestrainedForce(AdjustedForce, AccRestraintPositive, AccRestraintNegative, dTime_s);
+					const Vec2D LocalForce_final = m_Physics.ComputeRestrainedForce(AdjustedForce, AccRestraintPositive, AccRestraintNegative, dTime_s);
+					LocalForce = LocalForce_final * Blend + (LocalForce * inv_Blend);
 				}
 				//destination - source will give the correct direction of *magnitude* to be added, then the direction gets restored
 				const double angular_velocity_delta = (normalized_angular * props.dHeading) - fabs(m_Physics.GetAngularVelocity());
@@ -775,7 +781,8 @@ protected:
 					const double torque = accel * MomentOfInertia;
 					const double AdjustedTorque = torque * ((m_rotAccel_rad_s > 0.0) ? 1.0 : -1.0);
 					//printf("|f=%.2f|", AdjustedTorque);
-					LocalTorque = m_Physics.ComputeRestrainedTorque(AdjustedTorque, props.MaxTorqueYaw * current_normalized_angular * MomentOfInertia, dTime_s);
+					const double LocalTorque_final = m_Physics.ComputeRestrainedTorque(AdjustedTorque, props.MaxTorqueYaw * current_normalized_angular * MomentOfInertia, dTime_s);
+					LocalTorque = LocalTorque_final * Blend + (LocalTorque * inv_Blend);
 				}
 				//printf("|fl=%.2f,tl=%.2f++fx=%.2f,fy=%.2f,t=%.2f|", props.MaxAccelForward * current_normalized_position * Mass, 
 				//	props.MaxTorqueYaw * current_normalized_angular * MomentOfInertia,LocalForce.x(),LocalForce.y(), LocalTorque);
@@ -1012,6 +1019,7 @@ public:
 			GN_(Rotation_Tolerance,dst.Rotation_Tolerance);
 			GN_(Rotation_ToleranceConsecutiveCount,dst.Rotation_ToleranceConsecutiveCount);
 			GN_(Rotation_TargetDistanceScaler,dst.Rotation_TargetDistanceScaler);
+			GN_(CentripetalGuard_Blend, dst.CentripetalGuard_Blend);
 			//finished with this macro
 			#undef GN_
 		}

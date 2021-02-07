@@ -61,6 +61,7 @@ namespace registry_v1
 	Rg_(Ship2D_Rotation_Tolerance)
 	Rg_(Ship2D_Rotation_ToleranceConsecutiveCount)
 	Rg_(Ship2D_Rotation_TargetDistanceScaler)
+	Rg_(Ship2D_CentripetalGuard_Blend)
 #pragma endregion
 
 #pragma region _rotary_properties legacy_
