@@ -202,6 +202,38 @@ void Test_Centripetal(Module::Robot::SwerveRobot& robot)
 	cout("------------------------------------------------------ turn fast\n");
 
 }
+void Test_Centripetal_right(Module::Robot::SwerveRobot& robot)
+{
+	for (size_t i = 0; i < 100; i++)
+	{
+		robot.SetLinearVelocity_local(3.12, 0.0);  //up to top speed
+		robot.SetAngularVelocity(8.0);
+		TimeSlice(robot); //update a time slice
+		//cout("position=%.2f, x=%.2f\n", Meters2Feet( _robot.GetCurrentPosition().y()), Meters2Feet( _robot.GetCurrentPosition().x()));
+		cout("pos[%.2f,%.2f],heading =%.2f,gyro=%.2f,e=%.2f\n",
+			Meters2Feet(robot.GetCurrentPosition().x()), Meters2Feet(robot.GetCurrentPosition().y()), RAD_2_DEG(robot.GetCurrentHeading()),
+			RAD_2_DEG(robot.Get_OdometryCurrentHeading()), Meters2Feet(robot.GetCurrentVelocities().Velocity.AsArray[0])
+		);
+	}
+	cout("------------------------------------------------------ up 45\n");
+}
+
+void Test_Centripetal_left(Module::Robot::SwerveRobot& robot)
+{
+	for (size_t i = 0; i < 100; i++)
+	{
+		robot.SetLinearVelocity_local(3.12, 0.0);  //up to top speed
+		robot.SetAngularVelocity(-8.0);
+		TimeSlice(robot); //update a time slice
+		//cout("position=%.2f, x=%.2f\n", Meters2Feet( _robot.GetCurrentPosition().y()), Meters2Feet( _robot.GetCurrentPosition().x()));
+		cout("pos[%.2f,%.2f],heading =%.2f,gyro=%.2f,e=%.2f\n",
+			Meters2Feet(robot.GetCurrentPosition().x()), Meters2Feet(robot.GetCurrentPosition().y()), RAD_2_DEG(robot.GetCurrentHeading()),
+			RAD_2_DEG(robot.Get_OdometryCurrentHeading()), Meters2Feet(robot.GetCurrentVelocities().Velocity.AsArray[0])
+		);
+	}
+	cout("------------------------------------------------------ up 45\n");
+}
+
 int main()
 {
 	using namespace Module::Robot;
@@ -230,10 +262,13 @@ int main()
 	#endif
 	_robot.SetAngularVelocity(0.0);
 	#if 1
-	Test_Centripetal(_robot);
-	#endif
+	//Test_Centripetal(_robot);
+	//Test_Centripetal_right(_robot);
+	Test_Centripetal_left(_robot);
+#endif
 	#if 0
 	up_down_test(_robot);
+	//stop_test(_robot, 100);
 	strafe_test(_robot);
 	#endif
 	#if 0

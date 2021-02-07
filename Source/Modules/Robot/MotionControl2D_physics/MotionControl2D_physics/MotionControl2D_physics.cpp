@@ -721,11 +721,13 @@ protected:
 		if ((m_LockShipHeadingToOrientation) && (m_SimFlightMode) && (m_StabilizeRotation))
 		{
 			const Ship_Props& props = m_ShipProperties.GetShipProps();
+			const double Mass = m_Physics.GetMass();
 			//first gather the intended ratio's to see if we need to interact
 			Vec2D velocity_normalized = m_RequestedVelocity;
 			double linear_velocity_magnitude = velocity_normalized.normalize();
 			const double intended_position_ratio = linear_velocity_magnitude / props.ENGAGED_MAX_SPEED;
 			const double intended_angular_ratio = m_rotAccel_rad_s / props.dHeading;
+
 			//only when the sum of both exceed the max of 1.0 should we take action
 			if (intended_position_ratio + intended_angular_ratio > 1.0)
 			{
@@ -737,32 +739,46 @@ protected:
 				//The position has to be computed with this new force first to capture the direction its changed to at this moment
 				 //Apply force now
 				Vec2D LocalVelocity = GlobalToLocal(GetAtt_r(), m_Physics.GetLinearVelocity());
-				LocalVelocity += (LocalForce / m_Physics.GetMass() )* dTime_s;
+				LocalVelocity += (LocalForce / Mass )* dTime_s;
 				
 				//Now to capture the velocity normalized
 				velocity_normalized = LocalVelocity;
 				linear_velocity_magnitude = velocity_normalized.normalize();
-				const double velocity_delta = linear_velocity_magnitude - (normalized_position * props.ENGAGED_MAX_SPEED);
-				//We only slow it down, otherwise we leave it alone
-				if (velocity_delta > 0)
+
+				//The actual normalized ratios are used for force/torque restraints
+				const double current_position_ratio = linear_velocity_magnitude / props.ENGAGED_MAX_SPEED;
+				const double current_angular_ratio = m_Physics.GetAngularVelocity() / props.dHeading;
+				const double current_normalize_scaler = 1.0 / (current_position_ratio + current_angular_ratio);
+				//These are our new setpoint velocities
+				const double current_normalized_position = current_position_ratio * current_normalize_scaler;
+				const double current_normalized_angular = current_angular_ratio * current_normalize_scaler;
+
+				//destination - source will give the correct direction of *magnitude* to be added, then the direction gets restored
+				const double velocity_delta = (normalized_position * props.ENGAGED_MAX_SPEED) - linear_velocity_magnitude;
+				
+				//printf("|adjx=%.2f,adjy=%.2f,f=%.2f|", AdjustedForce.x(), AdjustedForce.y(), force);
+				const Vec2D AccRestraintPositive(props.MaxAccelRight * current_normalized_position * Mass,props.MaxAccelForward * current_normalized_position * Mass);
+				const Vec2D AccRestraintNegative(props.MaxAccelLeft * current_normalized_position * Mass,props.MaxAccelReverse * current_normalized_position * Mass);
 				{
 					const double accel = velocity_delta / dTime_s;
-					const double force = accel * m_Physics.GetMass();
+					const double force = accel * Mass;
 					//now to restore direction, in the opposite way
-					const Vec2D AdjustedForce = velocity_normalized * -force;
-					//printf("|adjx=%.2f,adjy=%.2f,f=%.2f|", AdjustedForce.x(), AdjustedForce.y(), force);
-					LocalForce = AdjustedForce;
+					const Vec2D AdjustedForce = velocity_normalized * force;
+					LocalForce = m_Physics.ComputeRestrainedForce(AdjustedForce, AccRestraintPositive, AccRestraintNegative, dTime_s);
 				}
-				const double angular_velocity_delta = fabs(m_Physics.GetAngularVelocity()) - (normalized_angular * props.dHeading);
-				//printf("|w=%.2f|", m_Physics.GetAngularVelocity());
-				if (angular_velocity_delta > 0)
+				//destination - source will give the correct direction of *magnitude* to be added, then the direction gets restored
+				const double angular_velocity_delta = (normalized_angular * props.dHeading) - fabs(m_Physics.GetAngularVelocity());
+				const double MomentOfInertia = m_Physics.GetMomentofInertia();
 				{
+					//printf("|w=%.2f|", m_Physics.GetAngularVelocity());
 					const double accel = angular_velocity_delta / dTime_s;
-					const double torque = accel * m_Physics.GetMomentofInertia();
-					const double AdjustedTorque = -torque * ((m_Physics.GetAngularVelocity() > 0.0) ? 1.0: -1.0);
+					const double torque = accel * MomentOfInertia;
+					const double AdjustedTorque = torque * ((intended_angular_ratio > 0.0) ? 1.0 : -1.0);
 					//printf("|f=%.2f|", AdjustedTorque);
-					LocalTorque = AdjustedTorque;
+					LocalTorque = m_Physics.ComputeRestrainedTorque(AdjustedTorque, props.MaxTorqueYaw * current_normalized_angular * MomentOfInertia, dTime_s);
 				}
+				//printf("|fl=%.2f,tl=%.2f++fx=%.2f,fy=%.2f,t=%.2f|", props.MaxAccelForward * current_normalized_position * Mass, 
+				//	props.MaxTorqueYaw * current_normalized_angular * MomentOfInertia,LocalForce.x(),LocalForce.y(), LocalTorque);
 				//printf("|pos=%.2f,ang=%.2f++pos=%.2f,ang=%.2f|", normalized_position, normalized_angular, position_ratio, angular_ratio);
 			}
 		}
