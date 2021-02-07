@@ -726,7 +726,7 @@ protected:
 			Vec2D velocity_normalized = m_RequestedVelocity;
 			double linear_velocity_magnitude = velocity_normalized.normalize();
 			const double intended_position_ratio = linear_velocity_magnitude / props.ENGAGED_MAX_SPEED;
-			const double intended_angular_ratio = m_rotAccel_rad_s / props.dHeading;
+			const double intended_angular_ratio = fabs(m_rotAccel_rad_s) / props.dHeading;
 
 			//only when the sum of both exceed the max of 1.0 should we take action
 			if (intended_position_ratio + intended_angular_ratio > 1.0)
@@ -747,7 +747,7 @@ protected:
 
 				//The actual normalized ratios are used for force/torque restraints
 				const double current_position_ratio = linear_velocity_magnitude / props.ENGAGED_MAX_SPEED;
-				const double current_angular_ratio = m_Physics.GetAngularVelocity() / props.dHeading;
+				const double current_angular_ratio = fabs(m_Physics.GetAngularVelocity()) / props.dHeading;
 				const double current_normalize_scaler = 1.0 / (current_position_ratio + current_angular_ratio);
 				//These are our new setpoint velocities
 				const double current_normalized_position = current_position_ratio * current_normalize_scaler;
@@ -773,12 +773,13 @@ protected:
 					//printf("|w=%.2f|", m_Physics.GetAngularVelocity());
 					const double accel = angular_velocity_delta / dTime_s;
 					const double torque = accel * MomentOfInertia;
-					const double AdjustedTorque = torque * ((intended_angular_ratio > 0.0) ? 1.0 : -1.0);
+					const double AdjustedTorque = torque * ((m_rotAccel_rad_s > 0.0) ? 1.0 : -1.0);
 					//printf("|f=%.2f|", AdjustedTorque);
 					LocalTorque = m_Physics.ComputeRestrainedTorque(AdjustedTorque, props.MaxTorqueYaw * current_normalized_angular * MomentOfInertia, dTime_s);
 				}
 				//printf("|fl=%.2f,tl=%.2f++fx=%.2f,fy=%.2f,t=%.2f|", props.MaxAccelForward * current_normalized_position * Mass, 
 				//	props.MaxTorqueYaw * current_normalized_angular * MomentOfInertia,LocalForce.x(),LocalForce.y(), LocalTorque);
+				//printf("\n");
 				//printf("|pos=%.2f,ang=%.2f++pos=%.2f,ang=%.2f|", normalized_position, normalized_angular, position_ratio, angular_ratio);
 			}
 		}
