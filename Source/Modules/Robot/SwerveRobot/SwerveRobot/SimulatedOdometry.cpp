@@ -1357,7 +1357,7 @@ private:
 	std::function< SwerveVelocities&()> m_CurrentVelocities_callback;
 	std::function<SwerveVelocities()> m_VoltageCallback;
 	Inv_Swerve_Drive m_Input;
-	double m_KineticFriction = 0.10; //this looks about right, but we can try to fix
+	double m_KineticFriction = 0.50; //this looks about right, but we can try to fix
 	class SwerveDrive_Plus : public Swerve_Drive
 	{
 	private:
@@ -1404,6 +1404,7 @@ private:
 		}
 	};
 	SwerveDrive_Plus m_Output;
+	Swerve_Drive m_TestForce; //used to measure acceleration
 	double m_WheelDiameter_In=4.0;
 	bool m_IsSkidding=false; //cache last state to determine or force normal
 	#pragma endregion
@@ -1412,6 +1413,7 @@ public:
 	{
 		//TODO get properties for our local members
 		m_Input.Init(props);
+		m_TestForce.Init(props);
 		m_Output.Init(props);
 		Framework::Base::asset_manager DefaultMotorProps;
 		using namespace properties::registry_v1;
@@ -1480,20 +1482,64 @@ public:
 		double InputAsTorque = (m_Input.GetAngularVelocity() - last_payload_angular_velocity) / dTime_s * 
 			m_Payload.GetMomentofInertia() * drive_train_efficiency;
 
+		double summed_y_force = 0.0;
+		//see if we are decelerating
+		bool IsDecelerating = fabs(m_Input.GetLocalVelocityY()) < fabs(last_payload_velocity.y());
+		if (IsDecelerating)
+		{
+			//Make sure the rotation isn't overpowering this indication
+			if (fabs(m_Input.GetAngularVelocity()) > fabs(last_payload_angular_velocity))
+			{
+				//compare apples to apples
+				const double angular_velocity_asLinear = m_Input.GetAngularVelocity() * Pi * m_Input.GetDriveProperties().GetTurningDiameter();
+				if (fabs(angular_velocity_asLinear) > fabs(m_Input.GetLocalVelocityY()))
+					IsDecelerating = false;
+			}
+		}
+		if ((!IsDecelerating) && (fabs(m_Input.GetAngularVelocity()) < fabs(last_payload_angular_velocity)))
+		{
+			IsDecelerating = true; //kind of redundant but makes the logic a mirror reflection of above
+			if (fabs(m_Input.GetLocalVelocityY()) > fabs(last_payload_velocity.y()))
+			{
+				//compare oranges to oranges
+				const double angular_velocity_asLinear = m_Input.GetAngularVelocity() * Pi * m_Input.GetDriveProperties().GetTurningDiameter();
+				if (fabs(m_Input.GetLocalVelocityY()) > fabs(angular_velocity_asLinear))
+					IsDecelerating = false;
+			}
+		}
+
+		if (!IsDecelerating)
+		{
+			//Testing the total force start by adding up the total velocity delta
+			m_TestForce.UpdateVelocities(m_Input.GetLocalVelocityY() - last_payload_velocity.y(), 
+				m_Input.GetLocalVelocityX() - last_payload_velocity.x(), m_Input.GetAngularVelocity() - last_payload_angular_velocity);
+			double max_wheel_velocity=0.0;
+			for (size_t i = 0; i < 4; i++)
+				if (m_TestForce.GetIntendedVelocitiesFromIndex(i) > max_wheel_velocity)
+					max_wheel_velocity = m_TestForce.GetIntendedVelocitiesFromIndex(i);
+			//sum all 4 wheels... if one of them exceeds force they all do
+			summed_y_force = max_wheel_velocity / dTime_s * m_Payload.GetMass() * drive_train_efficiency;
+			//printf("|sum=%.2f,y=%.2f|",summed_y_force,InputAsForce.y());
+		}
 		//Now we can easily evaluate the y-component of force to see if we have a skid, for now we only care about linear motion
 		//as rotation with motion only impacts the x-component of the wheels and is addressed below
 		//The spin in place may be added here later, but leaving out for now as this is not a typical stress that needs to be simulated
-		const bool IsSkidding = fabs(InputAsForce.y()) > m_Friction.GetForceNormal(g,m_IsSkidding?1:0);
-		m_IsSkidding = IsSkidding; //stays skid until we slow down enough below the kinetic friction
+		const bool IsSkidding = fabs(summed_y_force) > m_Friction.GetForceNormal(g,m_IsSkidding?1:0);
 		const int FrictionMode = IsSkidding ? 1 : 0;
 		//Scale down even further if we are skidding
 		if (IsSkidding)
 		{
-			//printf("skid [%.2f>%.2f]\n",InputAsForce.y(),m_Friction.GetForceNormal());
-			InputAsForce *= m_KineticFriction, InputAsTorque *= m_KineticFriction;
-			//ensure we cannot have more force than force normal
-			InputAsForce.y() = std::min(m_Friction.GetForceNormal(),InputAsForce.y()); 
+			#if 0
+			static int counter = 0;
+			printf("[%d]skid [%.2f>%.2f]\n",counter++,InputAsForce.y(),m_Friction.GetForceNormal(g, m_IsSkidding ? 1 : 0));
+			#endif
+			//the scaled amount is fudged to what looks about right since the summed forces is not quite accurate
+			const double scale = m_Friction.GetForceNormal(g, m_IsSkidding ? 1 : 0) / std::max(fabs(summed_y_force)*2.0,m_KineticFriction);
+			//This may be a bit more scale than in reality but should be effective
+			InputAsForce *= scale;
+			InputAsTorque *= scale;
 		}
+		m_IsSkidding = IsSkidding; //stays skid until we slow down enough below the kinetic friction
 
 		//Apply our torque forces now, before working with friction forces
 		//Note: each vector was averaged (and the multiply by 0.25 was the last operation)
