@@ -1445,54 +1445,43 @@ public:
 	{
 		using namespace Framework::Base;
 		//Make sure the potentiometer angles are set in current velocities before calling in here
-		//TODO in this first iteration all forces are transferred in a non-skid state, but afterwards
-		//we should look into how to handle skid states
-		//First let's round up the forces from each encoder
-		SwerveVelocities ForcesForPayload = m_CurrentVelocities_callback();
+		SwerveVelocities InitialVelocitiesForPayload = m_CurrentVelocities_callback();
 		for (size_t i = 0; i < 4; i++)
 		{
 			const double Voltage = m_VoltageCallback().Velocity.AsArray[i];
 			Potentiometer_Tester4& encoder = m_Encoders[i];
-			double Torque = encoder.GetTorqueFromVoltage(Voltage);
-			//encoder.GetWheelModel_rw().ApplyFractionalTorque(encoder.GetMechanicalRestaintTorque(m_VoltageCallback().Velocity.AsArray[i]), dTime_s);
-			//Work out the new velocity for this to apply correct torque
-			double predicted_velocity = encoder.GetWheelModel_rw().GetVelocity();  //start with what we have and add in the new torque
-			double pv_AngularAcceleration = encoder.GetWheelModel_rw().GetAngularAcceleration(Torque);
-			predicted_velocity += pv_AngularAcceleration * dTime_s;
-			//The predicted velocity cannot be greater than the max velocity, (no reduction applied)
-			predicted_velocity = std::min(predicted_velocity , encoder.GetMaxSpeed());
-			Torque += encoder.GetMechanicalRestaintTorque(Voltage,predicted_velocity);
-
-			//To translate for torque at wheel, we first need to apply the mechanical advantage of the inverse gear reduction
-			//Then extract the force applied
-			//Since Torque = F X R we'll isolate force by dividing out the radius
-			const double Force = (Torque * (1.0/encoder.GetGearReduction()) * encoder.GetGearBoxEffeciency() ) / Inches2Meters(m_WheelDiameter_In * 0.5);
-
-			//We'll try this another way to check since torque is also Ia if we isolate a, we can multiply by the radius for linear velocity force.
-			//const double Force  = (Torque / encoder.GetWheelModel_rw().GetMomentofInertia()) * Inches2Meters(m_WheelDiameter_In * 0.5);
-
-			ForcesForPayload.Velocity.AsArray[i] = Force;
-			//if (Voltage > 0.99)
-			//	int x = 4;
-			#if 0
-			encoder.GetWheelModel_rw().ApplyFractionalTorque(Torque, dTime_s);
+			encoder.UpdatePotentiometerVoltage(Voltage);
+			//This is our initial velocity to submit to payload
 			const double LinearVelocity = encoder.GetWheelModel_rw().GetVelocity() * encoder.GetGearReduction() *
 				Inches2Meters(m_WheelDiameter_In * 0.5);
+
+			#if 0
 			m_CurrentVelocities_callback().Velocity.AsArray[i] = LinearVelocity;
 			return;
+			#else
+			InitialVelocitiesForPayload.Velocity.AsArray[i] = LinearVelocity;
 			#endif
 		}
-		//Now we can interpolate the force vectors with the same kinematics of the drive
-		m_Input.InterpolateVelocities(ForcesForPayload);
+		//Now we can interpolate the velocity vectors with the same kinematics of the drive
+		m_Input.InterpolateVelocities(InitialVelocitiesForPayload);
+
 		//printf("force=%.2f\n",ForcesForPayload.Velocity.AsArray[0]);
 		//Before we apply the forces grab the current velocities to compute the new forces
 		const Vec2D last_payload_velocity = m_Payload.GetLinearVelocity();
 		const double last_payload_angular_velocity = m_Payload.GetAngularVelocity();
+		const double drive_train_efficiency = m_Encoders[0].GetGearBoxEffeciency();
+		//Now to convert the inputs velocities into force, which is the velocity change (per second) and divide out the time
+		//to get our acceleration impulse, finally multiple by mass for the total.
+		//Note: I may need to consider conservation of momentum here, but for now scaling down using drive train efficiency does add the latency
+		Vec2D InputAsForce = (Vec2D(m_Input.GetLocalVelocityX(), m_Input.GetLocalVelocityY()) - last_payload_velocity) / dTime_s * 
+			m_Payload.GetMass() * drive_train_efficiency;
+		double InputAsTorque = (m_Input.GetAngularVelocity() - last_payload_angular_velocity) / dTime_s * 
+			m_Payload.GetMomentofInertia() * drive_train_efficiency;
 
 		//Apply our torque forces now, before working with friction forces
 		//Note: each vector was averaged (and the multiply by 0.25 was the last operation)
-		m_Payload.ApplyFractionalForce(Vec2D(m_Input.GetLocalVelocityX()*4.0, m_Input.GetLocalVelocityY() * 4.0), dTime_s);
-		m_Payload.ApplyFractionalTorque(m_Input.GetAngularVelocity()*4.0, dTime_s);
+		m_Payload.ApplyFractionalForce(InputAsForce, dTime_s);
+		m_Payload.ApplyFractionalTorque(InputAsTorque, dTime_s);
 		//printf("|pay_t=%.2f|", m_Input.GetAngularVelocity());
 
 		//Check direction, while the controls may not take centripetal forces into consideration, or if in open loop and no feedback
@@ -1565,7 +1554,7 @@ public:
 		//printf("--%.2f,", current_payload_velocity.y());
 		const double current_payload_angular_velocity = m_Payload.GetAngularVelocity();
 		const SwerveVelocities &AdjustedToExisting=m_Output.UpdateFromExisting(current_payload_velocity.y(), current_payload_velocity.x(), 
-			current_payload_angular_velocity,ForcesForPayload);
+			current_payload_angular_velocity, InitialVelocitiesForPayload);
 		//Now we can apply the torque to the wheel
 		for (size_t i = 0; i < 4; i++)
 		{
@@ -1578,11 +1567,8 @@ public:
 			//Now that the velocity has taken effect we can add in the adverse torque
 			const double WheelVelocity= encoder.GetWheelModel_rw().GetVelocity() * encoder.GetGearReduction();
 			const double LinearVelocity = WheelVelocity * Inches2Meters(m_WheelDiameter_In * 0.5);
-			//disabled until we confirm it ready
-			#if 1
 			//finally update our odometry, note we work in linear velocity so we multiply by the wheel radius
 			m_CurrentVelocities_callback().Velocity.AsArray[i] = LinearVelocity;
-			#endif
 		}
 	}
 	void SetCurrentVelocities_Callback(std::function<SwerveVelocities&()> callback)
