@@ -584,8 +584,8 @@ private:
 			//PUT_NUMBER(Rotary_PrecisionTolerance, 0.03);
 			//Use _c, _t1, _t2, _t3, _t4 for array 0..5 respectively
 			//PUT_NUMBER(Rotary_Voltage_Terms) //PolynomialEquation_forth_Props 
-			PUT_NUMBER(Rotary_InverseMaxAccel, val.inv_max_accel);
-			PUT_NUMBER(Rotary_InverseMaxDecel, 1.0/4.0);
+			//PUT_NUMBER(Rotary_InverseMaxAccel, val.inv_max_accel);
+			//PUT_NUMBER(Rotary_InverseMaxDecel, 1.0/4.0);
 			//PUT_NUMBER(Rotary_Positive_DeadZone, val.Positive_DeadZone);
 			//PUT_NUMBER(Rotary_Negative_DeadZone, val.Negative_DeadZone);
 			//PUT_NUMBER(Rotary_MinLimitRange, val.MinLimitRange);
