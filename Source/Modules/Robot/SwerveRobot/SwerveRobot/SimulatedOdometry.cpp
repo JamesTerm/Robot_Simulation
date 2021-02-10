@@ -1357,7 +1357,7 @@ private:
 	std::function< SwerveVelocities&()> m_CurrentVelocities_callback;
 	std::function<SwerveVelocities()> m_VoltageCallback;
 	Inv_Swerve_Drive m_Input;
-	double m_KineticFriction = 0.5;
+	double m_KineticFriction = 0.10; //this looks about right, but we can try to fix
 	class SwerveDrive_Plus : public Swerve_Drive
 	{
 	private:
@@ -1405,6 +1405,7 @@ private:
 	};
 	SwerveDrive_Plus m_Output;
 	double m_WheelDiameter_In=4.0;
+	bool m_IsSkidding=false; //cache last state to determine or force normal
 	#pragma endregion
 public:
 	virtual void Initialize(const Framework::Base::asset_manager* props = NULL)
@@ -1482,13 +1483,16 @@ public:
 		//Now we can easily evaluate the y-component of force to see if we have a skid, for now we only care about linear motion
 		//as rotation with motion only impacts the x-component of the wheels and is addressed below
 		//The spin in place may be added here later, but leaving out for now as this is not a typical stress that needs to be simulated
-		const bool IsSkidding = InputAsForce.y() > m_Friction.GetForceNormal();
+		const bool IsSkidding = fabs(InputAsForce.y()) > m_Friction.GetForceNormal(g,m_IsSkidding?1:0);
+		m_IsSkidding = IsSkidding; //stays skid until we slow down enough below the kinetic friction
 		const int FrictionMode = IsSkidding ? 1 : 0;
 		//Scale down even further if we are skidding
 		if (IsSkidding)
 		{
 			//printf("skid [%.2f>%.2f]\n",InputAsForce.y(),m_Friction.GetForceNormal());
 			InputAsForce *= m_KineticFriction, InputAsTorque *= m_KineticFriction;
+			//ensure we cannot have more force than force normal
+			InputAsForce.y() = std::min(m_Friction.GetForceNormal(),InputAsForce.y()); 
 		}
 
 		//Apply our torque forces now, before working with friction forces
@@ -1588,7 +1592,7 @@ public:
 			double torque_load = (motor_velocity - wheel_model.GetVelocity()) / dTime_s * wheel_model.GetMomentofInertia();
 			//separating this out for easy of debugging:
 			if (IsSkidding)
-				torque_load *= m_KineticFriction; //This same amount put in is the same amount to take out
+				torque_load = 0.0; //This is not correct, but will help us visualize the skid this is some impact on the velocity though
 			wheel_model.ApplyFractionalTorque(torque_load, dTime_s);
 
 			#endif
