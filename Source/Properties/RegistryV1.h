@@ -167,7 +167,8 @@ namespace registry_v1
 	//and CommonSwivel_ prefix for Potentiometer_Tester4 to override these defaults
 	Rg_(Pot4_free_speed_rad) //radians per second of motor
 	Rg_(Pot4_stall_torque_NM) //Nm
-	Rg_(Pot4_gear_reduction)
+	Rg_(Pot4_encoder_gear_reduction)  //used by real encoder from its position to the wheel
+	Rg_(Pot4_motor_gear_reduction)   //used by simulation from motor to the wheel
 	Rg_(Pot4_gear_box_effeciency) //This will account for the friction
 	Rg_(Pot4_mass)
 	//Use SolidWorks and get the cube root of the volume which gives a rough diameter error on the side of larger

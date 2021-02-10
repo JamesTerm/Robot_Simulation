@@ -603,7 +603,8 @@ private:
 			PUT_NUMBER(Pot4_dead_zone, 0.13); //see how this relates to speed loss constant
 			PUT_NUMBER(Pot4_free_speed_rad, 5880 * (1.0 / 60.0) * Pi2);
 			PUT_NUMBER(Pot4_gear_box_effeciency, 0.9);
-			PUT_NUMBER(Pot4_gear_reduction, 1.0 / 9.0);
+			PUT_NUMBER(Pot4_motor_gear_reduction, 1.0 / 9.0);
+			PUT_NUMBER(Pot4_encoder_gear_reduction, val.encoder_to_wheel_ratio);
 			PUT_NUMBER(Pot4_mass, Pounds2Kilograms(3.0));
 			PUT_NUMBER(Pot4_RadiusOfConcentratedMass, Inches2Meters(1.12));  //Motor radius
 			PUT_NUMBER(Pot4_AngularInertiaCoefficient, 0.5);  //using a solid cylinder or disc)
@@ -697,7 +698,8 @@ private:
 
 				//Note: we have some adjusted properties for Pot4 in here, so we keep these separate from Pot 2
 				PUT_NUMBER(Pot4_stall_torque_NM, 0.71);
-				PUT_NUMBER(Pot4_gear_reduction, (1.0 / 81.0)* (3.0 / 7.0));
+				PUT_NUMBER(Pot4_motor_gear_reduction, (1.0 / 81.0)* (3.0 / 7.0));
+				PUT_NUMBER(Pot4_encoder_gear_reduction, val.encoder_to_wheel_ratio);
 				PUT_NUMBER(Pot4_gear_box_effeciency, 0.65);
 				//These are difficult to tune, especially the radius of concentrated mass, but dictate the rate acceleration
 				PUT_NUMBER(Pot4_mass, 0.34);
