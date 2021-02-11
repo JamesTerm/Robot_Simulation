@@ -726,8 +726,8 @@ protected:
 			const Ship_Props& props = m_ShipProperties.GetShipProps();
 			const double Mass = m_Physics.GetMass();
 			//first gather the intended ratio's to see if we need to interact
-			Vec2D velocity_normalized = m_RequestedVelocity;
-			double linear_velocity_magnitude = velocity_normalized.normalize();
+			Vec2D intended_velocity_normalized = m_RequestedVelocity;
+			double linear_velocity_magnitude = intended_velocity_normalized.normalize();
 			const double intended_position_ratio = linear_velocity_magnitude / props.ENGAGED_MAX_SPEED;
 			const double intended_angular_ratio = fabs(m_rotAccel_rad_s) / props.dHeading;
 
@@ -747,7 +747,7 @@ protected:
 				LocalVelocity += (LocalForce / Mass )* dTime_s;
 				
 				//Now to capture the velocity normalized
-				velocity_normalized = LocalVelocity;
+				Vec2D velocity_normalized = LocalVelocity;
 				linear_velocity_magnitude = velocity_normalized.normalize();
 
 				//The actual normalized ratios are used for force/torque restraints
@@ -768,7 +768,7 @@ protected:
 					const double accel = velocity_delta / dTime_s;
 					const double force = accel * Mass;
 					//now to restore direction, in the opposite way
-					const Vec2D AdjustedForce = velocity_normalized * force;
+					const Vec2D AdjustedForce = intended_velocity_normalized * force;
 					const Vec2D LocalForce_final = m_Physics.ComputeRestrainedForce(AdjustedForce, AccRestraintPositive, AccRestraintNegative, dTime_s);
 					LocalForce = LocalForce_final * Blend + (LocalForce * inv_Blend);
 				}
