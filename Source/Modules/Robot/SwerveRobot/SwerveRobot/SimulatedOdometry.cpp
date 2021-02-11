@@ -1484,7 +1484,10 @@ public:
 
 		double summed_y_force = 0.0;
 		//see if we are decelerating
-		bool IsDecelerating = fabs(m_Input.GetLocalVelocityY()) < fabs(last_payload_velocity.y());
+		const Vec2D current_local_velocity(m_Input.GetLocalVelocityX(), m_Input.GetLocalVelocityY());
+		const double current_local_speed = current_local_velocity.length();  //aka magnitude
+		const double last_payload_speed = last_payload_velocity.length();
+		bool IsDecelerating = current_local_speed < last_payload_speed;
 		if (IsDecelerating)
 		{
 			//Make sure the rotation isn't overpowering this indication
@@ -1492,18 +1495,18 @@ public:
 			{
 				//compare apples to apples
 				const double angular_velocity_asLinear = m_Input.GetAngularVelocity() * Pi * m_Input.GetDriveProperties().GetTurningDiameter();
-				if (fabs(angular_velocity_asLinear) > fabs(m_Input.GetLocalVelocityY()))
+				if (fabs(angular_velocity_asLinear) > current_local_speed)
 					IsDecelerating = false;
 			}
 		}
 		if ((!IsDecelerating) && (fabs(m_Input.GetAngularVelocity()) < fabs(last_payload_angular_velocity)))
 		{
 			IsDecelerating = true; //kind of redundant but makes the logic a mirror reflection of above
-			if (fabs(m_Input.GetLocalVelocityY()) > fabs(last_payload_velocity.y()))
+			if (current_local_speed > last_payload_speed)
 			{
 				//compare oranges to oranges
 				const double angular_velocity_asLinear = m_Input.GetAngularVelocity() * Pi * m_Input.GetDriveProperties().GetTurningDiameter();
-				if (fabs(m_Input.GetLocalVelocityY()) > fabs(angular_velocity_asLinear))
+				if (current_local_speed > fabs(angular_velocity_asLinear))
 					IsDecelerating = false;
 			}
 		}
@@ -1561,13 +1564,14 @@ public:
 			//Note: aligned_to_Intended this is the current velocity rotated to align with the intended velocity, when the current velocity direction
 			//is mostly the same as the intended, the Y component will consume it.
 			const Vec2D aligned_to_Intended_velocity = GlobalToLocal(IntendedDirection, local_payload_velocity);
+			const Vec2D IntendedVelocity_fromWheelAngle = GlobalToLocal(IntendedDirection, IntendedVelocities);
 			const double Skid_Velocity = aligned_to_Intended_velocity.x();  //velocity to apply friction force to can be in either direction
 			m_Friction.SetVelocity(Skid_Velocity);
 			const double friction_x = m_Friction.GetFrictionalForce(dTime_s, FrictionMode);
 			//printf("|fnx=%.2f|",friction_x);
 			double friction_y = 0.0;
 			//Test for friction Y (only when controls for Y are idle)
-			if (IsZero(IntendedVelocities.y(),0.01))
+			if (IsZero(IntendedVelocity_fromWheelAngle.y(),0.01))
 			{
 				double combined_velocity_magnitude=0.0;
 				for (size_t i = 0; i < 4; i++)
