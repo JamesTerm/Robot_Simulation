@@ -32,6 +32,10 @@ namespace Framework
 //For example g = ( G * (Me->5.98E+24)) / (Re->6.38E+6)^2 = 9.8 m/s^2
 //G is ideal to compute forces on ships from various planets
 const double G = 6.673E-11;
+//const double EarthMass = 5.98E+24;
+//const double EarthRadius = 6.38E+6;
+//const double g = (G * EarthMass) / (EarthRadius * EarthRadius);
+const double g = 9.80665;  //the above equation has precision loss so this value is more accurate
 
 class COMMON_API PhysicsEntity_1D
 {
