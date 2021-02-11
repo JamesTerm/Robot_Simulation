@@ -137,10 +137,19 @@ __inline void Smart_GetMultiValue(size_t NoItems, const char * const SmartNames[
 
 class SmartDashboard_Control
 {
+	#pragma region _description_
 	//It was a bit challenging but this is completely decoupled from SwerveRobotTest, this makes it possible
 	//to link different kind of robot objects, we may have a different update method to match it
+	#pragma endregion
+public:
+	enum class view_mode
+	{
+		eUsing_PredictionVariables, //Using advanced odometry to get accurate localization
+		eUsing_EncoderVariables,  //Using only encoders (will not pick up skids and slips)
+		eUsign_IntendedVelocity  //Older assemblies need this
+	};
 private:
-	bool m_HasEncoder = true;
+	view_mode m_ViewMode = view_mode::eUsing_PredictionVariables;
 	class Interpolate_Position
 	{
 		//Newer SmartDashboard may intensionally update slower than our framerate when this happens the position looks jerky
@@ -225,9 +234,25 @@ public:
 			"swivel_fl_Raw","swivel_fr_Raw","swivel_rl_Raw","swivel_rr_Raw",
 			"Heading","Travel_Heading"
 		};
+		const char* const SmartNames_prediction[] = { "predicted_X_ft","predicted_Y_ft",
+			"wheel_fl_Encoder","wheel_fr_Encoder","wheel_rl_Encoder","wheel_rr_Encoder",
+			"swivel_fl_Raw","swivel_fr_Raw","swivel_rl_Raw","swivel_rr_Raw",
+			"predicted_Heading","Travel_Heading"
+		};
 
 		double * const SmartVariables = &smart_state.raw.element[0];
-		Smart_GetMultiValue(12, m_HasEncoder? SmartNames_Encoder : SmartNames, SmartVariables);
+		switch (m_ViewMode)
+		{
+		case view_mode::eUsing_PredictionVariables:
+			Smart_GetMultiValue(12, SmartNames_prediction, SmartVariables);
+			break;
+		case view_mode::eUsing_EncoderVariables:
+			Smart_GetMultiValue(12, SmartNames_Encoder, SmartVariables);
+			break;
+		case view_mode::eUsign_IntendedVelocity:
+			Smart_GetMultiValue(12, SmartNames, SmartVariables);
+			break;
+		}
 		//The values read in are in feet and degrees (human readable, we have to translate them back)
 		//This is just written out so it's easy to follow and maintain
 		using vi = SwerveRobot_UI::SwerveRobot_State;
@@ -254,9 +279,9 @@ public:
 	{
 		SmartDashboard::shutdown();
 	}
-	void SetHasEncoder(bool hasEncoder)
+	void SetViewMode(view_mode mode)
 	{
-		m_HasEncoder = hasEncoder;
+		m_ViewMode = mode;
 	}
 	void SetInterpolatePosition(bool interpolate_position)
 	{
@@ -308,16 +333,20 @@ public:
 	void Test(size_t index)
 	{
 		assert(m_viewer);
+		using view_mode = SmartDashboard_Control::view_mode;
 		switch (index)
 		{
 		case 1:
-			m_smart_control.SetHasEncoder(false);
+			m_smart_control.SetViewMode(view_mode::eUsing_EncoderVariables);
 			break;
 		case 2:
+			m_smart_control.SetViewMode(view_mode::eUsign_IntendedVelocity);
+			break;
+		case 3:
 			m_smart_control.SetInterpolatePosition(false);
 			break;
 		default:
-			m_smart_control.SetHasEncoder(true);
+			m_smart_control.SetViewMode(view_mode::eUsing_PredictionVariables);
 		}
 	}
 	~OutputView_Tester()
