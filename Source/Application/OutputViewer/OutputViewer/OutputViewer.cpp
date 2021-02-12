@@ -3,6 +3,7 @@
 #include <Windows.h>
 #include "../../../Modules/Output/OSG_Viewer/OSG_Viewer/OSG_Viewer.h"
 #include "../../../Modules/Output/OSG_Viewer/OSG_Viewer/SwerveRobot_UI.h"
+#include "../../../Modules/Output/OSG_Viewer/OSG_Viewer/Entity_UI.h"
 //helpful for interpolation of position
 #include "../../../Base/Vec2d.h"
 
@@ -43,7 +44,7 @@ static void DisplayHelp()
 	printf(
 		"cls\n"
 		"Zoom <size usually 100>\n"
-		"test <test name or number>\n"
+		"test <test [ipaddress d.d.d.d =localhost] [number]>\n"
 		"start\n"
 		"stop\n"
 		"pos <feet x> <feet y> \n"
@@ -64,11 +65,70 @@ namespace Module
 {
 	namespace Output {
 
+class target_retical
+{
+private:
+	Entity_UI m_TargetUI;
+	//Entity_UI::Entity_State m_current_state = {};
+	using Vector2D = Entity_UI::Vector2D;
+	//properties
+	std::string m_entity_name = "localizaion_retical";
+	Vector2D m_Dimensions = { 0.25,0.25 };            //x-width, y-length in meters
+	Vector2D m_Character_Dimensions = { 3.0,1.0 };  //font dimensions
+	const char* m_TextImage = "-O-";
+	Entity_UI::Entity_Properties m_props = { m_entity_name,m_Dimensions,m_Character_Dimensions,m_TextImage };
+	bool m_EnableTarget = false;
+public:
+	void init()
+	{
+		//Anytime robot needs updates link it to our current state
+		//m_TargetUI.SetEntity_Callback([&]() {	return m_current_state;	});
+		m_TargetUI.SetProperties_Callback([&]() {return m_props; });
+		//Good to go... now initialize the robot
+		m_TargetUI.Initialize();
+		m_EnableTarget = true;
+	}
+	#if 0
+	void UpdateState_Position(double xpos, double ypos)
+	{
+		m_current_state.Pos_m.x = xpos;
+		m_current_state.Pos_m.y = ypos;
+	}
+	void UpdateState_Heading(double heading)
+	{
+		m_current_state.Att_r = heading;
+		m_current_state.IntendedOrientation = heading;  //for now keep the same
+	}
+	#endif
+	void SetEntity_Callback(std::function<Entity_UI::Entity_State()> callback)
+	{
+		m_TargetUI.SetEntity_Callback(callback);
+	}
+	void TimeSliceLoop(double dTime_s)
+	{
+		m_TargetUI.TimeChange(dTime_s);
+	}
+	void UpdateScene(void* geode)
+	{
+		if (m_EnableTarget)
+			m_TargetUI.UpdateScene(geode, true);
+	}
+	void SetEnable(bool enable)
+	{
+		m_EnableTarget = enable;
+	}
+	bool GetIsEnabled() const
+	{
+		return m_EnableTarget;
+	}
+};
 
 class SwerveRobotTest
 {
 private:
 	SwerveRobot_UI m_Robot;
+	std::shared_ptr<target_retical> m_target = nullptr;
+	Entity_UI::uEntity_State m_target_current_state = {};
 	SwerveRobot_UI::uSwerveRobot_State m_current_state = {};
 	OSG_Viewer *m_viewer = nullptr;
 	std::function<void(double dTime_s)> m_UpdateCallback=nullptr;
@@ -81,7 +141,12 @@ public:
 	{
 		m_viewer = &viewer; //cache to remove hook
 		//Tell viewer to look at our scene for our object
-		viewer.SetSceneCallback([&](void *rootNode, void *geode) { m_Robot.UpdateScene(geode, true); });
+		viewer.SetSceneCallback([&](void *rootNode, void *geode) 
+		{ 
+			m_Robot.UpdateScene(geode, true); 
+			if (m_target)
+				m_target->UpdateScene(geode);
+		});
 		//Anytime robot needs updates link it to our current state
 		m_Robot.SetSwerveRobot_Callback([&]() {	return m_current_state.bits; });
 		//When viewer updates a frame
@@ -93,6 +158,8 @@ public:
 				m_UpdateCallback(dTime_s);
 			//give the robot its time slice to process them
 			m_Robot.TimeChange(dTime_s);
+			if (m_target)
+				m_target->TimeSliceLoop(dTime_s);
 		});
 		//Good to go... now initialize the robot
 		m_Robot.Initialize();
@@ -113,9 +180,32 @@ public:
 	{
 		return m_current_state;
 	}
+	Entity_UI::uEntity_State& get_target_state_as_union()
+	{
+		return m_target_current_state;
+	}
+
 	SwerveRobot_UI::SwerveRobot_State &get_current_state_rw()
 	{ 
 		return m_current_state.bits; 
+	}
+	void SetEnableTargetReticle(bool enable)
+	{
+		if ((enable) && (m_target == nullptr))
+		{
+			m_target = std::make_shared<target_retical>();
+			m_target->init();
+			m_target-> SetEntity_Callback([&]() {	return m_target_current_state.bits; });
+		}
+		if (m_target)
+			m_target->SetEnable(enable);
+	}
+	bool GetIsTargetEnabled() const
+	{
+		bool ret = false;
+		if (m_target)
+			ret = m_target->GetIsEnabled();
+		return ret;
 	}
 };
 
@@ -210,6 +300,68 @@ private:
 			return m_last_smart_state;
 		}
 	} m_interpolate;
+	class Target_Interpolate_Position
+	{
+		//Note: This probably could have been solved via template
+
+		//Newer SmartDashboard may intensionally update slower than our framerate when this happens the position looks jerky
+		//this will help interpolate the in-between moments of time
+	private:
+		Entity_UI::uEntity_State m_last_smart_state;
+		bool m_Bypass = false;
+	public:
+		void SetInterpolatePosition(bool interpolate_position)
+		{
+			m_Bypass = !interpolate_position;
+		}
+		Entity_UI::uEntity_State& operator() (Entity_UI::uEntity_State smart_state, double dTime_s)
+		{
+			//only interpolate if our times are under 20ms
+			if ((!m_Bypass) && (dTime_s < 0.2))
+			{
+				//To start at this point we have the last state and our time delta (around 16ms)
+				//finally we need our velocities from SmartDashboard
+				//The last velocity is pure magnitude which we can use to gauge tolerance
+				const char* const SmartNames[] = { "linear_velocity_x","linear_velocity_y","Rotation Velocity","Velocity" };
+				double velocity[4] = { 0 };
+				Smart_GetMultiValue(4, SmartNames, &velocity[0]);
+				//Now we have everything we need to interpolate
+				//first we'll interpolate the position
+				using namespace Framework::Base;
+				//as x , y
+				Vec2D position(m_last_smart_state.bits.Pos_m.x, m_last_smart_state.bits.Pos_m.y);
+				const Vec2D global_velocity(velocity[0], velocity[1]);
+				const Vec2D global_pos_delta = global_velocity * dTime_s;  //how much we increment right now
+				//Now we can compute this position. Offset it with last state so we can average it with the current
+				position += global_pos_delta;
+				//So we have 2 positions, the last state predicted, and the current state of smart dashboard... 
+				//To keep smooth only apply this when we exceed a tolerance
+				const Vec2D smart_pos(smart_state.bits.Pos_m.x, smart_state.bits.Pos_m.y);
+				const double error = (smart_pos - position).length();
+				//While position doesn't have to be perfect, having the tolerance scaled to velocity ensure's 
+				//it will not glitch on slower speeds (which would be more noticeable
+				const double tolerance = fabs(velocity[3]) * 0.05;
+				//SmartDashboard::PutNumber("Test", tolerance);
+				const Vec2D new_pos = error > tolerance ? smart_pos : position;
+				//const Vec2D new_pos = position;  //testing
+				//commit this adjustment
+				smart_state.bits.Pos_m.x = new_pos.x();
+				smart_state.bits.Pos_m.y = new_pos.y();
+				//Now for the heading more of the same
+				const double heading_delta = velocity[2] * dTime_s;
+				double predicted_heading = m_last_smart_state.bits.Att_r + heading_delta;
+				const double smart_heading = smart_state.bits.Att_r;
+				//Unlike position, the rotation needs to be perfect when there is no angular velocity, so we scale the tolerance to it
+				const double tolerance_rot = 0.2 * fabs(velocity[2] * 0.5);
+				//SmartDashboard::PutNumber("Test", tolerance_rot);
+				const double new_heading = fabs(smart_heading - predicted_heading) > tolerance_rot ? smart_heading : predicted_heading;
+				//commit this
+				smart_state.bits.Att_r = new_heading;
+			}
+			m_last_smart_state = smart_state;
+			return m_last_smart_state;
+		}
+	} m_target_interpolate;
 public:
 	//Note: to do nothing in the constructor gives client code the ability to instantiate it without using it or any penalty to instantiate it
 	//and not need to consider it as a pointer
@@ -273,6 +425,28 @@ public:
 		};
 		state = m_interpolate(state,dTime_s);
 	}
+	void UpdateTarget(Entity_UI::uEntity_State &state,double dTime_s)
+	{
+		Entity_UI::uEntity_State smart_state = {};
+		//PSAI position, swerve velocities array, attitude, intended orientation
+		const char* const SmartNames_prediction[] = { "predicted_X_ft","predicted_Y_ft",
+			"predicted_Heading","Travel_Heading"
+		};
+
+		double* const SmartVariables = &smart_state.raw.element[0];
+		Smart_GetMultiValue(4, SmartNames_prediction, SmartVariables);
+		//The values read in are in feet and degrees (human readable, we have to translate them back)
+		//This is just written out so it's easy to follow and maintain
+		using vi = SwerveRobot_UI::SwerveRobot_State;
+		state.raw =
+		{
+			Feet2Meters(smart_state.bits.Pos_m.x),
+			Feet2Meters(smart_state.bits.Pos_m.y),
+			DEG_2_RAD(smart_state.bits.Att_r),
+			DEG_2_RAD(smart_state.bits.IntendedOrientation)
+		};
+		state = m_target_interpolate(state, dTime_s);
+	}
 	//Reserved make update method for voltage and physics simulation of encoders
 	//void UpdateState_physics(SwerveRobot_UI::SwerveRobot_State &state)
 	~SmartDashboard_Control()
@@ -303,7 +477,9 @@ private:
 		{
 			//The robot has setup most the hooks we just need the update from the robot
 			m_robot->SetUpdateCallback(	[&](double dTime_s)
-				{	m_smart_control.UpdateState_basic(m_robot->get_state_as_union(),dTime_s);
+				{	
+				m_smart_control.UpdateState_basic(m_robot->get_state_as_union(),dTime_s);
+				m_smart_control.UpdateTarget(m_robot->get_target_state_as_union(), dTime_s);
 				});
 		}
 		else
@@ -337,7 +513,8 @@ public:
 		switch (index)
 		{
 		case 1:
-			m_smart_control.SetViewMode(view_mode::eUsing_PredictionVariables);
+			m_smart_control.SetViewMode(view_mode::eUsing_PrimaryVariables);
+			m_robot->SetEnableTargetReticle(true);
 			break;
 		case 2:
 			m_smart_control.SetViewMode(view_mode::eUsign_IntendedVelocity);
@@ -347,6 +524,7 @@ public:
 			break;
 		default:
 			m_smart_control.SetViewMode(view_mode::eUsing_PrimaryVariables);
+			m_robot->SetEnableTargetReticle(false);
 		}
 	}
 	~OutputView_Tester()
