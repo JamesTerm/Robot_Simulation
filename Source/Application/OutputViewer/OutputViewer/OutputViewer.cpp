@@ -144,12 +144,12 @@ class SmartDashboard_Control
 public:
 	enum class view_mode
 	{
-		eUsing_PredictionVariables, //Using advanced odometry to get accurate localization
-		eUsing_EncoderVariables,  //Using only encoders (will not pick up skids and slips)
+		eUsing_PrimaryVariables,    //Using primary includes advanced odometry to get accurate localization
+		eUsing_PredictionVariables, //Using only encoders (will not pick up skids and slips)
 		eUsign_IntendedVelocity  //Older assemblies need this
 	};
 private:
-	view_mode m_ViewMode = view_mode::eUsing_PredictionVariables;
+	view_mode m_ViewMode = view_mode::eUsing_PrimaryVariables;
 	class Interpolate_Position
 	{
 		//Newer SmartDashboard may intensionally update slower than our framerate when this happens the position looks jerky
@@ -229,7 +229,7 @@ public:
 			"swivel_fl_Raw","swivel_fr_Raw","swivel_rl_Raw","swivel_rr_Raw",
 			"Heading","Travel_Heading"
 		};
-		const char * const SmartNames_Encoder[] = { "X_ft","Y_ft",
+		const char * const SmartNames_Primary[] = { "X_ft","Y_ft",
 			"wheel_fl_Encoder","wheel_fr_Encoder","wheel_rl_Encoder","wheel_rr_Encoder",
 			"swivel_fl_Raw","swivel_fr_Raw","swivel_rl_Raw","swivel_rr_Raw",
 			"Heading","Travel_Heading"
@@ -243,11 +243,11 @@ public:
 		double * const SmartVariables = &smart_state.raw.element[0];
 		switch (m_ViewMode)
 		{
+		case view_mode::eUsing_PrimaryVariables:
+			Smart_GetMultiValue(12, SmartNames_Primary, SmartVariables);
+			break;
 		case view_mode::eUsing_PredictionVariables:
 			Smart_GetMultiValue(12, SmartNames_prediction, SmartVariables);
-			break;
-		case view_mode::eUsing_EncoderVariables:
-			Smart_GetMultiValue(12, SmartNames_Encoder, SmartVariables);
 			break;
 		case view_mode::eUsign_IntendedVelocity:
 			Smart_GetMultiValue(12, SmartNames, SmartVariables);
@@ -337,7 +337,7 @@ public:
 		switch (index)
 		{
 		case 1:
-			m_smart_control.SetViewMode(view_mode::eUsing_EncoderVariables);
+			m_smart_control.SetViewMode(view_mode::eUsing_PredictionVariables);
 			break;
 		case 2:
 			m_smart_control.SetViewMode(view_mode::eUsign_IntendedVelocity);
@@ -346,7 +346,7 @@ public:
 			m_smart_control.SetInterpolatePosition(false);
 			break;
 		default:
-			m_smart_control.SetViewMode(view_mode::eUsing_PredictionVariables);
+			m_smart_control.SetViewMode(view_mode::eUsing_PrimaryVariables);
 		}
 	}
 	~OutputView_Tester()
