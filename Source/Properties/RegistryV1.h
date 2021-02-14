@@ -15,11 +15,12 @@ namespace registry_v1
 //put a csz (Const String Zero terminated) prefix as a constant char * variable for asset key names
 #define Rg_(x) const char * const csz_##x = #x;
 
-	Rg_(Build_bypass_simulation)
-	Rg_(Build_hook_simulation)
-	Rg_(Build_sim_prediction_vars)
-	Rg_(Build_sim_target_reticle)
+	Rg_(Build_bypass_simulation)  //Used to feed voltage directly into the position and velocity of drive
+	Rg_(Build_hook_simulation) //If simulation supports it, will hook advance odometry
+	Rg_(Build_sim_prediction_vars) //Show encoder-only (velocity only prediction) localization variables (Output viewer uses this for target reticle)
+	Rg_(Build_sim_target_reticle)  //Visual Studio version only
 
+	Rg_(Misc_have_gyro)  //Visual Studio must be false; otherwise, optional and will auto-simulate when running simulation
 #pragma region _prefix section_
 	//instance named prefix for each wheel front, and rear... of left and right, left is port side, right starboard
 	//or from top view with front facing up, s = speed, a = wheel angle
@@ -163,6 +164,8 @@ namespace registry_v1
 	Rg_(EncoderSimulation_Free_Current_Amp)
 	//} motor;
 //};
+#pragma endregion
+#pragma region _simulation odometry_
 	//Use the CommonDrive_ prefix for SwerveEncoders_Simulator4 encoders
 	//and CommonSwivel_ prefix for Potentiometer_Tester4 to override these defaults
 	Rg_(Pot4_free_speed_rad) //radians per second of motor

@@ -801,6 +801,7 @@ public:
 		#else
 		assets.put_bool(csz_Build_bypass_simulation, true);
 		#endif
+		assets.put_bool(csz_Misc_have_gyro, false);  //must be false for Visual Studio
 		//TestIndivualWheels();
 		//TestCurivator();
 		TestAndromeda();

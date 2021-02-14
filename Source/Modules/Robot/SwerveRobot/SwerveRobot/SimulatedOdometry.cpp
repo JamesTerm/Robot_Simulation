@@ -1677,6 +1677,17 @@ public:
 class SimulatedOdometry_Internal
 {
 private:
+	static inline double NormalizeRotation2(double Rotation)
+	{
+		const double Pi2 = M_PI * 2.0;
+		//Normalize the rotation
+		if (Rotation > M_PI)
+			Rotation -= Pi2;
+		else if (Rotation < -M_PI)
+			Rotation += Pi2;
+		return Rotation;
+	}
+
 	#pragma region _member vars_
 	SwerveVelocities m_CurrentVelocities;
 	std::function<SwerveVelocities()> m_VoltageCallback;
@@ -1712,6 +1723,7 @@ private:
 			const double AngularVelocity = payload.GetAngularVelocity();
 			//update our heading
 			m_current_heading += AngularVelocity * d_time_s;
+			m_current_heading=NormalizeRotation2(m_current_heading);
 			//With latest heading we can adjust our position delta to proper heading
 			const Vec2D local_velocity = payload.GetLinearVelocity();
 			const Vec2D global_velocity = LocalToGlobal(m_current_heading, local_velocity);
@@ -1735,16 +1747,6 @@ private:
 	#endif
 	bool m_UseBypass = true;
 	#pragma endregion
-	inline double NormalizeRotation2(double Rotation)
-	{
-		const double Pi2 = M_PI * 2.0;
-		//Normalize the rotation
-		if (Rotation > M_PI)
-			Rotation -= Pi2;
-		else if (Rotation < -M_PI)
-			Rotation += Pi2;
-		return Rotation;
-	}
 	void SetHooks(bool enabled)
 	{
 		#ifndef __UseLegacySimulation__

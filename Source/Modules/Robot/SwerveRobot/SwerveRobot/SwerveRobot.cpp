@@ -70,6 +70,7 @@ private:
 	std::function<SwerveRobot::PID_Velocity_proto> m_PID_Velocity_callback = Default_Velocity_PID_Monitor;
 	std::function<SwerveRobot::PID_Position_proto> m_PID_Position_callback = Default_Position_PID_Monitor;
 	std::function<Robot::SwerveVelocities ()> m_PhysicalOdometry=nullptr;
+	std::function<double ()> m_PhysicalOdometry_heading=nullptr;
 #pragma endregion
 	void SetHooks(bool enable)
 	{
@@ -100,7 +101,7 @@ private:
 				MotionControl2D::Vector2D ret = { postion[0],postion[1] };
 				return ret;
 			});
-			HOOK(m_Odometry.SetOdometryHeadingCallback,, return GetCurrentHeading());
+			HOOK(m_Odometry.SetOdometryHeadingCallback,, return m_PhysicalOdometry_heading?m_PhysicalOdometry_heading(): GetCurrentHeading());
 			//I could use the macro, but I can see this one needing a break point from time-to-time
 			m_Odometry.SetOdometryVelocityCallback(
 				[&]()
@@ -382,24 +383,32 @@ public:
 	}
 	void Init(const Framework::Base::asset_manager *asset_properties)
 	{
-		if ((asset_properties) && (asset_properties->get_bool(properties::registry_v1::csz_Build_hook_simulation,false)))
+   		using namespace ::properties::registry_v1;
+		if (asset_properties)
 		{
-			if (m_Simulation.Sim_SupportHeading())
+			//If we have a gyro do not hook up the simulation gyro
+			const bool HaveGyro = asset_properties->get_bool(csz_Misc_have_gyro, false);
+			if (HaveGyro)
+				m_Odometry.Set_SupportHeading(true);  //This is already hooked up by now
+			if (asset_properties->get_bool(csz_Build_hook_simulation,false))
 			{
-				m_Odometry.Set_SupportHeading(true);
-				m_Odometry.SetOdometryHeadingCallback(
-					[&]()
+				if (m_Simulation.Sim_SupportHeading()&&!HaveGyro)
 				{
-					return m_Simulation.GyroMag_GetCurrentHeading();
-				});
-			}
-			if (m_Simulation.Sim_SupportVision())
-			{
-				m_Odometry.SetOdometryPositionCallback(
-					[&]()
+					m_Odometry.Set_SupportHeading(true);
+					m_Odometry.SetOdometryHeadingCallback(
+						[&]()
+					{
+						return m_Simulation.GyroMag_GetCurrentHeading();
+					});
+				}
+				if (m_Simulation.Sim_SupportVision())
 				{
-					return m_Simulation.Vision_GetCurrentPosition();
-				});
+					m_Odometry.SetOdometryPositionCallback(
+						[&]()
+					{
+						return m_Simulation.Vision_GetCurrentPosition();
+					});
+				}
 			}
 		}
 		//Go ahead and grab all the default properties first, then if we have asset properties fill in the ones we have and pass
@@ -614,6 +623,10 @@ public:
 	{
 		return m_Odometry.GetHeading();
 	}
+	double Get_SimulatedCurrentHeading() const
+	{
+		return m_Simulation.GyroMag_GetCurrentHeading();
+	}
 	const SwerveVelocities &GetCurrentVelocities() const
 	{
 		return m_Odometry.GetCurrentVelocities();
@@ -680,6 +693,10 @@ public:
 	{
 		m_PhysicalOdometry=callback;
 	}
+	void SetPhysicalOdometry_heading(std::function<double ()> callback)
+	{
+		m_PhysicalOdometry_heading=callback;
+	}
 	#pragma endregion
 };
 #pragma region _wrapper methods_
@@ -743,6 +760,10 @@ double SwerveRobot::Get_OdometryCurrentHeading() const
 {
 	return m_SwerveRobot->Get_OdometryCurrentHeading();
 }
+double SwerveRobot::Get_SimulatedCurrentHeading() const
+{
+	return m_SwerveRobot->Get_SimulatedCurrentHeading();
+}
 void SwerveRobot::Set_UpdateGlobalVelocity(std::function<void(const Vec2D &new_velocity)> callback)
 {
 	m_SwerveRobot->Set_UpdateGlobalVelocity(callback);
@@ -770,6 +791,10 @@ void SwerveRobot::SetExternal_Position_PID_Monitor_Callback(std::function<PID_Po
 void SwerveRobot::SetPhysicalOdometry(std::function<Robot::SwerveVelocities ()> callback)
 {
 	m_SwerveRobot->SetPhysicalOdometry(callback);
+}
+void SwerveRobot::SetPhysicalOdometry_heading(std::function<double ()> callback)
+{
+	m_SwerveRobot->SetPhysicalOdometry_heading(callback);	
 }
 const SwerveVelocities &SwerveRobot::GetCurrentVelocities() const
 {

@@ -52,6 +52,7 @@ public:
 	const Vec2D &Get_OdometryCurrentPosition() const; //allow client to access odometry method for position to hook (if supported see Get_SupportOdometryPosition)
 	double GetCurrentHeading() const;
 	double Get_OdometryCurrentHeading() const; //allow client to access odometry method of heading as well
+	double Get_SimulatedCurrentHeading() const; //explicit access to simulations heading
 	const SwerveVelocities &GetCurrentVelocities() const;  //access to odometry readings
 	const SwerveVelocities &GetSimulatedVelocities() const; //explicit access to simulations velocities
 	const SwerveVelocities &GetCurrentVoltages() const;    //access to voltage writings
@@ -79,6 +80,7 @@ public:
 	void SetExternal_Position_PID_Monitor_Callback(std::function<PID_Position_proto> callback);
 	//Hook up the physical odometry if we have it
 	void SetPhysicalOdometry(std::function<Robot::SwerveVelocities ()> callback);
+	void SetPhysicalOdometry_heading(std::function<double ()> callback);
 private:
 	std::shared_ptr<SwerveRobot_Internal> m_SwerveRobot;
 };
