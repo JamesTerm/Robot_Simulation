@@ -1834,6 +1834,9 @@ public:
 				m_Potentiometers[i].ResetPos();
 			}
 			#else
+			for (size_t i = 0; i < 4; i++)
+				m_Potentiometers[i].ResetPos();
+			m_EncoderSim4.ResetPos();
 			m_AdvancedSensors.Reset();
 			#endif
 		}
