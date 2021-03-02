@@ -604,6 +604,7 @@ public:
 		//populate properties method here and invoke it, init can have properties sent as a parameter here
 		m_script_loader.load_script(m_properties);
 		InitControllers();
+		m_Goal.Initialize(&m_properties);
 		m_robot.Init(&m_properties);
 		m_Advanced_Odometry.Init(&m_properties);
 		m_viewer.init();
