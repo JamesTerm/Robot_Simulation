@@ -4,8 +4,6 @@
 #include <algorithm>
 #include <functional>
 
-#pragma comment (lib,"winmm")
-#pragma comment (lib,"Shlwapi.lib")
 #include <timeapi.h>
 #include <shlwapi.h>
 //#include "../Robot_Tester.h"

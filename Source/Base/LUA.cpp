@@ -1,7 +1,8 @@
 #if 1
 #include "LUA.h"
+#include <locale.h>
 
-#ifdef _Win32
+#ifdef _WIN32
 // No C library depreciation warnings
 #pragma warning ( disable : 4995 )
 #pragma warning ( disable : 4996 )

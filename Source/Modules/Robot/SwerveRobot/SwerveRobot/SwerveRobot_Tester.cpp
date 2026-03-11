@@ -21,14 +21,6 @@
 #include "../../../../Properties/RegistryV1.h"
 #include "SwerveRobot.h"
 
-#ifdef _WIN64
-#ifdef _DEBUG
-#pragma comment(lib,"../../../../Modules/Output/OSG_Viewer/x64/Debug/OSG_Viewer.lib")
-#else
-#pragma comment(lib,"../../../../Modules/Output/OSG_Viewer/x64/Release/OSG_Viewer.lib")
-#endif
-#endif
-
 //#define __TestPID__
 
 #ifndef __TestPID__

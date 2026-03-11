@@ -7,9 +7,6 @@
 #include <dinput.h>
 #include "dx_Joystick.h"
 
-#pragma comment(lib, "dinput8")
-#pragma comment(lib, "dxGUID")
-
 namespace Module {
 	namespace Input {
 

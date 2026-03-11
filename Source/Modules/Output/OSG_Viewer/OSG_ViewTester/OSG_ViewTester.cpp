@@ -5,6 +5,8 @@
 #include "../OSG_Viewer/Entity_UI.h"
 #include "../OSG_Viewer/Keyboard_State.h"
 
+using namespace Module::Output;
+
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
