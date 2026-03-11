@@ -216,18 +216,28 @@ endif()
 
 if(BUILD_UNIT_TESTS)
     enable_testing()
+    find_package(GTest CONFIG REQUIRED)
+    include(GoogleTest)
 
     add_executable(robot_unit_tests
-        tests/robot_unit_tests.cpp
+        tests/entity1d_tests.cpp
+        tests/entity2d_tests.cpp
+        tests/drivekinematics_tests.cpp
         Source/Modules/Robot/Entity1D/Entity1D/Entity1D.cpp
         Source/Modules/Robot/Entity2D/Entity2D/Entity2D.cpp
         Source/Modules/Robot/DriveKinematics/DriveKinematics/Vehicle_Drive.cpp
     )
+    target_include_directories(robot_unit_tests
+        PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/Source"
+    )
     target_link_libraries(robot_unit_tests
         PRIVATE
             BaseCore
+            GTest::gtest
+            GTest::gtest_main
     )
-    add_test(NAME robot_unit_tests COMMAND robot_unit_tests)
+    gtest_discover_tests(robot_unit_tests)
 endif()
 
 if(BUILD_DRIVER_STATION)

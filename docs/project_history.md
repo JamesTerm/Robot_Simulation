@@ -43,3 +43,23 @@
 
 - CMake excludes `Source/Libraries/SmartDashboard/networktables2/util/System.cpp` (VxWorks implementation) and uses Windows `OSAL/System.cpp`.
 - Non-blocking warnings remain from legacy `_CRT_SECURE_NO_WARNINGS` macro redefinitions.
+
+## 2026-03-11 - Documentation organization and GoogleTest integration
+
+- Reorganized docs to match SmartDashboard-style layout:
+  - Added `docs/overview.md` for long-form project orientation.
+  - Moved durable history to `docs/project_history.md`.
+  - Kept `Agent_Session_Notes.md` lean and handoff-focused.
+  - Slimmed top-level readme to quick-start + documentation map.
+- Integrated GoogleTest with CMake unit-test flow:
+  - Added `find_package(GTest CONFIG REQUIRED)` and `include(GoogleTest)`.
+  - Replaced custom test `main()` with gtest-based suites.
+  - Added `gtest_discover_tests(robot_unit_tests)` for CTest/Visual Studio discovery.
+- Split tests into focused files:
+  - `tests/entity1d_tests.cpp`
+  - `tests/entity2d_tests.cpp`
+  - `tests/drivekinematics_tests.cpp`
+- Added `docs/testing.md` with configure/build/run and Visual Studio test-discovery guidance.
+- Validation:
+  - `cmake --build build-vcpkg --config Debug --target robot_unit_tests` succeeds.
+  - `ctest --test-dir build-vcpkg -C Debug --output-on-failure` passes (6/6).
