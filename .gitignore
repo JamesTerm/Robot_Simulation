@@ -176,3 +176,10 @@ bin/
 # Miscellaneous
 *.recipe
 
+# CMake
+/build-*/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+Testing/
