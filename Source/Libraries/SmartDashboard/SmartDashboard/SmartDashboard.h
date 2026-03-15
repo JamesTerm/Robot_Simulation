@@ -17,11 +17,34 @@
 #include "networktables2/type/ComplexData.h"
 #include "ErrorBase.h"
 
+class SmartDashboardDirectPublishSink
+{
+public:
+	virtual ~SmartDashboardDirectPublishSink() {}
+	virtual void PublishBoolean(const std::string& keyName, bool value) = 0;
+	virtual void PublishNumber(const std::string& keyName, double value) = 0;
+	virtual void PublishString(const std::string& keyName, const std::string& value) = 0;
+};
+
+class SmartDashboardDirectQuerySource
+{
+public:
+	virtual ~SmartDashboardDirectQuerySource() {}
+	virtual bool TryGetBoolean(const std::string& keyName, bool& value) = 0;
+	virtual bool TryGetNumber(const std::string& keyName, double& value) = 0;
+	virtual bool TryGetString(const std::string& keyName, std::string& value) = 0;
+};
+
 class SmartDashboard //: public SensorBase
 {
 public:
 	static void init();
+	static bool is_initialized();
 	static void shutdown();
+	static void SetDirectPublishSink(SmartDashboardDirectPublishSink* sink);
+	static void ClearDirectPublishSink();
+	static void SetDirectQuerySource(SmartDashboardDirectQuerySource* source);
+	static void ClearDirectQuerySource();
 
 	static void PutData(std::string key, Sendable *data);
 	static void PutData(NamedSendable *value);
@@ -69,4 +92,3 @@ private:
 };
 
 #endif
-

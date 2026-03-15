@@ -30,6 +30,37 @@ WCHAR szWindowClass[MAX_LOADSTRING];            // the main window class name
 RobotTester *s_pRobotTester = nullptr;  
 //void BindRobot(RobotTester &_robot_tester);  //forward declare
 void SetupPreferences();
+ConnectionMode s_InitialConnectionMode = ConnectionMode::eLegacySmartDashboard;
+
+ConnectionMode ParseConnectionModeFromCmdLine(LPWSTR cmd_line)
+{
+	if (!cmd_line)
+		return ConnectionMode::eLegacySmartDashboard;
+
+	std::wstring cmd = cmd_line;
+	std::transform(cmd.begin(), cmd.end(), cmd.begin(), towlower);
+
+	if ((cmd.find(L"direct") != std::wstring::npos) || (cmd.find(L"conn=direct") != std::wstring::npos))
+		return ConnectionMode::eDirectConnect;
+	if ((cmd.find(L"shuffle") != std::wstring::npos) || (cmd.find(L"conn=shuffle") != std::wstring::npos))
+		return ConnectionMode::eShuffleboard;
+	if ((cmd.find(L"legacy") != std::wstring::npos) || (cmd.find(L"conn=legacy") != std::wstring::npos))
+		return ConnectionMode::eLegacySmartDashboard;
+
+	return ConnectionMode::eLegacySmartDashboard;
+}
+
+void ApplyConnectionMode(ConnectionMode mode)
+
+{
+	if (s_pRobotTester)
+		s_pRobotTester->SetConnectionMode(mode);
+
+	std::wstring message = L"Connection Mode: ";
+	message += GetConnectionModeName(mode);
+	message += L"\n";
+	OutputDebugStringW(message.c_str());
+}
 //Keyboard *s_Keyboard = nullptr;
 
 __inline void GetParentDirectory(std::wstring &path)
@@ -52,7 +83,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	{
 		std::wstring path;
 		wchar_t Buffer[MAX_PATH];
-		GetModuleFileName(nullptr, Buffer, MAX_PATH);
+		GetModuleFileNameW(nullptr, Buffer, MAX_PATH);
 		PathRemoveFileSpecW(Buffer);
 		path = Buffer;
 		GetParentDirectory(path);
@@ -60,7 +91,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 		SetCurrentDirectoryW(path.c_str());
 	}
 	UNREFERENCED_PARAMETER(hPrevInstance);
-	UNREFERENCED_PARAMETER(lpCmdLine);
+	s_InitialConnectionMode = ParseConnectionModeFromCmdLine(lpCmdLine);
 
 	// TODO: Place code here.
 
@@ -72,7 +103,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	const HWND pParent = nullptr;  //just to show what the parameter is
 
 	// Display the main dialog box.  I've always wanted to put the callback in the same place!
-	HWND m_hDlg = CreateDialogW(hInstance, MAKEINTRESOURCE(IDD_DriveStation1), pParent,
+	HWND m_hDlg = CreateDialogW(hInstance, MAKEINTRESOURCEW(IDD_DriveStation1), pParent,
 		[](HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	{
 		INT_PTR ret = FALSE;
@@ -188,6 +219,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	RobotTester _robot_tester;
 	s_pRobotTester = &_robot_tester;
 	_robot_tester.RobotTester_create();
+	_robot_tester.SetConnectionMode(s_InitialConnectionMode);
 	//Bind robot for Keyboard binding
 	//BindRobot(_robot_tester);
 	_robot_tester.RobotTester_init();
@@ -205,6 +237,22 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	{
 		if ((msg.message == WM_KEYDOWN)|| (msg.message == WM_KEYUP))
 		{
+			if (msg.message == WM_KEYDOWN)
+			{
+				switch (msg.wParam)
+				{
+				case VK_F5:
+					ApplyConnectionMode(ConnectionMode::eLegacySmartDashboard);
+					break;
+				case VK_F6:
+					ApplyConnectionMode(ConnectionMode::eDirectConnect);
+					break;
+				case VK_F7:
+					ApplyConnectionMode(ConnectionMode::eShuffleboard);
+					break;
+				}
+			}
+
 			bool ProcessKey = true;
 			WORD ascii = 0;
 			//Translate WM_Key messages to ascii

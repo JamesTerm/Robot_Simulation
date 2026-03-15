@@ -19,7 +19,8 @@ ServerNetworkTableEntryStore::~ServerNetworkTableEntryStore()
 bool ServerNetworkTableEntryStore::addEntry(NetworkTableEntry* newEntry)
 {
 	NTSynchronized sync(block_namedEntries);
-	NetworkTableEntry* entry = namedEntries[newEntry->name];
+	std::map<std::string, NetworkTableEntry*>::iterator it = namedEntries.find(newEntry->name);
+	NetworkTableEntry* entry = (it != namedEntries.end()) ? it->second : NULL;
 	
 	if (entry == NULL)
 	{

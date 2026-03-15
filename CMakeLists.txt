@@ -245,6 +245,7 @@ if(BUILD_DRIVER_STATION)
         Source/Application/DriverStation/DriverStation/DriverStation.cpp
         Source/Application/DriverStation/DriverStation/Keyboard.cpp
         Source/Application/DriverStation/DriverStation/Robot_Tester.cpp
+        Source/Application/DriverStation/DriverStation/Transport.cpp
         Source/Application/DriverStation/DriverStation/stdafx.cpp
         Source/Application/DriverStation/DriverStation/DriverStation.rc
     )

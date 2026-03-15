@@ -8,14 +8,50 @@
 
 ITable* SmartDashboard::m_table = NULL;
 std::map<ITable *, Sendable *> SmartDashboard::m_tablesToData;
+namespace
+{
+	bool g_smartdashboard_initialized = false;
+	SmartDashboardDirectPublishSink* g_directPublishSink = NULL;
+	SmartDashboardDirectQuerySource* g_directQuerySource = NULL;
+}
 
 void SmartDashboard::init()
 {
+	if (g_smartdashboard_initialized && m_table != NULL)
+		return;
 	m_table = NetworkTable::GetTable("SmartDashboard");
+	g_smartdashboard_initialized = (m_table != NULL);
+}
+
+bool SmartDashboard::is_initialized()
+{
+	return g_smartdashboard_initialized && m_table != NULL;
 }
 void SmartDashboard::shutdown()
 {
 	NetworkTable::Shutdown();
+	m_table = NULL;
+	g_smartdashboard_initialized = false;
+}
+
+void SmartDashboard::SetDirectPublishSink(SmartDashboardDirectPublishSink* sink)
+{
+	g_directPublishSink = sink;
+}
+
+void SmartDashboard::ClearDirectPublishSink()
+{
+	g_directPublishSink = NULL;
+}
+
+void SmartDashboard::SetDirectQuerySource(SmartDashboardDirectQuerySource* source)
+{
+	g_directQuerySource = source;
+}
+
+void SmartDashboard::ClearDirectQuerySource()
+{
+	g_directQuerySource = NULL;
 }
 void SmartDashboard::SetClientMode()
 {
@@ -121,6 +157,9 @@ void SmartDashboard::RetrieveValue(std::string keyName, ComplexData& value)
  */
 void SmartDashboard::PutBoolean(std::string keyName, bool value)
 {
+	if (g_directPublishSink != NULL)
+		g_directPublishSink->PublishBoolean(keyName, value);
+
 	m_table->PutBoolean(keyName, value);
 }
 
@@ -131,6 +170,13 @@ void SmartDashboard::PutBoolean(std::string keyName, bool value)
  */
 bool SmartDashboard::GetBoolean(std::string keyName)
 {
+	if (g_directQuerySource != NULL)
+	{
+		bool value = false;
+		if (g_directQuerySource->TryGetBoolean(keyName, value))
+			return value;
+	}
+
 	return m_table->GetBoolean(keyName);
 }
 
@@ -142,6 +188,10 @@ bool SmartDashboard::GetBoolean(std::string keyName)
  * @param value the value
  */
 void SmartDashboard::PutNumber(std::string keyName, double value){
+	if (!is_initialized()) init();
+	if (m_table == NULL) return;
+	if (g_directPublishSink != NULL)
+		g_directPublishSink->PublishNumber(keyName, value);
 	m_table->PutNumber(keyName, value);
 }
 
@@ -152,6 +202,15 @@ void SmartDashboard::PutNumber(std::string keyName, double value){
  */
 double SmartDashboard::GetNumber(std::string keyName)
 {
+	if (g_directQuerySource != NULL)
+	{
+		double value = 0.0;
+		if (g_directQuerySource->TryGetNumber(keyName, value))
+			return value;
+	}
+
+	if (!is_initialized()) init();
+	if (m_table == NULL) return 0.0;
 	return m_table->GetNumber(keyName);
 }
 
@@ -164,6 +223,9 @@ double SmartDashboard::GetNumber(std::string keyName)
  */
 void SmartDashboard::PutString(std::string keyName, std::string value)
 {
+	if (g_directPublishSink != NULL)
+		g_directPublishSink->PublishString(keyName, value);
+
 	m_table->PutString(keyName, value);
 }
 
@@ -195,6 +257,13 @@ int SmartDashboard::GetString(std::string keyName, char *outBuffer, unsigned int
  */
 std::string SmartDashboard::GetString(std::string keyName)
 {
+	if (g_directQuerySource != NULL)
+	{
+		std::string value;
+		if (g_directQuerySource->TryGetString(keyName, value))
+			return value;
+	}
+
 	return m_table->GetString(keyName);
 }
 

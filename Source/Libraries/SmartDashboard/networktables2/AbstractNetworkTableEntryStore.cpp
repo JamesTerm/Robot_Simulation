@@ -134,8 +134,18 @@
 			else
 			{
 				tableEntry = index->second;
-				if(tableEntry->GetType()->id != type->id){
-					throw TableKeyExistsWithDifferentTypeException(name, tableEntry->GetType());
+				NetworkTableEntryType* existingType = tableEntry->GetType();
+				if (existingType == NULL)
+				{
+					printf("NT warning: null existing type for key '%s'; forcing reassignment\n", name.c_str());
+					tableEntry->ForcePut((SequenceNumber)(tableEntry->GetSequenceNumber() + 1), type, value);
+					tableEntry->FireListener(listenerManager);
+					outgoingReceiver->offerOutgoingUpdate(tableEntry);
+					return;
+				}
+
+				if(existingType->id != type->id){
+					throw TableKeyExistsWithDifferentTypeException(name, existingType);
 				}
 				
 				EntryValue oldValue = tableEntry->GetValue();
@@ -154,6 +164,11 @@
 		{ 
 			NTSynchronized sync(LOCK);
 			NetworkTableEntryType* type = tableEntry->GetType();
+			if (type == NULL)
+			{
+				printf("NT warning: null type in PutOutgoing(entry) for key '%s'; dropping update\n", tableEntry->name.c_str());
+				return;
+			}
 			EntryValue oldValue = tableEntry->GetValue();
 			if(!type->areEqual(value, oldValue)){
 			  if(updateEntry(tableEntry, (SequenceNumber)(tableEntry->GetSequenceNumber() + 1), value)){

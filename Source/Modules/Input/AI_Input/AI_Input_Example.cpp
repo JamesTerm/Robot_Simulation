@@ -290,15 +290,39 @@ public:
 		AutonType AutonTest = eDoNothing;
 		const char* const AutonTestSelection = "AutonTest";
 		#if 1
+		double autonSelection = (double)eDoNothing;
+		bool hasSelection = false;
 		try
 		{
-			AutonTest = (AutonType)((size_t)SmartDashboard::GetNumber(AutonTestSelection));
+			autonSelection = SmartDashboard::GetNumber(AutonTestSelection);
+			hasSelection = true;
 		}
 		catch (...)
 		{
-			//set up default for nothing
-			SmartDashboard::PutNumber(AutonTestSelection, (double)eDoNothing);
+			try
+			{
+				const std::string textSelection = SmartDashboard::GetString(AutonTestSelection);
+				autonSelection = atof(textSelection.c_str());
+				hasSelection = true;
+			}
+			catch (...)
+			{
+			}
 		}
+
+		if (!hasSelection)
+		{
+			// set up default for nothing
+			SmartDashboard::PutNumber(AutonTestSelection, (double)eDoNothing);
+			autonSelection = (double)eDoNothing;
+		}
+
+		int autonIndex = (int)autonSelection;
+		if (autonIndex < (int)eDoNothing)
+			autonIndex = (int)eDoNothing;
+		if (autonIndex >= (int)eNoAutonTypes)
+			autonIndex = (int)eDoNothing;
+		AutonTest = (AutonType)autonIndex;
 		#else
 		#if !defined __USE_LEGACY_WPI_LIBRARIES__
 		SmartDashboard::SetDefaultNumber(AutonTestSelection, 0.0);

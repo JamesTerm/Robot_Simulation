@@ -18,6 +18,12 @@
 - Long-form repository orientation moved to `docs/overview.md`.
 - GoogleTest integration is now in place (`find_package(GTest CONFIG REQUIRED)` + `gtest_discover_tests`).
 - New transport feature direction is documented in `docs/transport_modes_strategy.md`.
+- Transport iteration progress:
+  - Iteration 1: runtime mode selection plumbing added (cmdline + hotkeys) with legacy behavior preserved.
+  - Iteration 2: extracted connection backend/router (`Transport.h/.cpp`) and routed `RobotTester` through it.
+  - Current behavior: legacy + shuffle use SmartDashboard path; direct mode now starts a shared-memory/event publisher (`Local\\SmartDashboard.Direct.*`) compatible with SmartDashboard direct subscriber expectations.
+  - Stability patch: added defensive guard in legacy NT entry store to handle rare null-entry-type update windows during Auton test transitions.
+  - Deeper hardening: removed implicit `std::map::operator[]` insertions in NT entry stores to avoid accidental null entry publication.
 
 ## Active constraints
 
@@ -29,3 +35,4 @@
 1. Start new feature branch for transport mode selector (Direct, Legacy SmartDashboard, Shuffleboard).
 2. Implement Direct + Legacy mode contract first (scalars + chooser topics + selected writeback).
 3. Add mode-focused tests; defer Shuffleboard-specific behavior until Direct is stable.
+4. Next coding step: implement first real Direct backend behavior behind `DashboardTransportRouter` while keeping legacy oracle path intact.

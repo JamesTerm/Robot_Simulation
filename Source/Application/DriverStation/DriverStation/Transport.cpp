@@ -1,0 +1,969 @@
+#include "stdafx.h"
+#include "Transport.h"
+
+#include "../../../Libraries/SmartDashboard/SmartDashboard_Import.h"
+
+#include <Windows.h>
+
+#include <atomic>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <memory>
+#include <mutex>
+#include <string>
+#include <thread>
+#include <unordered_map>
+
+namespace
+{
+	class IDirectPublisher
+	{
+	public:
+		virtual ~IDirectPublisher() = default;
+		virtual bool Start() = 0;
+		virtual void Stop() = 0;
+		virtual void PublishBool(const std::string& key, bool value) = 0;
+		virtual void PublishDouble(const std::string& key, double value) = 0;
+		virtual void PublishString(const std::string& key, const std::string& value) = 0;
+		virtual bool FlushNow() = 0;
+	};
+
+	class DirectPublisherStub final : public IDirectPublisher
+	{
+	public:
+		explicit DirectPublisherStub(
+			const std::wstring& mappingName,
+			const std::wstring& dataEventName,
+			const std::wstring& heartbeatEventName)
+			: m_mappingName(mappingName)
+			, m_dataEventName(dataEventName)
+			, m_heartbeatEventName(heartbeatEventName)
+		{
+		}
+
+		~DirectPublisherStub() override
+		{
+			Stop();
+		}
+
+		bool Start() override
+		{
+			if (m_running.load())
+				return true;
+
+			const std::size_t mappingBytes = sizeof(RingHeader) + kDefaultCapacityBytes;
+			m_mapping = CreateFileMappingW(
+				INVALID_HANDLE_VALUE,
+				nullptr,
+				PAGE_READWRITE,
+				static_cast<DWORD>((static_cast<unsigned long long>(mappingBytes) >> 32U) & 0xFFFFFFFFULL),
+				static_cast<DWORD>(static_cast<unsigned long long>(mappingBytes) & 0xFFFFFFFFULL),
+				m_mappingName.c_str());
+			if (m_mapping == nullptr)
+				return false;
+
+			m_view = MapViewOfFile(m_mapping, FILE_MAP_ALL_ACCESS, 0, 0, mappingBytes);
+			if (m_view == nullptr)
+			{
+				Close();
+				return false;
+			}
+
+			m_dataEvent = CreateEventW(nullptr, FALSE, FALSE, m_dataEventName.c_str());
+			if (m_dataEvent == nullptr)
+			{
+				Close();
+				return false;
+			}
+
+			m_heartbeatEvent = CreateEventW(nullptr, FALSE, FALSE, m_heartbeatEventName.c_str());
+			if (m_heartbeatEvent == nullptr)
+			{
+				Close();
+				return false;
+			}
+
+			auto* header = static_cast<RingHeader*>(m_view);
+			const std::uint32_t payloadCapacity = static_cast<std::uint32_t>(mappingBytes - sizeof(RingHeader));
+			const bool needsInit =
+				(header->magic != kMagic) ||
+				(header->version != kVersion) ||
+				(header->capacityBytes != payloadCapacity);
+			if (needsInit)
+			{
+				std::memset(m_view, 0, mappingBytes);
+				header->magic = kMagic;
+				header->version = kVersion;
+				header->reserved0 = 0;
+				header->capacityBytes = payloadCapacity;
+				header->writeIndex.store(0, std::memory_order_release);
+				header->readIndex.store(0, std::memory_order_release);
+				header->publishedSeq.store(0, std::memory_order_release);
+				header->droppedCount.store(0, std::memory_order_release);
+				const std::uint64_t nowUs = GetSteadyNowUs();
+				header->lastProducerHeartbeatUs.store(nowUs, std::memory_order_release);
+				header->lastConsumerHeartbeatUs.store(nowUs, std::memory_order_release);
+			}
+
+			m_header = header;
+			m_payload = reinterpret_cast<std::uint8_t*>(header + 1);
+			m_capacity = header->capacityBytes;
+			m_sequence = header->publishedSeq.load(std::memory_order_acquire);
+
+			m_running.store(true);
+			m_worker = std::thread(&DirectPublisherStub::RunLoop, this);
+			return true;
+		}
+
+		void Stop() override
+		{
+			if (!m_running.load())
+				return;
+
+			FlushNow();
+			m_running.store(false);
+			if (m_worker.joinable())
+				m_worker.join();
+
+			Close();
+		}
+
+		void PublishBool(const std::string& key, bool value) override
+		{
+			PendingValue pending;
+			pending.type = ValueType::Bool;
+			pending.boolValue = value;
+			StorePending(key, pending);
+		}
+
+		void PublishDouble(const std::string& key, double value) override
+		{
+			PendingValue pending;
+			pending.type = ValueType::Double;
+			pending.doubleValue = value;
+			StorePending(key, pending);
+		}
+
+		void PublishString(const std::string& key, const std::string& value) override
+		{
+			PendingValue pending;
+			pending.type = ValueType::String;
+			pending.stringValue = value;
+			StorePending(key, pending);
+		}
+
+		bool FlushNow() override
+		{
+			if (!m_running.load() || m_header == nullptr)
+				return false;
+
+			std::unordered_map<std::string, PendingValue> pending;
+			{
+				std::lock_guard<std::mutex> lock(m_pendingMutex);
+				pending.swap(m_pending);
+			}
+
+			bool published = false;
+			for (const auto& entry : pending)
+			{
+				published = WritePendingValue(entry.first, entry.second) || published;
+			}
+
+			m_header->lastProducerHeartbeatUs.store(GetSteadyNowUs(), std::memory_order_release);
+			if (published && m_dataEvent != nullptr)
+				SetEvent(m_dataEvent);
+			if (m_heartbeatEvent != nullptr)
+				SetEvent(m_heartbeatEvent);
+			return true;
+		}
+
+	private:
+		enum class ValueType : std::uint8_t
+		{
+			Bool = 1,
+			Double = 2,
+			String = 3
+		};
+
+		struct PendingValue
+		{
+			ValueType type = ValueType::String;
+			bool boolValue = false;
+			double doubleValue = 0.0;
+			std::string stringValue;
+		};
+
+		struct alignas(8) RingHeader
+		{
+			std::uint32_t magic;
+			std::uint16_t version;
+			std::uint16_t reserved0;
+			std::uint32_t capacityBytes;
+			std::atomic<std::uint32_t> writeIndex;
+			std::atomic<std::uint32_t> readIndex;
+			std::atomic<std::uint64_t> publishedSeq;
+			std::atomic<std::uint64_t> droppedCount;
+			std::atomic<std::uint64_t> lastProducerHeartbeatUs;
+			std::atomic<std::uint64_t> lastConsumerHeartbeatUs;
+		};
+
+		struct alignas(8) MessageHeader
+		{
+			std::uint16_t messageBytes;
+			std::uint8_t messageType;
+			std::uint8_t valueType;
+			std::uint64_t seq;
+			std::uint64_t sourceTimestampUs;
+			std::uint16_t keyLen;
+			std::uint16_t valueLen;
+		};
+
+		static constexpr std::uint32_t kMagic = 0x53444442;
+		static constexpr std::uint16_t kVersion = 1;
+		static constexpr std::uint32_t kDefaultCapacityBytes = 1U << 20;
+		static constexpr std::size_t kKeyMax = 128;
+		static constexpr std::size_t kStringMax = 256;
+		static constexpr std::uint8_t kMsgTypeUpsert = 1;
+
+		static std::uint64_t GetSteadyNowUs()
+		{
+			return static_cast<std::uint64_t>(
+				std::chrono::duration_cast<std::chrono::microseconds>(
+					std::chrono::steady_clock::now().time_since_epoch()).count());
+		}
+
+		void RunLoop()
+		{
+			while (m_running.load())
+			{
+				FlushNow();
+				std::this_thread::sleep_for(std::chrono::milliseconds(16));
+			}
+		}
+
+		void StorePending(const std::string& key, const PendingValue& pending)
+		{
+			std::lock_guard<std::mutex> lock(m_pendingMutex);
+			m_pending[key] = pending;
+		}
+
+		static std::uint32_t RingUsed(const RingHeader* header, std::uint32_t capacity)
+		{
+			const std::uint32_t writeIndex = header->writeIndex.load(std::memory_order_acquire);
+			const std::uint32_t readIndex = header->readIndex.load(std::memory_order_acquire);
+			if (writeIndex >= readIndex)
+				return writeIndex - readIndex;
+			return capacity - (readIndex - writeIndex);
+		}
+
+		std::uint32_t RingFree() const
+		{
+			return m_capacity - RingUsed(m_header, m_capacity) - 1U;
+		}
+
+		void CopyToRing(std::uint32_t index, const std::uint8_t* bytes, std::uint32_t count)
+		{
+			if (count == 0)
+				return;
+			const std::uint32_t firstPart = (std::min)(count, m_capacity - index);
+			std::memcpy(m_payload + index, bytes, firstPart);
+			if (count > firstPart)
+				std::memcpy(m_payload, bytes + firstPart, count - firstPart);
+		}
+
+		bool WritePendingValue(const std::string& key, const PendingValue& pending)
+		{
+			const std::uint16_t keyLen = static_cast<std::uint16_t>((std::min<std::size_t>)(key.size(), kKeyMax));
+			std::uint16_t valueLen = 0;
+			switch (pending.type)
+			{
+			case ValueType::Bool: valueLen = 1; break;
+			case ValueType::Double: valueLen = 8; break;
+			case ValueType::String: valueLen = static_cast<std::uint16_t>((std::min<std::size_t>)(pending.stringValue.size(), kStringMax)); break;
+			}
+
+			const std::uint32_t totalBytes = static_cast<std::uint32_t>(sizeof(MessageHeader) + keyLen + valueLen);
+			if (totalBytes >= m_capacity || RingFree() < totalBytes)
+			{
+				m_header->droppedCount.fetch_add(1, std::memory_order_acq_rel);
+				return false;
+			}
+
+			const std::uint64_t seq = ++m_sequence;
+			MessageHeader msg {};
+			msg.messageBytes = static_cast<std::uint16_t>(totalBytes);
+			msg.messageType = kMsgTypeUpsert;
+			msg.valueType = static_cast<std::uint8_t>(pending.type);
+			msg.seq = seq;
+			msg.sourceTimestampUs = GetSteadyNowUs();
+			msg.keyLen = keyLen;
+			msg.valueLen = valueLen;
+
+			std::uint32_t cursor = m_header->writeIndex.load(std::memory_order_acquire);
+			CopyToRing(cursor, reinterpret_cast<const std::uint8_t*>(&msg), static_cast<std::uint32_t>(sizeof(msg)));
+			cursor = (cursor + static_cast<std::uint32_t>(sizeof(msg))) % m_capacity;
+
+			if (keyLen > 0)
+			{
+				CopyToRing(cursor, reinterpret_cast<const std::uint8_t*>(key.data()), keyLen);
+				cursor = (cursor + keyLen) % m_capacity;
+			}
+
+			switch (pending.type)
+			{
+			case ValueType::Bool:
+			{
+				const std::uint8_t b = pending.boolValue ? 1U : 0U;
+				CopyToRing(cursor, &b, 1U);
+				cursor = (cursor + 1U) % m_capacity;
+				break;
+			}
+			case ValueType::Double:
+			{
+				std::uint8_t dBytes[8] = {};
+				std::memcpy(dBytes, &pending.doubleValue, 8);
+				CopyToRing(cursor, dBytes, 8U);
+				cursor = (cursor + 8U) % m_capacity;
+				break;
+			}
+			case ValueType::String:
+			{
+				if (valueLen > 0)
+				{
+					CopyToRing(cursor, reinterpret_cast<const std::uint8_t*>(pending.stringValue.data()), valueLen);
+					cursor = (cursor + valueLen) % m_capacity;
+				}
+				break;
+			}
+			}
+
+			m_header->writeIndex.store(cursor, std::memory_order_release);
+			m_header->publishedSeq.store(seq, std::memory_order_release);
+			return true;
+		}
+
+		void Close()
+		{
+			if (m_heartbeatEvent != nullptr)
+			{
+				CloseHandle(m_heartbeatEvent);
+				m_heartbeatEvent = nullptr;
+			}
+			if (m_dataEvent != nullptr)
+			{
+				CloseHandle(m_dataEvent);
+				m_dataEvent = nullptr;
+			}
+			if (m_view != nullptr)
+			{
+				UnmapViewOfFile(m_view);
+				m_view = nullptr;
+			}
+			if (m_mapping != nullptr)
+			{
+				CloseHandle(m_mapping);
+				m_mapping = nullptr;
+			}
+			m_header = nullptr;
+			m_payload = nullptr;
+			m_capacity = 0;
+			m_sequence = 0;
+		}
+
+		std::wstring m_mappingName;
+		std::wstring m_dataEventName;
+		std::wstring m_heartbeatEventName;
+		std::atomic<bool> m_running {false};
+		HANDLE m_mapping = nullptr;
+		void* m_view = nullptr;
+		HANDLE m_dataEvent = nullptr;
+		HANDLE m_heartbeatEvent = nullptr;
+		RingHeader* m_header = nullptr;
+		std::uint8_t* m_payload = nullptr;
+		std::uint32_t m_capacity = 0;
+		std::uint64_t m_sequence = 0;
+		std::thread m_worker;
+		std::mutex m_pendingMutex;
+		std::unordered_map<std::string, PendingValue> m_pending;
+	};
+
+	class DirectCommandSubscriber
+	{
+	public:
+		explicit DirectCommandSubscriber(
+			const std::wstring& mappingName,
+			const std::wstring& dataEventName,
+			const std::wstring& heartbeatEventName)
+			: m_mappingName(mappingName)
+			, m_dataEventName(dataEventName)
+			, m_heartbeatEventName(heartbeatEventName)
+		{
+		}
+
+		~DirectCommandSubscriber()
+		{
+			Stop();
+		}
+
+		bool Start()
+		{
+			if (m_running.load())
+				return true;
+
+			const std::size_t mappingBytes = sizeof(RingHeader) + kDefaultCapacityBytes;
+			m_mapping = CreateFileMappingW(
+				INVALID_HANDLE_VALUE,
+				nullptr,
+				PAGE_READWRITE,
+				static_cast<DWORD>((static_cast<unsigned long long>(mappingBytes) >> 32U) & 0xFFFFFFFFULL),
+				static_cast<DWORD>(static_cast<unsigned long long>(mappingBytes) & 0xFFFFFFFFULL),
+				m_mappingName.c_str());
+			if (m_mapping == nullptr)
+				return false;
+
+			m_view = MapViewOfFile(m_mapping, FILE_MAP_ALL_ACCESS, 0, 0, mappingBytes);
+			if (m_view == nullptr)
+			{
+				Close();
+				return false;
+			}
+
+			m_dataEvent = CreateEventW(nullptr, FALSE, FALSE, m_dataEventName.c_str());
+			if (m_dataEvent == nullptr)
+			{
+				Close();
+				return false;
+			}
+
+			m_heartbeatEvent = CreateEventW(nullptr, FALSE, FALSE, m_heartbeatEventName.c_str());
+			if (m_heartbeatEvent == nullptr)
+			{
+				Close();
+				return false;
+			}
+
+			auto* header = static_cast<RingHeader*>(m_view);
+			const std::uint32_t payloadCapacity = static_cast<std::uint32_t>(mappingBytes - sizeof(RingHeader));
+			const bool needsInit =
+				(header->magic != kMagic) ||
+				(header->version != kVersion) ||
+				(header->capacityBytes != payloadCapacity);
+			if (needsInit)
+			{
+				std::memset(m_view, 0, mappingBytes);
+				header->magic = kMagic;
+				header->version = kVersion;
+				header->reserved0 = 0;
+				header->capacityBytes = payloadCapacity;
+				header->writeIndex.store(0, std::memory_order_release);
+				header->readIndex.store(0, std::memory_order_release);
+				header->publishedSeq.store(0, std::memory_order_release);
+				header->droppedCount.store(0, std::memory_order_release);
+				const std::uint64_t nowUs = GetSteadyNowUs();
+				header->lastProducerHeartbeatUs.store(nowUs, std::memory_order_release);
+				header->lastConsumerHeartbeatUs.store(nowUs, std::memory_order_release);
+			}
+
+			m_header = header;
+			m_payload = reinterpret_cast<std::uint8_t*>(header + 1);
+			m_capacity = header->capacityBytes;
+
+			m_running.store(true);
+			m_worker = std::thread(&DirectCommandSubscriber::RunLoop, this);
+			return true;
+		}
+
+		void Stop()
+		{
+			if (!m_running.load())
+				return;
+
+			m_running.store(false);
+			if (m_dataEvent != nullptr)
+				SetEvent(m_dataEvent);
+
+			if (m_worker.joinable())
+				m_worker.join();
+
+			Close();
+		}
+
+		bool TryGetBoolean(const std::string& keyName, bool& value)
+		{
+			std::lock_guard<std::mutex> lock(m_valuesMutex);
+			auto it = m_values.find(keyName);
+			if (it == m_values.end() || it->second.type != ValueType::Bool)
+				return false;
+			value = it->second.boolValue;
+			return true;
+		}
+
+		bool TryGetNumber(const std::string& keyName, double& value)
+		{
+			std::lock_guard<std::mutex> lock(m_valuesMutex);
+			auto it = m_values.find(keyName);
+			if (it == m_values.end())
+				return false;
+			if (it->second.type == ValueType::Double)
+			{
+				value = it->second.doubleValue;
+				return true;
+			}
+			if (it->second.type == ValueType::String)
+			{
+				value = atof(it->second.stringValue.c_str());
+				return true;
+			}
+			if (it->second.type == ValueType::Bool)
+			{
+				value = it->second.boolValue ? 1.0 : 0.0;
+				return true;
+			}
+			return false;
+		}
+
+		bool TryGetString(const std::string& keyName, std::string& value)
+		{
+			std::lock_guard<std::mutex> lock(m_valuesMutex);
+			auto it = m_values.find(keyName);
+			if (it == m_values.end())
+				return false;
+			if (it->second.type == ValueType::String)
+			{
+				value = it->second.stringValue;
+				return true;
+			}
+			return false;
+		}
+
+	private:
+		enum class ValueType : std::uint8_t
+		{
+			Bool = 1,
+			Double = 2,
+			String = 3
+		};
+
+		struct StoredValue
+		{
+			ValueType type = ValueType::String;
+			bool boolValue = false;
+			double doubleValue = 0.0;
+			std::string stringValue;
+		};
+
+		struct alignas(8) RingHeader
+		{
+			std::uint32_t magic;
+			std::uint16_t version;
+			std::uint16_t reserved0;
+			std::uint32_t capacityBytes;
+			std::atomic<std::uint32_t> writeIndex;
+			std::atomic<std::uint32_t> readIndex;
+			std::atomic<std::uint64_t> publishedSeq;
+			std::atomic<std::uint64_t> droppedCount;
+			std::atomic<std::uint64_t> lastProducerHeartbeatUs;
+			std::atomic<std::uint64_t> lastConsumerHeartbeatUs;
+		};
+
+		struct alignas(8) MessageHeader
+		{
+			std::uint16_t messageBytes;
+			std::uint8_t messageType;
+			std::uint8_t valueType;
+			std::uint64_t seq;
+			std::uint64_t sourceTimestampUs;
+			std::uint16_t keyLen;
+			std::uint16_t valueLen;
+		};
+
+		static constexpr std::uint32_t kMagic = 0x53444442;
+		static constexpr std::uint16_t kVersion = 1;
+		static constexpr std::uint32_t kDefaultCapacityBytes = 1U << 20;
+
+		static std::uint64_t GetSteadyNowUs()
+		{
+			return static_cast<std::uint64_t>(
+				std::chrono::duration_cast<std::chrono::microseconds>(
+					std::chrono::steady_clock::now().time_since_epoch()).count());
+		}
+
+		void RunLoop()
+		{
+			while (m_running.load())
+			{
+				const DWORD waitResult = WaitForSingleObject(m_dataEvent, 50);
+				if (waitResult == WAIT_OBJECT_0 || waitResult == WAIT_TIMEOUT)
+				{
+					StoredValue value;
+					std::string key;
+					while (ReadNextValue(key, value))
+					{
+						std::lock_guard<std::mutex> lock(m_valuesMutex);
+						m_values[key] = value;
+					}
+				}
+				if (m_header != nullptr)
+					m_header->lastConsumerHeartbeatUs.store(GetSteadyNowUs(), std::memory_order_release);
+			}
+		}
+
+		void CopyFromRing(std::uint32_t index, std::uint8_t* outBytes, std::uint32_t count)
+		{
+			if (count == 0)
+				return;
+			const std::uint32_t firstPart = (std::min)(count, m_capacity - index);
+			std::memcpy(outBytes, m_payload + index, firstPart);
+			if (count > firstPart)
+				std::memcpy(outBytes + firstPart, m_payload, count - firstPart);
+		}
+
+		bool ReadNextValue(std::string& outKey, StoredValue& outValue)
+		{
+			if (m_header == nullptr || m_payload == nullptr || m_capacity == 0)
+				return false;
+
+			const std::uint32_t readIndex = m_header->readIndex.load(std::memory_order_acquire);
+			const std::uint32_t writeIndex = m_header->writeIndex.load(std::memory_order_acquire);
+			if (readIndex == writeIndex)
+				return false;
+
+			MessageHeader msg {};
+			CopyFromRing(readIndex, reinterpret_cast<std::uint8_t*>(&msg), static_cast<std::uint32_t>(sizeof(msg)));
+			if (msg.messageBytes < sizeof(MessageHeader))
+			{
+				m_header->readIndex.store(writeIndex, std::memory_order_release);
+				return false;
+			}
+
+			std::uint32_t cursor = (readIndex + static_cast<std::uint32_t>(sizeof(MessageHeader))) % m_capacity;
+			outKey.clear();
+			if (msg.keyLen > 0)
+			{
+				outKey.resize(msg.keyLen);
+				CopyFromRing(cursor, reinterpret_cast<std::uint8_t*>(&outKey[0]), msg.keyLen);
+				cursor = (cursor + msg.keyLen) % m_capacity;
+			}
+
+			outValue = StoredValue{};
+			outValue.type = static_cast<ValueType>(msg.valueType);
+			switch (outValue.type)
+			{
+			case ValueType::Bool:
+			{
+				std::uint8_t b = 0;
+				if (msg.valueLen >= 1)
+					CopyFromRing(cursor, &b, 1);
+				outValue.boolValue = (b != 0);
+				break;
+			}
+			case ValueType::Double:
+			{
+				std::uint8_t db[8] = {};
+				if (msg.valueLen >= 8)
+				{
+					CopyFromRing(cursor, db, 8);
+					std::memcpy(&outValue.doubleValue, db, 8);
+				}
+				break;
+			}
+			case ValueType::String:
+			{
+				if (msg.valueLen > 0)
+				{
+					outValue.stringValue.resize(msg.valueLen);
+					CopyFromRing(cursor, reinterpret_cast<std::uint8_t*>(&outValue.stringValue[0]), msg.valueLen);
+				}
+				break;
+			}
+			}
+
+			cursor = (readIndex + msg.messageBytes) % m_capacity;
+			m_header->readIndex.store(cursor, std::memory_order_release);
+			return true;
+		}
+
+		void Close()
+		{
+			if (m_heartbeatEvent != nullptr)
+			{
+				CloseHandle(m_heartbeatEvent);
+				m_heartbeatEvent = nullptr;
+			}
+			if (m_dataEvent != nullptr)
+			{
+				CloseHandle(m_dataEvent);
+				m_dataEvent = nullptr;
+			}
+			if (m_view != nullptr)
+			{
+				UnmapViewOfFile(m_view);
+				m_view = nullptr;
+			}
+			if (m_mapping != nullptr)
+			{
+				CloseHandle(m_mapping);
+				m_mapping = nullptr;
+			}
+			m_header = nullptr;
+			m_payload = nullptr;
+			m_capacity = 0;
+			std::lock_guard<std::mutex> lock(m_valuesMutex);
+			m_values.clear();
+		}
+
+		std::wstring m_mappingName;
+		std::wstring m_dataEventName;
+		std::wstring m_heartbeatEventName;
+		std::atomic<bool> m_running {false};
+		HANDLE m_mapping = nullptr;
+		void* m_view = nullptr;
+		HANDLE m_dataEvent = nullptr;
+		HANDLE m_heartbeatEvent = nullptr;
+		RingHeader* m_header = nullptr;
+		std::uint8_t* m_payload = nullptr;
+		std::uint32_t m_capacity = 0;
+		std::thread m_worker;
+		std::mutex m_valuesMutex;
+		std::unordered_map<std::string, StoredValue> m_values;
+	};
+
+	class LegacySmartDashboardBackend final : public IConnectionBackend
+	{
+public:
+		void Initialize() override
+		{
+			if (!SmartDashboard::is_initialized())
+				SmartDashboard::init();
+			OutputDebugStringW(L"[Transport] Legacy SmartDashboard backend initialized\n");
+		}
+		void Shutdown() override
+		{
+			// Historically shutdown was unstable in this app flow; preserve existing behavior.
+			OutputDebugStringW(L"[Transport] Legacy SmartDashboard backend shutdown requested\n");
+		}
+		const wchar_t* GetBackendName() const override
+		{
+			return L"Legacy SmartDashboard";
+		}
+	};
+
+	class DirectConnectBackend final : public IConnectionBackend
+		, public SmartDashboardDirectPublishSink
+		, public SmartDashboardDirectQuerySource
+	{
+	public:
+		DirectConnectBackend()
+			: m_publisher(std::make_unique<DirectPublisherStub>(
+				L"Local\\SmartDashboard.Direct.Buffer",
+				L"Local\\SmartDashboard.Direct.DataAvailable",
+				L"Local\\SmartDashboard.Direct.Heartbeat"))
+			, m_commandSubscriber(std::make_unique<DirectCommandSubscriber>(
+				L"Local\\SmartDashboard.Direct.Command.Buffer",
+				L"Local\\SmartDashboard.Direct.Command.DataAvailable",
+				L"Local\\SmartDashboard.Direct.Command.Heartbeat"))
+		{
+		}
+
+		void Initialize() override
+		{
+			SmartDashboard::SetDirectPublishSink(this);
+			SmartDashboard::SetDirectQuerySource(this);
+			m_running = (m_publisher && m_publisher->Start());
+			const bool commandRunning = (m_commandSubscriber && m_commandSubscriber->Start());
+			if (m_running)
+			{
+				if (commandRunning)
+					OutputDebugStringW(L"[Transport] Direct Connect backend initialized (telemetry + command channels active)\n");
+				else
+					OutputDebugStringW(L"[Transport] Direct Connect backend initialized (telemetry active, command channel inactive)\n");
+			}
+			else
+				OutputDebugStringW(L"[Transport] Direct Connect backend failed to start; no direct stream available\n");
+		}
+		void Shutdown() override
+		{
+			SmartDashboard::ClearDirectPublishSink();
+			SmartDashboard::ClearDirectQuerySource();
+			if (m_commandSubscriber)
+				m_commandSubscriber->Stop();
+			if (m_publisher)
+				m_publisher->Stop();
+			m_running = false;
+			OutputDebugStringW(L"[Transport] Direct Connect backend shutdown requested\n");
+		}
+		const wchar_t* GetBackendName() const override
+		{
+			return m_running ? L"Direct Connect" : L"Direct Connect (inactive)";
+		}
+
+		void PublishBoolean(const std::string& keyName, bool value) override
+		{
+			if (m_publisher && m_running)
+				m_publisher->PublishBool(keyName, value);
+		}
+		void PublishNumber(const std::string& keyName, double value) override
+		{
+			if (m_publisher && m_running)
+				m_publisher->PublishDouble(keyName, value);
+		}
+		void PublishString(const std::string& keyName, const std::string& value) override
+		{
+			if (m_publisher && m_running)
+				m_publisher->PublishString(keyName, value);
+		}
+
+		bool TryGetBoolean(const std::string& keyName, bool& value) override
+		{
+			if (!m_commandSubscriber)
+				return false;
+			return m_commandSubscriber->TryGetBoolean(keyName, value);
+		}
+
+		bool TryGetNumber(const std::string& keyName, double& value) override
+		{
+			if (!m_commandSubscriber)
+				return false;
+			return m_commandSubscriber->TryGetNumber(keyName, value);
+		}
+
+		bool TryGetString(const std::string& keyName, std::string& value) override
+		{
+			if (!m_commandSubscriber)
+				return false;
+			return m_commandSubscriber->TryGetString(keyName, value);
+		}
+
+	private:
+		std::unique_ptr<IDirectPublisher> m_publisher;
+		std::unique_ptr<DirectCommandSubscriber> m_commandSubscriber;
+		bool m_running = false;
+	};
+
+	class ShuffleboardBackend final : public IConnectionBackend
+	{
+	public:
+		void Initialize() override
+		{
+			if (!SmartDashboard::is_initialized())
+				SmartDashboard::init();
+			OutputDebugStringW(L"[Transport] Shuffleboard backend requested; using legacy transport path for now\n");
+		}
+		void Shutdown() override
+		{
+			OutputDebugStringW(L"[Transport] Shuffleboard backend shutdown requested\n");
+		}
+		const wchar_t* GetBackendName() const override
+		{
+			return L"Shuffleboard (legacy path)";
+		}
+	};
+}
+
+const wchar_t* GetConnectionModeName(ConnectionMode mode)
+{
+	switch (mode)
+	{
+	case ConnectionMode::eLegacySmartDashboard:
+		return L"Legacy SmartDashboard";
+	case ConnectionMode::eDirectConnect:
+		return L"Direct Connect";
+	case ConnectionMode::eShuffleboard:
+		return L"Shuffleboard";
+	default:
+		return L"Unknown";
+	}
+}
+
+DashboardTransportRouter::DashboardTransportRouter() = default;
+
+void DashboardTransportRouter::Initialize(ConnectionMode initial_mode)
+{
+	if (m_is_initialized)
+	{
+		SetMode(initial_mode);
+		return;
+	}
+
+	m_mode = initial_mode;
+	EnsureBackend();
+	if (m_backend)
+		m_backend->Initialize();
+	m_is_initialized = true;
+}
+
+void DashboardTransportRouter::SetMode(ConnectionMode mode)
+{
+	if (!m_is_initialized)
+	{
+		Initialize(mode);
+		return;
+	}
+
+	if (m_mode == mode && m_backend)
+		return;
+
+	if (UsesLegacyTransportPath(m_mode) && UsesLegacyTransportPath(mode))
+	{
+		m_mode = mode;
+		std::wstring message = L"[Transport] Mode switch retained existing legacy backend to avoid NT reinit race: ";
+		message += GetConnectionModeName(mode);
+		message += L"\n";
+		OutputDebugStringW(message.c_str());
+		return;
+	}
+
+	if (m_backend)
+		m_backend->Shutdown();
+
+	m_mode = mode;
+	EnsureBackend();
+	if (m_backend)
+		m_backend->Initialize();
+}
+
+bool DashboardTransportRouter::UsesLegacyTransportPath(ConnectionMode mode)
+{
+	return (mode == ConnectionMode::eLegacySmartDashboard) ||
+		(mode == ConnectionMode::eDirectConnect) ||
+		(mode == ConnectionMode::eShuffleboard);
+}
+
+ConnectionMode DashboardTransportRouter::GetMode() const
+{
+	return m_mode;
+}
+
+const wchar_t* DashboardTransportRouter::GetActiveBackendName() const
+{
+	if (m_backend)
+		return m_backend->GetBackendName();
+	return L"None";
+}
+
+void DashboardTransportRouter::Shutdown()
+{
+	if (m_backend)
+		m_backend->Shutdown();
+}
+
+void DashboardTransportRouter::EnsureBackend()
+{
+	switch (m_mode)
+	{
+	case ConnectionMode::eLegacySmartDashboard:
+		m_backend = std::make_unique<LegacySmartDashboardBackend>();
+		break;
+	case ConnectionMode::eDirectConnect:
+		m_backend = std::make_unique<DirectConnectBackend>();
+		break;
+	case ConnectionMode::eShuffleboard:
+		m_backend = std::make_unique<ShuffleboardBackend>();
+		break;
+	default:
+		m_backend = std::make_unique<LegacySmartDashboardBackend>();
+		break;
+	}
+}

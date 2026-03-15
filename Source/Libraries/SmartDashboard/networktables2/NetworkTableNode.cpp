@@ -34,6 +34,9 @@ bool NetworkTableNode::GetBoolean(std::string& name){
 	NetworkTableEntry* entry = entryStore.GetEntry(name);
 	if(entry==NULL)
 		throw TableKeyNotDefinedException(name);
+	NetworkTableEntryType* entryType = entry->GetType();
+	if ((entryType == NULL) || (entryType->id != DefaultEntryTypes::BOOLEAN.id))
+		throw TableKeyExistsWithDifferentTypeException(name, entryType);
 	return entry->GetValue().b;
 }
 
@@ -46,6 +49,9 @@ double NetworkTableNode::GetDouble(std::string& name){
 	NetworkTableEntry* entry = entryStore.GetEntry(name);
 	if(entry==NULL)
 		throw TableKeyNotDefinedException(name);
+	NetworkTableEntryType* entryType = entry->GetType();
+	if ((entryType == NULL) || (entryType->id != DefaultEntryTypes::DOUBLE.id))
+		throw TableKeyExistsWithDifferentTypeException(name, entryType);
 	return entry->GetValue().f;
 }
 
@@ -58,6 +64,9 @@ std::string& NetworkTableNode::GetString(std::string& name) {
 	NetworkTableEntry* entry = entryStore.GetEntry(name);
 	if(entry==NULL)
 		throw TableKeyNotDefinedException(name);
+	NetworkTableEntryType* entryType = entry->GetType();
+	if ((entryType == NULL) || (entryType->id != DefaultEntryTypes::STRING.id))
+		throw TableKeyExistsWithDifferentTypeException(name, entryType);
 	return *(std::string*)(entry->GetValue().ptr);
 }
 	
@@ -167,5 +176,4 @@ void NetworkTableNode::FireTableListeners(std::string& key, EntryValue value, bo
 	for(unsigned int i = 0; i<tableListeners.size(); ++i)
 		tableListeners.at(i)->ValueChanged(NULL, key, value, isNew);
 }
-
 
