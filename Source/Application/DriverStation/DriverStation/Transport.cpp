@@ -470,6 +470,10 @@ namespace
 			m_payload = reinterpret_cast<std::uint8_t*>(header + 1);
 			m_capacity = header->capacityBytes;
 
+			// Prime retained command values before returning so startup consumers
+			// can observe operator-owned settings immediately.
+			DrainPendingValues();
+
 			m_running.store(true);
 			m_worker = std::thread(&DirectCommandSubscriber::RunLoop, this);
 			return true;
@@ -504,21 +508,49 @@ namespace
 		{
 			std::lock_guard<std::mutex> lock(m_valuesMutex);
 			auto it = m_values.find(keyName);
+			if (it == m_values.end() && keyName == "AutonTest")
+			{
+				it = m_values.find("Test/AutonTest");
+				if (it != m_values.end())
+					OutputDebugStringA("[DirectCommandSubscriber] AutonTest alias hit via Test/AutonTest\n");
+			}
 			if (it == m_values.end())
+			{
+				if (keyName == "AutonTest")
+					OutputDebugStringA("[DirectCommandSubscriber] AutonTest miss\n");
 				return false;
+			}
 			if (it->second.type == ValueType::Double)
 			{
 				value = it->second.doubleValue;
+				if (keyName == "AutonTest")
+				{
+					char dbg[256] = {};
+					sprintf_s(dbg, "[DirectCommandSubscriber] AutonTest type=double value=%g\n", value);
+					OutputDebugStringA(dbg);
+				}
 				return true;
 			}
 			if (it->second.type == ValueType::String)
 			{
 				value = atof(it->second.stringValue.c_str());
+				if (keyName == "AutonTest")
+				{
+					char dbg[256] = {};
+					sprintf_s(dbg, "[DirectCommandSubscriber] AutonTest type=string raw='%s' parsed=%g\n", it->second.stringValue.c_str(), value);
+					OutputDebugStringA(dbg);
+				}
 				return true;
 			}
 			if (it->second.type == ValueType::Bool)
 			{
 				value = it->second.boolValue ? 1.0 : 0.0;
+				if (keyName == "AutonTest")
+				{
+					char dbg[256] = {};
+					sprintf_s(dbg, "[DirectCommandSubscriber] AutonTest type=bool value=%g\n", value);
+					OutputDebugStringA(dbg);
+				}
 				return true;
 			}
 			return false;
@@ -528,6 +560,8 @@ namespace
 		{
 			std::lock_guard<std::mutex> lock(m_valuesMutex);
 			auto it = m_values.find(keyName);
+			if (it == m_values.end() && keyName == "AutonTest")
+				it = m_values.find("Test/AutonTest");
 			if (it == m_values.end())
 				return false;
 			if (it->second.type == ValueType::String)
@@ -597,16 +631,38 @@ namespace
 				const DWORD waitResult = WaitForSingleObject(m_dataEvent, 50);
 				if (waitResult == WAIT_OBJECT_0 || waitResult == WAIT_TIMEOUT)
 				{
-					StoredValue value;
-					std::string key;
-					while (ReadNextValue(key, value))
-					{
-						std::lock_guard<std::mutex> lock(m_valuesMutex);
-						m_values[key] = value;
-					}
+					DrainPendingValues();
 				}
 				if (m_header != nullptr)
 					m_header->lastConsumerHeartbeatUs.store(GetSteadyNowUs(), std::memory_order_release);
+			}
+		}
+
+		void DrainPendingValues()
+		{
+			StoredValue value;
+			std::string key;
+			while (ReadNextValue(key, value))
+			{
+				if (key == "AutonTest" || key == "Test/AutonTest")
+				{
+					char dbg[320] = {};
+					switch (value.type)
+					{
+					case ValueType::Double:
+						sprintf_s(dbg, "[DirectCommandSubscriber] rx key='%s' type=double value=%g\n", key.c_str(), value.doubleValue);
+						break;
+					case ValueType::String:
+						sprintf_s(dbg, "[DirectCommandSubscriber] rx key='%s' type=string value='%s'\n", key.c_str(), value.stringValue.c_str());
+						break;
+					case ValueType::Bool:
+						sprintf_s(dbg, "[DirectCommandSubscriber] rx key='%s' type=bool value=%d\n", key.c_str(), value.boolValue ? 1 : 0);
+						break;
+					}
+					OutputDebugStringA(dbg);
+				}
+				std::lock_guard<std::mutex> lock(m_valuesMutex);
+				m_values[key] = value;
 			}
 		}
 

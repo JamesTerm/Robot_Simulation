@@ -1,5 +1,22 @@
 # Project history
 
+## 2026-03-15 - Direct startup/reconnect command retention stabilization
+
+- Added direct transport smoke harness target `DriverStation_TransportSmoke` to exercise startup path quickly against live dashboard state.
+- Added autonomous selection resolver helper (`Source/Modules/Input/AI_Input/AutonSelection.h`) and gtest coverage (`tests/auton_selection_tests.cpp`) for retry/default/clamp behavior.
+- Fixed dashboard-owned command startup race behavior in robot-side activation path:
+  - `AI_Input_Example` now uses retry-based selection resolve for first auton activation.
+  - avoids robot-side overwrite of operator-owned startup values.
+- Hardened direct/legacy command reads for operator keys by supporting scoped and flat aliases in helper functions:
+  - prefers `Test/<key>` then falls back to `<key>`
+  - supports number-from-string fallback for mixed widget/control publishing paths
+  - removed robot-side default writeback in RobotTester helper paths.
+- Hardened NT entry/type handling for legacy path stability during mode and startup transitions.
+- Validation:
+  - `DriverStation`, `DriverStation_TransportSmoke`, and `robot_unit_tests` build successfully.
+  - `ctest --test-dir build-vcpkg -C Debug --output-on-failure` passes (10/10).
+  - Manual direct-mode stress validated startup/reconnect behavior for `AutonTest` and `TestMove` when paired with updated SmartDashboard.
+
 ## 2026-03-11 - CMake migration milestone (DriverStation vertical slice)
 
 - Added top-level `CMakeLists.txt` to begin non-invasive CMake migration while preserving legacy Visual Studio solution/project files.
@@ -75,3 +92,14 @@
 - Captured compatibility rule: preserve legacy SmartDashboard behavior as baseline/oracle.
 - Linked transport strategy in top-level `ReadMe.md` documentation map.
 - Updated `Agent_Session_Notes.md` checklist to prioritize transport mode selection and Direct/Legacy contract implementation.
+
+## 2026-03-15 - Safe cleanup while transport work continues
+
+- Applied no-risk warning hygiene for `_CRT_SECURE_NO_WARNINGS` macro definitions by guarding local defines:
+  - `Source/Application/DriverStation/DriverStation/stdafx.h`
+  - `Source/Base/Base_Includes.h`
+  - `Source/Base/LUA.cpp`
+  - `Source/Base/Misc.cpp`
+- Performed no-risk include deduplication in `Source/Application/DriverStation/DriverStation/stdafx.h` and `Source/Base/Misc.cpp`.
+- Added and verified startup transport smoke harness target (`DriverStation_TransportSmoke`) to exercise Direct mode startup sequence quickly.
+- Added unit tests for autonomous selection retry/default/clamp behavior (`tests/auton_selection_tests.cpp`) and integrated into `robot_unit_tests`.

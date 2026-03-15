@@ -610,7 +610,9 @@ public:
 			//Give driver station a default testing method by invoking here if we are in test mode
 			if (m_game_mode == game_mode::eTest)
 			{
-				int test_to_run = (int)Auton_Smart_GetSingleValue("AutonTest", 1.0);
+				int test_to_run = (int)Auton_Smart_GetSingleValue("AutonTest", 0.0);
+				if (test_to_run < 0)
+					test_to_run = 0;
 				test(test_to_run);
 			}
 			if (m_game_mode == game_mode::eAuton)

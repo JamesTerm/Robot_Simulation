@@ -24,11 +24,18 @@
   - Current behavior: legacy + shuffle use SmartDashboard path; direct mode now starts a shared-memory/event publisher (`Local\\SmartDashboard.Direct.*`) compatible with SmartDashboard direct subscriber expectations.
   - Stability patch: added defensive guard in legacy NT entry store to handle rare null-entry-type update windows during Auton test transitions.
   - Deeper hardening: removed implicit `std::map::operator[]` insertions in NT entry stores to avoid accidental null entry publication.
+  - Startup/reconnect stability: direct command startup now preserves dashboard-owned `AutonTest` and related test keys across repeated simulator restarts without restarting SmartDashboard.
+  - Added `DriverStation_TransportSmoke` target and `ResolveAutonIndex` unit-tested helper to reproduce startup sequencing in a fast harness.
 
 ## Active constraints
 
 - `SmartDashboard/networktables2/util/System.cpp` remains excluded in CMake (VxWorks path); Windows build uses `OSAL/System.cpp`.
 - `_CRT_SECURE_NO_WARNINGS` macro redefinition warnings remain non-blocking cleanup work.
+
+## Current known issues / follow-up log
+
+- `AutonTest` and `TestMove` direct startup/reconnect stress now pass in manual validation.
+- Keep monitoring for any remaining control keys that may require scoped alias support (`Test/<key>` fallback) when dashboards mix flat and scoped naming.
 
 ## Next-session checklist
 

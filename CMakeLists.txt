@@ -214,12 +214,24 @@ if(BUILD_TESTER_APPS)
     )
 endif()
 
+add_executable(DriverStation_TransportSmoke
+    Source/Application/DriverStation/DriverStation/TransportSmoke.cpp
+    Source/Application/DriverStation/DriverStation/Robot_Tester.cpp
+    Source/Application/DriverStation/DriverStation/Transport.cpp
+)
+target_link_libraries(DriverStation_TransportSmoke
+    PRIVATE
+        RobotAssembly_static
+        SmartDashboard
+)
+
 if(BUILD_UNIT_TESTS)
     enable_testing()
     find_package(GTest CONFIG REQUIRED)
     include(GoogleTest)
 
     add_executable(robot_unit_tests
+        tests/auton_selection_tests.cpp
         tests/entity1d_tests.cpp
         tests/entity2d_tests.cpp
         tests/drivekinematics_tests.cpp

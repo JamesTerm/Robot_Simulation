@@ -1,7 +1,6 @@
 #include <string>
 #include <stdarg.h>
 #include <string.h>
-#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -11,7 +10,9 @@
 #pragma warning ( disable : 4996 )
 #pragma warning ( disable : 4477 )
 
+#ifndef _CRT_SECURE_NO_WARNINGS
 #define _CRT_SECURE_NO_WARNINGS
+#endif
 #endif
 
 namespace Framework

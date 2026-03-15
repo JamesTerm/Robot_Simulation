@@ -2,6 +2,7 @@
 #include "AI_Input_Example.h"
 #include "Goal_Types.h"
 #include "SmartDashboard_HelperFunctions.h"
+#include "AutonSelection.h"
 #include "AI_BaseController_goals.h"
 #include "../../../Properties/RegistryV1.h"
 using namespace Framework::Base;
@@ -289,39 +290,64 @@ public:
 		m_Timer = 0.0;
 		AutonType AutonTest = eDoNothing;
 		const char* const AutonTestSelection = "AutonTest";
-		#if 1
-		double autonSelection = (double)eDoNothing;
-		bool hasSelection = false;
-		try
-		{
-			autonSelection = SmartDashboard::GetNumber(AutonTestSelection);
-			hasSelection = true;
-		}
-		catch (...)
+		const char* const AutonTestSelectionScoped = "Test/AutonTest";
+		auto tryReadAutonSelection = [&](double& outValue) -> bool
 		{
 			try
 			{
-				const std::string textSelection = SmartDashboard::GetString(AutonTestSelection);
-				autonSelection = atof(textSelection.c_str());
-				hasSelection = true;
+				outValue = SmartDashboard::GetNumber(AutonTestSelection);
+				printf("[AI AutonTest] source=number value=%g\n", outValue);
+				return true;
 			}
 			catch (...)
 			{
 			}
-		}
 
-		if (!hasSelection)
-		{
-			// set up default for nothing
-			SmartDashboard::PutNumber(AutonTestSelection, (double)eDoNothing);
-			autonSelection = (double)eDoNothing;
-		}
+			try
+			{
+				outValue = SmartDashboard::GetNumber(AutonTestSelectionScoped);
+				printf("[AI AutonTest] source=number(scoped) value=%g\n", outValue);
+				return true;
+			}
+			catch (...)
+			{
+			}
 
-		int autonIndex = (int)autonSelection;
-		if (autonIndex < (int)eDoNothing)
-			autonIndex = (int)eDoNothing;
-		if (autonIndex >= (int)eNoAutonTypes)
-			autonIndex = (int)eDoNothing;
+			try
+			{
+				const std::string textSelection = SmartDashboard::GetString(AutonTestSelection);
+				outValue = atof(textSelection.c_str());
+				printf("[AI AutonTest] source=string raw='%s' parsed=%g\n", textSelection.c_str(), outValue);
+				return true;
+			}
+			catch (...)
+			{
+			}
+
+			try
+			{
+				const std::string textSelection = SmartDashboard::GetString(AutonTestSelectionScoped);
+				outValue = atof(textSelection.c_str());
+				printf("[AI AutonTest] source=string(scoped) raw='%s' parsed=%g\n", textSelection.c_str(), outValue);
+				return true;
+			}
+			catch (...)
+			{
+			}
+
+			return false;
+		};
+		#if 1
+		int autonIndex = ResolveAutonIndex(
+			[&](double& outSelection) { return tryReadAutonSelection(outSelection); },
+			(int)eDoNothing,
+			(int)eNoAutonTypes,
+			20,
+			std::chrono::milliseconds(10));
+
+		if (autonIndex == (int)eDoNothing)
+			printf("[AI AutonTest] source=missing_or_default final_index=%d\n", autonIndex);
+		printf("[AI AutonTest] final_index=%d\n", autonIndex);
 		AutonTest = (AutonType)autonIndex;
 		#else
 		#if !defined __USE_LEGACY_WPI_LIBRARIES__

@@ -5,6 +5,10 @@
 //#include "WPIErrors.h"
 #include "networktables/NetworkTable.h"
 
+#ifdef _WIN32
+#include <Windows.h>
+#endif
+
 
 ITable* SmartDashboard::m_table = NULL;
 std::map<ITable *, Sendable *> SmartDashboard::m_tablesToData;
@@ -190,6 +194,12 @@ bool SmartDashboard::GetBoolean(std::string keyName)
 void SmartDashboard::PutNumber(std::string keyName, double value){
 	if (!is_initialized()) init();
 	if (m_table == NULL) return;
+	if (keyName == "AutonTest")
+	{
+		char dbg[256] = {};
+		sprintf_s(dbg, "[SmartDashboard::PutNumber] key=AutonTest value=%g\n", value);
+		OutputDebugStringA(dbg);
+	}
 	if (g_directPublishSink != NULL)
 		g_directPublishSink->PublishNumber(keyName, value);
 	m_table->PutNumber(keyName, value);
@@ -206,12 +216,31 @@ double SmartDashboard::GetNumber(std::string keyName)
 	{
 		double value = 0.0;
 		if (g_directQuerySource->TryGetNumber(keyName, value))
+		{
+			if (keyName == "AutonTest")
+			{
+				char dbg[256] = {};
+				sprintf_s(dbg, "[SmartDashboard::GetNumber] key=AutonTest source=direct value=%g\n", value);
+				OutputDebugStringA(dbg);
+			}
 			return value;
+		}
+		else if (keyName == "AutonTest")
+		{
+			OutputDebugStringA("[SmartDashboard::GetNumber] key=AutonTest source=direct miss\n");
+		}
 	}
 
 	if (!is_initialized()) init();
 	if (m_table == NULL) return 0.0;
-	return m_table->GetNumber(keyName);
+	double value = m_table->GetNumber(keyName);
+	if (keyName == "AutonTest")
+	{
+		char dbg[256] = {};
+		sprintf_s(dbg, "[SmartDashboard::GetNumber] key=AutonTest source=nt value=%g\n", value);
+		OutputDebugStringA(dbg);
+	}
+	return value;
 }
 
 /**

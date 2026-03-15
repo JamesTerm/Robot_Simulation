@@ -22,7 +22,9 @@
 #pragma warning ( disable : 4996 )
 #pragma warning ( disable : 4477 )
 
+#ifndef _CRT_SECURE_NO_WARNINGS
 #define _CRT_SECURE_NO_WARNINGS
+#endif
 //end---adding our environment here------------------------------------------------------------------------
 
 #include <iostream>
@@ -34,9 +36,7 @@
 #include <stdio.h>
 #include <cassert>
 #include <math.h>
-#include <windows.h>
 #include <winbase.h>
-#include <tchar.h>
 
 #include <algorithm>
 #include <functional>
@@ -44,7 +44,6 @@
 #include <memory>
 #include <map>
 #include <set>
-#include <iostream>
 #include <utility>
 #include <array>
 #include <deque>

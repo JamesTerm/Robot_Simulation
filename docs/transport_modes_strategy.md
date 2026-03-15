@@ -57,6 +57,20 @@ Use chooser base key like `Test/AutoChooser` with:
 
 Preferred NT encoding for options is string array (comma-string fallback acceptable while bridging).
 
+## Key naming policy (scoped vs flat)
+
+To align with modern dashboard behavior (including Shuffleboard-style hierarchical keys), robot-side reads should prefer scoped keys while keeping legacy compatibility aliases.
+
+- Canonical control/input keys should be scoped (for example `Test/AutonTest`).
+- Legacy flat aliases (for example `AutonTest`) should remain readable during migration.
+- Robot code should not rewrite operator-owned keys during normal read paths.
+- If both scoped and flat forms exist, prefer scoped value.
+
+Current migration example:
+
+- `AutonTest` control is treated as dashboard-owned.
+- Robot read path checks both `AutonTest` and `Test/AutonTest` to bridge legacy and scoped dashboards.
+
 ## References
 
 Protocol and implementation references in `../SmartDashboard`:
