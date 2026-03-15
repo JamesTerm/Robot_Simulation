@@ -63,3 +63,15 @@
 - Validation:
   - `cmake --build build-vcpkg --config Debug --target robot_unit_tests` succeeds.
   - `ctest --test-dir build-vcpkg -C Debug --output-on-failure` passes (6/6).
+
+## 2026-03-15 - Transport mode feature planning handoff
+
+- Added `docs/transport_modes_strategy.md` to capture next major feature direction.
+- Documented explicit three-mode goal:
+  - `Direct Connect`
+  - `Legacy SmartDashboard`
+  - `Shuffleboard`
+- Captured sequencing requirement: establish Direct Connect before Shuffleboard work.
+- Captured compatibility rule: preserve legacy SmartDashboard behavior as baseline/oracle.
+- Linked transport strategy in top-level `ReadMe.md` documentation map.
+- Updated `Agent_Session_Notes.md` checklist to prioritize transport mode selection and Direct/Legacy contract implementation.

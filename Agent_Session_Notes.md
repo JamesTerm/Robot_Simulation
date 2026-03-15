@@ -17,6 +17,7 @@
 - Durable details moved to `docs/project_history.md`.
 - Long-form repository orientation moved to `docs/overview.md`.
 - GoogleTest integration is now in place (`find_package(GTest CONFIG REQUIRED)` + `gtest_discover_tests`).
+- New transport feature direction is documented in `docs/transport_modes_strategy.md`.
 
 ## Active constraints
 
@@ -25,6 +26,6 @@
 
 ## Next-session checklist
 
-1. Expand gtest coverage by migrating practical checks from `_Tester.cpp` paths into focused suites.
-2. Keep optional tester apps buildable for exploratory/manual scenarios.
-3. Consider non-blocking cleanup of `_CRT_SECURE_NO_WARNINGS` macro redefinition warnings.
+1. Start new feature branch for transport mode selector (Direct, Legacy SmartDashboard, Shuffleboard).
+2. Implement Direct + Legacy mode contract first (scalars + chooser topics + selected writeback).
+3. Add mode-focused tests; defer Shuffleboard-specific behavior until Direct is stable.

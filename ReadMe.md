@@ -33,6 +33,7 @@ Visual Studio (CMake) note:
 ## Documentation map
 
 - `docs/overview.md` - project structure and architecture overview
+- `docs/transport_modes_strategy.md` - transport-mode plan (Direct, Legacy SmartDashboard, Shuffleboard)
 - `docs/testing.md` - test targets and test commands
 - `docs/project_history.md` - durable migration and milestone history
 - `Agent_Session_Notes.md` - lean handoff notes for next coding session
