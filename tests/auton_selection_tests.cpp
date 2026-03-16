@@ -1,10 +1,13 @@
 #include <gtest/gtest.h>
 
+#include "Modules/Input/AI_Input/AutonChooser.h"
 #include "Modules/Input/AI_Input/AutonSelection.h"
 
 #include <chrono>
 #include <vector>
 
+using Module::Input::AutonChooserOption;
+using Module::Input::ResolveAutonSelectionFromLabel;
 using Module::Input::ResolveAutonIndex;
 
 TEST(AutonSelectionTests, UsesImmediateValueWhenAvailable)
@@ -57,6 +60,19 @@ TEST(AutonSelectionTests, ClampsOutOfRangeToDefault)
         return true;
     };
 
-    const int index = ResolveAutonIndex(reader, 0, 6, 2, std::chrono::milliseconds(0));
-    EXPECT_EQ(index, 0);
+	const int index = ResolveAutonIndex(reader, 0, 6, 2, std::chrono::milliseconds(0));
+	EXPECT_EQ(index, 0);
+}
+
+TEST(AutonSelectionTests, ChooserSelectionMapsLabelToIndex)
+{
+	const AutonChooserOption options[] =
+	{
+		{0, "Do Nothing"},
+		{1, "Just Move Forward"},
+		{2, "Just Rotate"}
+	};
+
+	EXPECT_EQ(ResolveAutonSelectionFromLabel("Just Move Forward", options, 3, 2), 1);
+	EXPECT_EQ(ResolveAutonSelectionFromLabel("Unknown", options, 3, 2), 2);
 }

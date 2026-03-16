@@ -55,7 +55,7 @@ Use chooser base key like `Test/AutoChooser` with:
 - `<base>/active`
 - `<base>/selected`
 
-Preferred NT encoding for options is string array (comma-string fallback acceptable while bridging).
+Preferred dashboard-native encoding for options is string array on modern NT paths. Robot_Simulation still publishes comma-string chooser options on its current Direct bridge until the simulator-side direct protocol is upgraded to first-class arrays.
 
 ## Key naming policy (scoped vs flat)
 
@@ -85,7 +85,7 @@ Protocol and implementation references in `../SmartDashboard`:
 
 1. Add explicit mode switch (`Direct`, `Legacy SmartDashboard`, `Shuffleboard`) with startup logging.
 2. Implement shared scalar publish/read contract in Direct + Legacy modes.
-3. Implement chooser publish/read contract in Direct + Legacy modes.
+3. Implement chooser publish/read contract in Direct + Legacy modes, including shared `.type/default/options/active/selected` semantics.
 4. Add mode-scoped tests for scalar and chooser roundtrip.
 5. Add Shuffleboard path once Direct and Legacy are stable.
 

@@ -25,12 +25,50 @@
 HINSTANCE hInst;                                // current instance
 WCHAR szTitle[MAX_LOADSTRING];                  // The title bar text
 WCHAR szWindowClass[MAX_LOADSTRING];            // the main window class name
+HWND g_hDlg = nullptr;
 
 //Since the lambda cannot capture, we must give it access to the robot here
 RobotTester *s_pRobotTester = nullptr;  
 //void BindRobot(RobotTester &_robot_tester);  //forward declare
 void SetupPreferences();
 ConnectionMode s_InitialConnectionMode = ConnectionMode::eLegacySmartDashboard;
+
+namespace
+{
+	void PopulateConnectionModeCombo(HWND hWnd, ConnectionMode selectedMode)
+	{
+		HWND combo = GetDlgItem(hWnd, IDC_ConnectionMode);
+		if (!combo)
+			return;
+
+		SendMessageW(combo, CB_RESETCONTENT, 0, 0);
+		const ConnectionMode modes[] =
+		{
+			ConnectionMode::eLegacySmartDashboard,
+			ConnectionMode::eDirectConnect,
+			ConnectionMode::eShuffleboard
+		};
+
+		int selectedIndex = 0;
+		for (int i = 0; i < static_cast<int>(_countof(modes)); ++i)
+		{
+			const wchar_t* label = GetConnectionModeName(modes[i]);
+			const LRESULT index = SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(label));
+			SendMessageW(combo, CB_SETITEMDATA, static_cast<WPARAM>(index), static_cast<LPARAM>(modes[i]));
+			if (modes[i] == selectedMode)
+				selectedIndex = static_cast<int>(index);
+		}
+
+		SendMessageW(combo, CB_SETCURSEL, static_cast<WPARAM>(selectedIndex), 0);
+	}
+
+	void SyncConnectionModeCombo(HWND hWnd)
+	{
+		if (!s_pRobotTester)
+			return;
+		PopulateConnectionModeCombo(hWnd, s_pRobotTester->GetConnectionMode());
+	}
+}
 
 ConnectionMode ParseConnectionModeFromCmdLine(LPWSTR cmd_line)
 {
@@ -55,6 +93,8 @@ void ApplyConnectionMode(ConnectionMode mode)
 {
 	if (s_pRobotTester)
 		s_pRobotTester->SetConnectionMode(mode);
+	if (g_hDlg)
+		PopulateConnectionModeCombo(g_hDlg, mode);
 
 	std::wstring message = L"Connection Mode: ";
 	message += GetConnectionModeName(mode);
@@ -114,6 +154,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 			//TO avoid needing to read from the tester... match the current state against the current default
 			CheckDlgButton(hWnd, IDC_Tele, BM_SETCHECK);
 			CheckDlgButton(hWnd, IDC_Stop, BM_SETCHECK);
+			PopulateConnectionModeCombo(hWnd, s_InitialConnectionMode);
 			//Button_SetState(hWnd, IDStop, BM_CLICK, true, 0);
 			return (INT_PTR)TRUE;
 		case WM_COMMAND:
@@ -164,6 +205,18 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 				s_pRobotTester->SetGameMode(game_mode);
 				break;
 			}
+			case IDC_ConnectionMode:
+				if (HIWORD(wParam) == CBN_SELCHANGE)
+				{
+					const HWND combo = GetDlgItem(hWnd, IDC_ConnectionMode);
+					const LRESULT selectedIndex = SendMessageW(combo, CB_GETCURSEL, 0, 0);
+					if (selectedIndex != CB_ERR)
+					{
+						const LRESULT itemData = SendMessageW(combo, CB_GETITEMDATA, static_cast<WPARAM>(selectedIndex), 0);
+						ApplyConnectionMode(static_cast<ConnectionMode>(itemData));
+					}
+				}
+				break;
 			case IDM_EXIT:
 			case IDCANCEL:  //Not sure why this 2 is the same as the close button
 				printf("Shutting down\n");
@@ -214,12 +267,14 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	{
 		return FALSE;
 	}
+	g_hDlg = m_hDlg;
 
 	//We made it this far... start up the robot
 	RobotTester _robot_tester;
 	s_pRobotTester = &_robot_tester;
 	_robot_tester.RobotTester_create();
 	_robot_tester.SetConnectionMode(s_InitialConnectionMode);
+	SyncConnectionModeCombo(m_hDlg);
 	//Bind robot for Keyboard binding
 	//BindRobot(_robot_tester);
 	_robot_tester.RobotTester_init();

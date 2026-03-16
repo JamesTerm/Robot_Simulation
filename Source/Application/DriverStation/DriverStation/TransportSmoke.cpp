@@ -9,10 +9,15 @@
 
 int main()
 {
-    SmartDashboard::PutNumber("AutonTest", 1.0);
+	SmartDashboard::PutString("Test/AutoChooser/.type", "String Chooser");
+	SmartDashboard::PutString("Test/AutoChooser/options", "Do Nothing,Just Move Forward,Just Rotate,Move Rotate Sequence,Box Waypoints,Smart Waypoints");
+	SmartDashboard::PutString("Test/AutoChooser/default", "Do Nothing");
+	SmartDashboard::PutString("Test/AutoChooser/active", "Do Nothing");
+	SmartDashboard::PutString("Test/AutoChooser/selected", "Just Move Forward");
+	SmartDashboard::PutString("AutonTest", "Just Move Forward");
 
-    RobotTester tester;
-    tester.RobotTester_create();
+	RobotTester tester;
+	tester.RobotTester_create();
     tester.SetConnectionMode(ConnectionMode::eDirectConnect);
     tester.RobotTester_init();
 

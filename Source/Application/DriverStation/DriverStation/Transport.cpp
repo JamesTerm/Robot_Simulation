@@ -15,6 +15,7 @@
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <vector>
 
 namespace
 {
@@ -27,6 +28,7 @@ namespace
 		virtual void PublishBool(const std::string& key, bool value) = 0;
 		virtual void PublishDouble(const std::string& key, double value) = 0;
 		virtual void PublishString(const std::string& key, const std::string& value) = 0;
+		virtual void PublishStringArray(const std::string& key, const std::vector<std::string>& values) = 0;
 		virtual bool FlushNow() = 0;
 	};
 
@@ -127,6 +129,8 @@ namespace
 			if (m_worker.joinable())
 				m_worker.join();
 
+			m_consumerWasActive = false;
+
 			Close();
 		}
 
@@ -151,6 +155,14 @@ namespace
 			PendingValue pending;
 			pending.type = ValueType::String;
 			pending.stringValue = value;
+			StorePending(key, pending);
+		}
+
+		void PublishStringArray(const std::string& key, const std::vector<std::string>& values) override
+		{
+			PendingValue pending;
+			pending.type = ValueType::StringArray;
+			pending.stringArrayValue = values;
 			StorePending(key, pending);
 		}
 
@@ -184,7 +196,8 @@ namespace
 		{
 			Bool = 1,
 			Double = 2,
-			String = 3
+			String = 3,
+			StringArray = 4
 		};
 
 		struct PendingValue
@@ -193,6 +206,7 @@ namespace
 			bool boolValue = false;
 			double doubleValue = 0.0;
 			std::string stringValue;
+			std::vector<std::string> stringArrayValue;
 		};
 
 		struct alignas(8) RingHeader
@@ -225,6 +239,7 @@ namespace
 		static constexpr std::uint32_t kDefaultCapacityBytes = 1U << 20;
 		static constexpr std::size_t kKeyMax = 128;
 		static constexpr std::size_t kStringMax = 256;
+		static constexpr std::size_t kStringArrayMaxCount = 32;
 		static constexpr std::uint8_t kMsgTypeUpsert = 1;
 
 		static std::uint64_t GetSteadyNowUs()
@@ -238,6 +253,7 @@ namespace
 		{
 			while (m_running.load())
 			{
+				MaybeReplayRetainedSnapshot();
 				FlushNow();
 				std::this_thread::sleep_for(std::chrono::milliseconds(16));
 			}
@@ -245,8 +261,53 @@ namespace
 
 		void StorePending(const std::string& key, const PendingValue& pending)
 		{
+			{
+				std::lock_guard<std::mutex> retainedLock(m_retainedMutex);
+				m_retained[key] = pending;
+			}
 			std::lock_guard<std::mutex> lock(m_pendingMutex);
 			m_pending[key] = pending;
+		}
+
+		void MaybeReplayRetainedSnapshot()
+		{
+			if (m_header == nullptr)
+				return;
+
+			const std::uint64_t lastConsumerHeartbeatUs = m_header->lastConsumerHeartbeatUs.load(std::memory_order_acquire);
+			const std::uint64_t nowUs = GetSteadyNowUs();
+			const bool consumerActive =
+				(lastConsumerHeartbeatUs != 0) &&
+				(nowUs >= lastConsumerHeartbeatUs) &&
+				((nowUs - lastConsumerHeartbeatUs) <= 500000ULL);
+
+			if (!consumerActive)
+			{
+				m_consumerWasActive = false;
+				return;
+			}
+
+			if (m_consumerWasActive)
+				return;
+
+			m_consumerWasActive = true;
+
+			std::unordered_map<std::string, PendingValue> retainedCopy;
+			{
+				std::lock_guard<std::mutex> retainedLock(m_retainedMutex);
+				retainedCopy = m_retained;
+			}
+
+			if (retainedCopy.empty())
+				return;
+
+			{
+				std::lock_guard<std::mutex> pendingLock(m_pendingMutex);
+				for (const auto& entry : retainedCopy)
+					m_pending[entry.first] = entry.second;
+			}
+
+			OutputDebugStringW(L"[Transport] Direct publisher replayed retained snapshot for dashboard reconnect\n");
 		}
 
 		static std::uint32_t RingUsed(const RingHeader* header, std::uint32_t capacity)
@@ -282,6 +343,18 @@ namespace
 			case ValueType::Bool: valueLen = 1; break;
 			case ValueType::Double: valueLen = 8; break;
 			case ValueType::String: valueLen = static_cast<std::uint16_t>((std::min<std::size_t>)(pending.stringValue.size(), kStringMax)); break;
+			case ValueType::StringArray:
+			{
+				std::size_t total = 1;
+				const std::size_t count = (std::min<std::size_t>)(pending.stringArrayValue.size(), kStringArrayMaxCount);
+				for (std::size_t i = 0; i < count; ++i)
+				{
+					total += 2;
+					total += (std::min<std::size_t>)(pending.stringArrayValue[i].size(), kStringMax);
+				}
+				valueLen = static_cast<std::uint16_t>(total);
+				break;
+			}
 			}
 
 			const std::uint32_t totalBytes = static_cast<std::uint32_t>(sizeof(MessageHeader) + keyLen + valueLen);
@@ -337,6 +410,24 @@ namespace
 				}
 				break;
 			}
+			case ValueType::StringArray:
+			{
+				const std::uint8_t count = static_cast<std::uint8_t>((std::min<std::size_t>)(pending.stringArrayValue.size(), kStringArrayMaxCount));
+				CopyToRing(cursor, &count, 1U);
+				cursor = (cursor + 1U) % m_capacity;
+				for (std::size_t i = 0; i < count; ++i)
+				{
+					const std::uint16_t itemLen = static_cast<std::uint16_t>((std::min<std::size_t>)(pending.stringArrayValue[i].size(), kStringMax));
+					CopyToRing(cursor, reinterpret_cast<const std::uint8_t*>(&itemLen), sizeof(itemLen));
+					cursor = (cursor + static_cast<std::uint32_t>(sizeof(itemLen))) % m_capacity;
+					if (itemLen > 0)
+					{
+						CopyToRing(cursor, reinterpret_cast<const std::uint8_t*>(pending.stringArrayValue[i].data()), itemLen);
+						cursor = (cursor + itemLen) % m_capacity;
+					}
+				}
+				break;
+			}
 			}
 
 			m_header->writeIndex.store(cursor, std::memory_order_release);
@@ -370,6 +461,7 @@ namespace
 			m_payload = nullptr;
 			m_capacity = 0;
 			m_sequence = 0;
+			m_consumerWasActive = false;
 		}
 
 		std::wstring m_mappingName;
@@ -387,6 +479,9 @@ namespace
 		std::thread m_worker;
 		std::mutex m_pendingMutex;
 		std::unordered_map<std::string, PendingValue> m_pending;
+		std::mutex m_retainedMutex;
+		std::unordered_map<std::string, PendingValue> m_retained;
+		bool m_consumerWasActive = false;
 	};
 
 	class DirectCommandSubscriber
@@ -498,6 +593,11 @@ namespace
 		{
 			std::lock_guard<std::mutex> lock(m_valuesMutex);
 			auto it = m_values.find(keyName);
+			if (it == m_values.end() && keyName.compare(0, 15, "SmartDashboard/") == 0)
+			{
+				const std::string normalized = keyName.substr(15);
+				it = m_values.find(normalized);
+			}
 			if (it == m_values.end() || it->second.type != ValueType::Bool)
 				return false;
 			value = it->second.boolValue;
@@ -508,6 +608,11 @@ namespace
 		{
 			std::lock_guard<std::mutex> lock(m_valuesMutex);
 			auto it = m_values.find(keyName);
+			if (it == m_values.end() && keyName.compare(0, 15, "SmartDashboard/") == 0)
+			{
+				const std::string normalized = keyName.substr(15);
+				it = m_values.find(normalized);
+			}
 			if (it == m_values.end() && keyName == "AutonTest")
 			{
 				it = m_values.find("Test/AutonTest");
@@ -560,13 +665,32 @@ namespace
 		{
 			std::lock_guard<std::mutex> lock(m_valuesMutex);
 			auto it = m_values.find(keyName);
-			if (it == m_values.end() && keyName == "AutonTest")
-				it = m_values.find("Test/AutonTest");
+			if (it == m_values.end())
+			{
+				if (keyName == "AutonTest")
+					it = m_values.find("Test/AutonTest");
+				else if (keyName.compare(0, 15, "SmartDashboard/") == 0)
+				{
+					const std::string normalized = keyName.substr(15);
+					it = m_values.find(normalized);
+				}
+			}
 			if (it == m_values.end())
 				return false;
 			if (it->second.type == ValueType::String)
 			{
 				value = it->second.stringValue;
+				return true;
+			}
+			if (it->second.type == ValueType::StringArray)
+			{
+				value.clear();
+				for (size_t i = 0; i < it->second.stringArrayValue.size(); ++i)
+				{
+					if (i > 0)
+						value += ",";
+					value += it->second.stringArrayValue[i];
+				}
 				return true;
 			}
 			return false;
@@ -577,7 +701,8 @@ namespace
 		{
 			Bool = 1,
 			Double = 2,
-			String = 3
+			String = 3,
+			StringArray = 4
 		};
 
 		struct StoredValue
@@ -586,6 +711,7 @@ namespace
 			bool boolValue = false;
 			double doubleValue = 0.0;
 			std::string stringValue;
+			std::vector<std::string> stringArrayValue;
 		};
 
 		struct alignas(8) RingHeader
@@ -654,6 +780,9 @@ namespace
 						break;
 					case ValueType::String:
 						sprintf_s(dbg, "[DirectCommandSubscriber] rx key='%s' type=string value='%s'\n", key.c_str(), value.stringValue.c_str());
+						break;
+					case ValueType::StringArray:
+						sprintf_s(dbg, "[DirectCommandSubscriber] rx key='%s' type=string_array count=%zu\n", key.c_str(), value.stringArrayValue.size());
 						break;
 					case ValueType::Bool:
 						sprintf_s(dbg, "[DirectCommandSubscriber] rx key='%s' type=bool value=%d\n", key.c_str(), value.boolValue ? 1 : 0);
@@ -731,6 +860,28 @@ namespace
 				{
 					outValue.stringValue.resize(msg.valueLen);
 					CopyFromRing(cursor, reinterpret_cast<std::uint8_t*>(&outValue.stringValue[0]), msg.valueLen);
+				}
+				break;
+			}
+			case ValueType::StringArray:
+			{
+				if (msg.valueLen > 0)
+				{
+					std::vector<std::uint8_t> bytes(msg.valueLen);
+					CopyFromRing(cursor, bytes.data(), msg.valueLen);
+					std::size_t offset = 0;
+					const std::uint8_t count = bytes[offset++];
+					outValue.stringArrayValue.clear();
+					outValue.stringArrayValue.reserve(count);
+					for (std::uint8_t i = 0; i < count && offset + 2 <= bytes.size(); ++i)
+					{
+						std::uint16_t itemLen = 0;
+						std::memcpy(&itemLen, bytes.data() + offset, sizeof(itemLen));
+						offset += 2;
+						const std::size_t boundedLen = (std::min<std::size_t>)(itemLen, bytes.size() - offset);
+						outValue.stringArrayValue.push_back(std::string(reinterpret_cast<const char*>(bytes.data() + offset), boundedLen));
+						offset += boundedLen;
+					}
 				}
 				break;
 			}
@@ -869,6 +1020,12 @@ public:
 		{
 			if (m_publisher && m_running)
 				m_publisher->PublishString(keyName, value);
+		}
+
+		void PublishStringArray(const std::string& keyName, const std::vector<std::string>& values) override
+		{
+			if (m_publisher && m_running)
+				m_publisher->PublishStringArray(keyName, values);
 		}
 
 		bool TryGetBoolean(const std::string& keyName, bool& value) override

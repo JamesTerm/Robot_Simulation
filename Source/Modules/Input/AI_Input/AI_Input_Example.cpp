@@ -2,6 +2,7 @@
 #include "AI_Input_Example.h"
 #include "Goal_Types.h"
 #include "SmartDashboard_HelperFunctions.h"
+#include "AutonChooser.h"
 #include "AutonSelection.h"
 #include "AI_BaseController_goals.h"
 #include "../../../Properties/RegistryV1.h"
@@ -274,6 +275,21 @@ public:
 		eNoAutonTypes
 	};
 
+	static const AutonChooserOption* GetAutonChooserOptions(size_t& optionCount)
+	{
+		static const AutonChooserOption kOptions[] =
+		{
+			{eDoNothing, "Do Nothing"},
+			{eJustMoveForward, "Just Move Forward"},
+			{eJustRotate, "Just Rotate"},
+			{eSimpleMoveRotateSequence, "Move Rotate Sequence"},
+			{eTestBoxWayPoints, "Box Waypoints"},
+			{eTestSmartWayPoints, "Smart Waypoints"}
+		};
+		optionCount = _countof(kOptions);
+		return kOptions;
+	}
+
 	AI_Example_internal(AI_Input* parent) : m_pParent(parent), m_Timer(0.0),
 		m_Primer(false)  //who ever is done first on this will complete the goals (i.e. if time runs out)
 	{
@@ -290,9 +306,22 @@ public:
 		m_Timer = 0.0;
 		AutonType AutonTest = eDoNothing;
 		const char* const AutonTestSelection = "AutonTest";
-		const char* const AutonTestSelectionScoped = "Test/AutonTest";
+		const char* const AutonChooserBase = "Test/AutoChooser";
+		size_t autonOptionCount = 0;
+		const AutonChooserOption* autonOptions = GetAutonChooserOptions(autonOptionCount);
 		auto tryReadAutonSelection = [&](double& outValue) -> bool
 		{
+			const int chooserIndex = ResolveAutonSelectionFromChooser(
+				AutonChooserBase,
+				AutonTestSelection,
+				autonOptions,
+				autonOptionCount,
+				(int)eDoNothing);
+			outValue = static_cast<double>(chooserIndex);
+			printf("[AI AutonTest] source=chooser final_index=%d\n", chooserIndex);
+			return true;
+
+			const char* const AutonTestSelectionScoped = "Test/AutonTest";
 			try
 			{
 				outValue = SmartDashboard::GetNumber(AutonTestSelection);
@@ -348,6 +377,13 @@ public:
 		if (autonIndex == (int)eDoNothing)
 			printf("[AI AutonTest] source=missing_or_default final_index=%d\n", autonIndex);
 		printf("[AI AutonTest] final_index=%d\n", autonIndex);
+		PublishAutonChooser(
+			AutonChooserBase,
+			autonOptions,
+			autonOptionCount,
+			(int)eDoNothing,
+			autonIndex,
+			autonIndex);
 		AutonTest = (AutonType)autonIndex;
 		#else
 		#if !defined __USE_LEGACY_WPI_LIBRARIES__

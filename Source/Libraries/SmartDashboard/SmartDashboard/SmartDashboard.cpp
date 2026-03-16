@@ -4,10 +4,13 @@
 #include "NamedSendable.h"
 //#include "WPIErrors.h"
 #include "networktables/NetworkTable.h"
+#include "networktables2/type/StringArray.h"
 
 #ifdef _WIN32
 #include <Windows.h>
 #endif
+
+#include <sstream>
 
 
 ITable* SmartDashboard::m_table = NULL;
@@ -17,6 +20,60 @@ namespace
 	bool g_smartdashboard_initialized = false;
 	SmartDashboardDirectPublishSink* g_directPublishSink = NULL;
 	SmartDashboardDirectQuerySource* g_directQuerySource = NULL;
+
+	std::string StripSmartDashboardPrefix(const std::string& keyName)
+	{
+		static const std::string kPrefix = "SmartDashboard/";
+		if (keyName.compare(0, kPrefix.size(), kPrefix) == 0)
+			return keyName.substr(kPrefix.size());
+		return keyName;
+	}
+
+	bool TryGetDirectBoolean(const std::string& keyName, bool& value)
+	{
+		if (g_directQuerySource == NULL)
+			return false;
+
+		if (g_directQuerySource->TryGetBoolean(keyName, value))
+			return true;
+
+		const std::string normalized = StripSmartDashboardPrefix(keyName);
+		if (normalized != keyName && g_directQuerySource->TryGetBoolean(normalized, value))
+			return true;
+
+		return false;
+	}
+
+	bool TryGetDirectNumber(const std::string& keyName, double& value)
+	{
+		if (g_directQuerySource == NULL)
+			return false;
+
+		if (g_directQuerySource->TryGetNumber(keyName, value))
+			return true;
+
+		const std::string normalized = StripSmartDashboardPrefix(keyName);
+		if (normalized != keyName && g_directQuerySource->TryGetNumber(normalized, value))
+			return true;
+
+		return false;
+	}
+
+	bool TryGetDirectString(const std::string& keyName, std::string& value)
+	{
+		if (g_directQuerySource == NULL)
+			return false;
+
+		if (g_directQuerySource->TryGetString(keyName, value))
+			return true;
+
+		const std::string normalized = StripSmartDashboardPrefix(keyName);
+		if (normalized != keyName && g_directQuerySource->TryGetString(normalized, value))
+			return true;
+
+		return false;
+	}
+
 }
 
 void SmartDashboard::init()
@@ -85,6 +142,11 @@ void SmartDashboard::SetIPAddress(const char* address)
  */
 void SmartDashboard::PutData(std::string key, Sendable *data)
 {
+	if (!is_initialized())
+		init();
+	if (m_table == NULL)
+		return;
+
 	if (data == NULL)
 	{
 		//TODO wpi_setWPIErrorWithContext(NullParameter, "value");
@@ -92,6 +154,7 @@ void SmartDashboard::PutData(std::string key, Sendable *data)
 	}
     ITable* dataTable = m_table->GetSubTable(key);
     dataTable->PutString("~TYPE~", data->GetSmartDashboardType());
+	dataTable->PutString(".type", data->GetSmartDashboardType());
     data->InitTable(dataTable);
     m_tablesToData[dataTable] = data;
 }
@@ -138,6 +201,11 @@ void SmartDashboard::PutData(NamedSendable *value)
  */
 void SmartDashboard::PutValue(std::string keyName, ComplexData& value)
 {
+	if (!is_initialized())
+		init();
+	if (m_table == NULL)
+		return;
+
 	m_table->PutValue(keyName, value);
 }
 
@@ -149,6 +217,11 @@ void SmartDashboard::PutValue(std::string keyName, ComplexData& value)
  */
 void SmartDashboard::RetrieveValue(std::string keyName, ComplexData& value)
 {
+	if (!is_initialized())
+		init();
+	if (m_table == NULL)
+		return;
+
 	m_table->RetrieveValue(keyName, value);
 }
 
@@ -161,6 +234,11 @@ void SmartDashboard::RetrieveValue(std::string keyName, ComplexData& value)
  */
 void SmartDashboard::PutBoolean(std::string keyName, bool value)
 {
+	if (!is_initialized())
+		init();
+	if (m_table == NULL)
+		return;
+
 	if (g_directPublishSink != NULL)
 		g_directPublishSink->PublishBoolean(keyName, value);
 
@@ -177,9 +255,14 @@ bool SmartDashboard::GetBoolean(std::string keyName)
 	if (g_directQuerySource != NULL)
 	{
 		bool value = false;
-		if (g_directQuerySource->TryGetBoolean(keyName, value))
+		if (TryGetDirectBoolean(keyName, value))
 			return value;
 	}
+
+	if (!is_initialized())
+		init();
+	if (m_table == NULL)
+		return false;
 
 	return m_table->GetBoolean(keyName);
 }
@@ -215,7 +298,7 @@ double SmartDashboard::GetNumber(std::string keyName)
 	if (g_directQuerySource != NULL)
 	{
 		double value = 0.0;
-		if (g_directQuerySource->TryGetNumber(keyName, value))
+		if (TryGetDirectNumber(keyName, value))
 		{
 			if (keyName == "AutonTest")
 			{
@@ -252,14 +335,41 @@ double SmartDashboard::GetNumber(std::string keyName)
  */
 void SmartDashboard::PutString(std::string keyName, std::string value)
 {
+	if (!is_initialized())
+		init();
+	if (m_table == NULL)
+		return;
+
 	if (g_directPublishSink != NULL)
 		g_directPublishSink->PublishString(keyName, value);
 
 	m_table->PutString(keyName, value);
 }
 
+void SmartDashboard::PutStringArray(std::string keyName, const std::vector<std::string>& values)
+{
+	if (!is_initialized())
+		init();
+	if (m_table == NULL)
+		return;
+
+	if (g_directPublishSink != NULL)
+		g_directPublishSink->PublishStringArray(keyName, values);
+
+	StringArray arrayValue;
+	for (size_t i = 0; i < values.size(); ++i)
+		arrayValue.add(values[i]);
+
+	m_table->PutValue(keyName, arrayValue);
+}
+
 bool SmartDashboard::IsConnected()
 {
+	if (!is_initialized())
+		init();
+	if (m_table == NULL)
+		return false;
+
 	return m_table->IsConnected();
 }
 /**
@@ -270,6 +380,11 @@ bool SmartDashboard::IsConnected()
  * @return the length of the string
  */
 int SmartDashboard::GetString(std::string keyName, char *outBuffer, unsigned int bufferLen){
+	if (!is_initialized())
+		init();
+	if (m_table == NULL || outBuffer == NULL || bufferLen == 0)
+		return 0;
+
 	std::string value = m_table->GetString(keyName);
 	unsigned int i;
 	for(i = 0; i<bufferLen-1&&i<value.length(); ++i)
@@ -289,9 +404,14 @@ std::string SmartDashboard::GetString(std::string keyName)
 	if (g_directQuerySource != NULL)
 	{
 		std::string value;
-		if (g_directQuerySource->TryGetString(keyName, value))
+		if (TryGetDirectString(keyName, value))
 			return value;
 	}
+
+	if (!is_initialized())
+		init();
+	if (m_table == NULL)
+		return std::string();
 
 	return m_table->GetString(keyName);
 }

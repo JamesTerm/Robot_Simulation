@@ -2,6 +2,7 @@
 
 #include <map>
 #include <string>
+#include <vector>
 //we could include this if Sendable.h would declare the iTable class without including it
 //#include "SmartDashboard/NamedSendable.h"
 #include "networktables2/type/ComplexData.h"
@@ -27,6 +28,7 @@ public:
 	virtual void PublishBoolean(const std::string& keyName, bool value) = 0;
 	virtual void PublishNumber(const std::string& keyName, double value) = 0;
 	virtual void PublishString(const std::string& keyName, const std::string& value) = 0;
+	virtual void PublishStringArray(const std::string& keyName, const std::vector<std::string>& values) = 0;
 };
 
 class SmartDashboardDirectQuerySource
@@ -60,6 +62,7 @@ public:
 	static double GetNumber(std::string keyName);
 	
 	static void PutString(std::string keyName, std::string value);
+	static void PutStringArray(std::string keyName, const std::vector<std::string>& values);
 	static int GetString(std::string keyName, char *value, unsigned int valueLen);
 	static std::string GetString(std::string keyName);
 	static std::string GetString(std::string keyName, std::string defaultValue);

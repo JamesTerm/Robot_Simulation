@@ -1,5 +1,14 @@
 # Project history
 
+## 2026-03-16 - Shared chooser contract alignment for simulator and dashboards
+
+- Began converging Robot_Simulation autonomous selection around the same chooser semantics used by current SmartDashboard/Shuffleboard compatibility work:
+  - chooser base publishes `.type`, `options`, `default`, `active`, and `selected`
+  - robot-side autonomous selection now prefers chooser labels first and keeps legacy `AutonTest` string fallback during transition
+- Updated legacy SmartDashboard sendable publish path to emit `.type` alongside historical `~TYPE~` so documentation and compatibility adapters can share one chooser contract.
+- Updated transport smoke startup coverage to seed chooser-style autonomous keys instead of numeric-only `AutonTest`.
+- Documentation now records that modern NT string-array chooser options remain the preferred long-term encoding. SmartDashboard direct transport now supports them end-to-end, while Robot_Simulation still bridges chooser options as comma-strings until its direct protocol is upgraded to match.
+
 ## 2026-03-15 - Direct startup/reconnect command retention stabilization
 
 - Added direct transport smoke harness target `DriverStation_TransportSmoke` to exercise startup path quickly against live dashboard state.

@@ -26,6 +26,11 @@
   - Deeper hardening: removed implicit `std::map::operator[]` insertions in NT entry stores to avoid accidental null entry publication.
   - Startup/reconnect stability: direct command startup now preserves dashboard-owned `AutonTest` and related test keys across repeated simulator restarts without restarting SmartDashboard.
   - Added `DriverStation_TransportSmoke` target and `ResolveAutonIndex` unit-tested helper to reproduce startup sequencing in a fast harness.
+  - Direct chooser contract is now in place for simulator work: `Test/AutoChooser/.type`, `options`, `default`, `active`, `selected`, with string-array `options` on the direct path.
+  - DriverStation now has an in-app connection dropdown wired to legacy/direct/shuffle modes in addition to existing hotkeys.
+  - Current blocker/reference point: dashboard restart no longer clobbers robot-owned chooser selection, but full bidirectional retained-state parity is still incomplete:
+    - dashboard restarted second: chooser selection survives behaviorally, but some dashboard-owned cosmetic/control values (for example `TestMove` display refresh) still appear stale
+    - robot restarted second: chooser/control state handoff still behaves like previous runs rather than fully restoring both ownership directions
 
 ## Active constraints
 
@@ -34,12 +39,16 @@
 
 ## Current known issues / follow-up log
 
-- `AutonTest` and `TestMove` direct startup/reconnect stress now pass in manual validation.
+- Direct chooser manual validation now passes for basic operator flow: selecting `Just Move Forward` and enabling auton works, and dashboard restart no longer overwrites robot chooser state.
+- Remaining reconnect gap: we do not yet have both directions at once (robot-owned chooser retention plus dashboard-owned control refresh/replay parity).
 - Keep monitoring for any remaining control keys that may require scoped alias support (`Test/<key>` fallback) when dashboards mix flat and scoped naming.
+- Official SmartDashboard historically supported `SendableChooser`; use that as compatibility guidance rather than keeping long-term numeric-only fallback in this feature branch.
 
 ## Next-session checklist
 
-1. Start new feature branch for transport mode selector (Direct, Legacy SmartDashboard, Shuffleboard).
-2. Implement Direct + Legacy mode contract first (scalars + chooser topics + selected writeback).
-3. Add mode-focused tests; defer Shuffleboard-specific behavior until Direct is stable.
-4. Next coding step: implement first real Direct backend behavior behind `DashboardTransportRouter` while keeping legacy oracle path intact.
+1. Finish direct retained-state parity so both reconnect directions work cleanly:
+   - dashboard restarted second should repaint dashboard-owned values correctly
+   - robot restarted second should receive remembered dashboard-owned controls without regressing chooser ownership
+2. Keep robot-owned chooser state separate from dashboard-owned controls when refining replay/reconnect logic.
+3. Once Direct behavior is correct, compare against local Shuffleboard rather than relying on official SmartDashboard localhost behavior.
+4. Research/plan NT library update separately if adapter work later shows protocol/version gaps in legacy mode.
