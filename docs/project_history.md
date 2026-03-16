@@ -1,5 +1,18 @@
 # Project history
 
+## 2026-03-16 - Direct transport stress harness and consumer-cursor hardening
+
+- Continued the Direct-mode dashboard interoperability push with a stronger harness around SmartDashboard pairing:
+  - `DriverStation_TransportSmoke` now serves as a repeatable deterministic smoke runner for chooser + `TestMove` setup and 10-second auton execution
+  - SmartDashboard process/probe/watch tooling on the companion repo is now part of the active debug loop for repeated restart stress
+- Updated Robot_Simulation Direct transport to better match the SmartDashboard-side cursor model:
+  - direct telemetry replay now tracks consumer instance changes
+  - publisher free-space accounting now uses the active consumer cursor instead of the obsolete shared `readIndex`
+- Resulting status checkpoint:
+  - real single-dashboard Direct runs are healthier and smoke telemetry is visible again after repeated restarts
+  - repeated robot-restart stress is improved but still not considered fully deterministic over long sequences
+  - passive extra observers still perturb the transport, so true multi-observer robustness remains future work rather than the current Direct-mode assumption.
+
 ## 2026-03-16 - Shared chooser contract alignment for simulator and dashboards
 
 - Began converging Robot_Simulation autonomous selection around the same chooser semantics used by current SmartDashboard/Shuffleboard compatibility work:

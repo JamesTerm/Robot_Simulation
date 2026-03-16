@@ -107,6 +107,8 @@ namespace
 				const std::uint64_t nowUs = GetSteadyNowUs();
 				header->lastProducerHeartbeatUs.store(nowUs, std::memory_order_release);
 				header->lastConsumerHeartbeatUs.store(nowUs, std::memory_order_release);
+				header->consumerInstanceId.store(0, std::memory_order_release);
+				header->consumerReadIndex.store(0, std::memory_order_release);
 			}
 
 			m_header = header;
@@ -221,6 +223,8 @@ namespace
 			std::atomic<std::uint64_t> droppedCount;
 			std::atomic<std::uint64_t> lastProducerHeartbeatUs;
 			std::atomic<std::uint64_t> lastConsumerHeartbeatUs;
+			std::atomic<std::uint64_t> consumerInstanceId;
+			std::atomic<std::uint32_t> consumerReadIndex;
 		};
 
 		struct alignas(8) MessageHeader
@@ -275,6 +279,7 @@ namespace
 				return;
 
 			const std::uint64_t lastConsumerHeartbeatUs = m_header->lastConsumerHeartbeatUs.load(std::memory_order_acquire);
+			const std::uint64_t consumerInstanceId = m_header->consumerInstanceId.load(std::memory_order_acquire);
 			const std::uint64_t nowUs = GetSteadyNowUs();
 			const bool consumerActive =
 				(lastConsumerHeartbeatUs != 0) &&
@@ -284,13 +289,21 @@ namespace
 			if (!consumerActive)
 			{
 				m_consumerWasActive = false;
+				if (consumerInstanceId != 0)
+					m_lastObservedConsumerInstanceId = consumerInstanceId;
 				return;
 			}
 
-			if (m_consumerWasActive)
+			const bool consumerChanged =
+				(consumerInstanceId != 0) &&
+				(consumerInstanceId != m_lastObservedConsumerInstanceId);
+
+			if (m_consumerWasActive && !consumerChanged)
 				return;
 
 			m_consumerWasActive = true;
+			if (consumerInstanceId != 0)
+				m_lastObservedConsumerInstanceId = consumerInstanceId;
 
 			std::unordered_map<std::string, PendingValue> retainedCopy;
 			{
@@ -313,7 +326,7 @@ namespace
 		static std::uint32_t RingUsed(const RingHeader* header, std::uint32_t capacity)
 		{
 			const std::uint32_t writeIndex = header->writeIndex.load(std::memory_order_acquire);
-			const std::uint32_t readIndex = header->readIndex.load(std::memory_order_acquire);
+			const std::uint32_t readIndex = header->consumerReadIndex.load(std::memory_order_acquire);
 			if (writeIndex >= readIndex)
 				return writeIndex - readIndex;
 			return capacity - (readIndex - writeIndex);
@@ -462,6 +475,7 @@ namespace
 			m_capacity = 0;
 			m_sequence = 0;
 			m_consumerWasActive = false;
+			m_lastObservedConsumerInstanceId = 0;
 		}
 
 		std::wstring m_mappingName;
@@ -482,6 +496,7 @@ namespace
 		std::mutex m_retainedMutex;
 		std::unordered_map<std::string, PendingValue> m_retained;
 		bool m_consumerWasActive = false;
+		std::uint64_t m_lastObservedConsumerInstanceId = 0;
 	};
 
 	class DirectCommandSubscriber
@@ -559,11 +574,15 @@ namespace
 				const std::uint64_t nowUs = GetSteadyNowUs();
 				header->lastProducerHeartbeatUs.store(nowUs, std::memory_order_release);
 				header->lastConsumerHeartbeatUs.store(nowUs, std::memory_order_release);
+				header->consumerInstanceId.store(0, std::memory_order_release);
+				header->consumerReadIndex.store(0, std::memory_order_release);
 			}
 
 			m_header = header;
 			m_payload = reinterpret_cast<std::uint8_t*>(header + 1);
 			m_capacity = header->capacityBytes;
+			m_instanceId = NextInstanceId();
+			m_readCursor = header->writeIndex.load(std::memory_order_acquire);
 
 			// Prime retained command values before returning so startup consumers
 			// can observe operator-owned settings immediately.
@@ -726,6 +745,8 @@ namespace
 			std::atomic<std::uint64_t> droppedCount;
 			std::atomic<std::uint64_t> lastProducerHeartbeatUs;
 			std::atomic<std::uint64_t> lastConsumerHeartbeatUs;
+			std::atomic<std::uint64_t> consumerInstanceId;
+			std::atomic<std::uint32_t> consumerReadIndex;
 		};
 
 		struct alignas(8) MessageHeader
@@ -750,6 +771,12 @@ namespace
 					std::chrono::steady_clock::now().time_since_epoch()).count());
 		}
 
+		static std::uint64_t NextInstanceId()
+		{
+			static std::atomic<std::uint64_t> nextId {1};
+			return nextId.fetch_add(1, std::memory_order_relaxed);
+		}
+
 		void RunLoop()
 		{
 			while (m_running.load())
@@ -757,6 +784,17 @@ namespace
 				const DWORD waitResult = WaitForSingleObject(m_dataEvent, 50);
 				if (waitResult == WAIT_OBJECT_0 || waitResult == WAIT_TIMEOUT)
 				{
+					if (m_header != nullptr)
+					{
+						const std::uint64_t previousInstanceId =
+							m_header->consumerInstanceId.exchange(m_instanceId, std::memory_order_acq_rel);
+						if (previousInstanceId != m_instanceId)
+						{
+							const std::uint32_t writeIndex = m_header->writeIndex.load(std::memory_order_acquire);
+							m_readCursor = writeIndex;
+							m_header->consumerReadIndex.store(writeIndex, std::memory_order_release);
+						}
+					}
 					DrainPendingValues();
 				}
 				if (m_header != nullptr)
@@ -810,7 +848,7 @@ namespace
 			if (m_header == nullptr || m_payload == nullptr || m_capacity == 0)
 				return false;
 
-			const std::uint32_t readIndex = m_header->readIndex.load(std::memory_order_acquire);
+			const std::uint32_t readIndex = m_readCursor;
 			const std::uint32_t writeIndex = m_header->writeIndex.load(std::memory_order_acquire);
 			if (readIndex == writeIndex)
 				return false;
@@ -819,7 +857,8 @@ namespace
 			CopyFromRing(readIndex, reinterpret_cast<std::uint8_t*>(&msg), static_cast<std::uint32_t>(sizeof(msg)));
 			if (msg.messageBytes < sizeof(MessageHeader))
 			{
-				m_header->readIndex.store(writeIndex, std::memory_order_release);
+				m_readCursor = writeIndex;
+				m_header->consumerReadIndex.store(writeIndex, std::memory_order_release);
 				return false;
 			}
 
@@ -888,7 +927,8 @@ namespace
 			}
 
 			cursor = (readIndex + msg.messageBytes) % m_capacity;
-			m_header->readIndex.store(cursor, std::memory_order_release);
+			m_readCursor = cursor;
+			m_header->consumerReadIndex.store(cursor, std::memory_order_release);
 			return true;
 		}
 
@@ -917,6 +957,8 @@ namespace
 			m_header = nullptr;
 			m_payload = nullptr;
 			m_capacity = 0;
+			m_readCursor = 0;
+			m_instanceId = 0;
 			std::lock_guard<std::mutex> lock(m_valuesMutex);
 			m_values.clear();
 		}
@@ -935,6 +977,8 @@ namespace
 		std::thread m_worker;
 		std::mutex m_valuesMutex;
 		std::unordered_map<std::string, StoredValue> m_values;
+		std::uint32_t m_readCursor = 0;
+		std::uint64_t m_instanceId = 0;
 	};
 
 	class LegacySmartDashboardBackend final : public IConnectionBackend

@@ -28,9 +28,15 @@
   - Added `DriverStation_TransportSmoke` target and `ResolveAutonIndex` unit-tested helper to reproduce startup sequencing in a fast harness.
   - Direct chooser contract is now in place for simulator work: `Test/AutoChooser/.type`, `options`, `default`, `active`, `selected`, with string-array `options` on the direct path.
   - DriverStation now has an in-app connection dropdown wired to legacy/direct/shuffle modes in addition to existing hotkeys.
-  - Current blocker/reference point: dashboard restart no longer clobbers robot-owned chooser selection, but full bidirectional retained-state parity is still incomplete:
-    - dashboard restarted second: chooser selection survives behaviorally, but some dashboard-owned cosmetic/control values (for example `TestMove` display refresh) still appear stale
-    - robot restarted second: chooser/control state handoff still behaves like previous runs rather than fully restoring both ownership directions
+  - Current direct status checkpoint:
+    - simulator and dashboard both now use independent consumer-cursor semantics on the telemetry ring instead of one shared consumed cursor
+    - `DriverStation_TransportSmoke` is a reliable harness entry point and now explicitly runs in `Direct Connect`
+    - SmartDashboard process control helper exists at `D:/code/SmartDashboard/tools/smartdashboard_process.py`
+    - repeated robot restart stress improved after fixing publisher free-space accounting against the active consumer cursor rather than obsolete shared `readIndex`
+  - Remaining blocker/reference point:
+    - real single-dashboard runs are much healthier, but robot-survive stress is still somewhat race-sensitive over repeated cycles
+    - passive extra observers (debug watchers) still destabilize repeated runs, so transport is not yet truly multi-observer safe
+    - for the real dashboard path, setup-state tiles (`TestMove`, chooser) can appear visually stale even when robot behavior proves command values were applied; use `Timer` / `Y_ft` as live paint indicators in current harness layout
 
 ## Active constraints
 
@@ -40,15 +46,14 @@
 ## Current known issues / follow-up log
 
 - Direct chooser manual validation now passes for basic operator flow: selecting `Just Move Forward` and enabling auton works, and dashboard restart no longer overwrites robot chooser state.
-- Remaining reconnect gap: we do not yet have both directions at once (robot-owned chooser retention plus dashboard-owned control refresh/replay parity).
+- Remaining reconnect gap: repeated robot restart stress is improved but still not fully deterministic across long sequences; extra concurrent observers still expose race/session weaknesses.
+- Current manual interpretation: when smoke behavior is correct but chooser/TestMove look static, that may be a visibility/expectation issue because those are setup-state values; live telemetry keys like `Timer` and `Y_ft` are better paint verification signals.
 - Keep monitoring for any remaining control keys that may require scoped alias support (`Test/<key>` fallback) when dashboards mix flat and scoped naming.
 - Official SmartDashboard historically supported `SendableChooser`; use that as compatibility guidance rather than keeping long-term numeric-only fallback in this feature branch.
 
 ## Next-session checklist
 
-1. Finish direct retained-state parity so both reconnect directions work cleanly:
-   - dashboard restarted second should repaint dashboard-owned values correctly
-   - robot restarted second should receive remembered dashboard-owned controls without regressing chooser ownership
-2. Keep robot-owned chooser state separate from dashboard-owned controls when refining replay/reconnect logic.
-3. Once Direct behavior is correct, compare against local Shuffleboard rather than relying on official SmartDashboard localhost behavior.
-4. Research/plan NT library update separately if adapter work later shows protocol/version gaps in legacy mode.
+1. Finish hardening robot-survive stress for repeated restart cycles with a single real SmartDashboard client.
+2. Decide whether to keep current single-real-client direct assumptions or invest in true multi-observer broadcast semantics for tooling/watchers.
+3. Clean up harness instrumentation/logging once behavior is stable, but keep the process-control + smoke/probe workflow documented.
+4. Once Direct behavior is stable enough, compare against local Shuffleboard rather than relying on official SmartDashboard localhost behavior.

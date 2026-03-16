@@ -5,16 +5,34 @@
 
 #include <Windows.h>
 
+#include <cstdlib>
 #include <thread>
 
-int main()
+int main(int argc, char** argv)
 {
+	DWORD runMs = 500;
+	if (argc > 1)
+	{
+		const long parsed = std::strtol(argv[1], nullptr, 10);
+		if (parsed > 0)
+			runMs = static_cast<DWORD>(parsed);
+	}
+
 	SmartDashboard::PutString("Test/AutoChooser/.type", "String Chooser");
-	SmartDashboard::PutString("Test/AutoChooser/options", "Do Nothing,Just Move Forward,Just Rotate,Move Rotate Sequence,Box Waypoints,Smart Waypoints");
+	std::vector<std::string> chooserOptions;
+	chooserOptions.push_back("Do Nothing");
+	chooserOptions.push_back("Just Move Forward");
+	chooserOptions.push_back("Just Rotate");
+	chooserOptions.push_back("Move Rotate Sequence");
+	chooserOptions.push_back("Box Waypoints");
+	chooserOptions.push_back("Smart Waypoints");
+	SmartDashboard::PutStringArray("Test/AutoChooser/options", chooserOptions);
 	SmartDashboard::PutString("Test/AutoChooser/default", "Do Nothing");
 	SmartDashboard::PutString("Test/AutoChooser/active", "Do Nothing");
 	SmartDashboard::PutString("Test/AutoChooser/selected", "Just Move Forward");
 	SmartDashboard::PutString("AutonTest", "Just Move Forward");
+	SmartDashboard::PutNumber("TestMove", 3.5);
+	printf("[TransportSmoke] seeded chooser selected='Just Move Forward' TestMove=3.5 run_ms=%lu\n", static_cast<unsigned long>(runMs));
 
 	RobotTester tester;
 	tester.RobotTester_create();
@@ -24,7 +42,7 @@ int main()
     tester.SetGameMode(0); // auton
     tester.StartStreaming();
 
-    Sleep(500);
+	Sleep(runMs);
 
     tester.StopStreaming();
     tester.Shutdown();
