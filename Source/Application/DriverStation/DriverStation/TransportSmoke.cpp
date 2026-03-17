@@ -18,6 +18,11 @@ int main(int argc, char** argv)
 			runMs = static_cast<DWORD>(parsed);
 	}
 
+	RobotTester tester;
+	tester.RobotTester_create();
+	tester.SetConnectionMode(ConnectionMode::eDirectConnect);
+	tester.RobotTester_init();
+
 	SmartDashboard::PutString("Test/AutoChooser/.type", "String Chooser");
 	std::vector<std::string> chooserOptions;
 	chooserOptions.push_back("Do Nothing");
@@ -34,18 +39,13 @@ int main(int argc, char** argv)
 	SmartDashboard::PutNumber("TestMove", 3.5);
 	printf("[TransportSmoke] seeded chooser selected='Just Move Forward' TestMove=3.5 run_ms=%lu\n", static_cast<unsigned long>(runMs));
 
-	RobotTester tester;
-	tester.RobotTester_create();
-    tester.SetConnectionMode(ConnectionMode::eDirectConnect);
-    tester.RobotTester_init();
-
-    tester.SetGameMode(0); // auton
-    tester.StartStreaming();
+	tester.SetGameMode(0); // auton
+	tester.StartStreaming();
 
 	Sleep(runMs);
 
-    tester.StopStreaming();
-    tester.Shutdown();
+	tester.StopStreaming();
+	tester.Shutdown();
 
     return 0;
 }

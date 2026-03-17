@@ -29,6 +29,9 @@ namespace
 		virtual void PublishDouble(const std::string& key, double value) = 0;
 		virtual void PublishString(const std::string& key, const std::string& value) = 0;
 		virtual void PublishStringArray(const std::string& key, const std::vector<std::string>& values) = 0;
+		virtual bool TryGetBoolean(const std::string& key, bool& value) const = 0;
+		virtual bool TryGetNumber(const std::string& key, double& value) const = 0;
+		virtual bool TryGetString(const std::string& key, std::string& value) const = 0;
 		virtual bool FlushNow() = 0;
 	};
 
@@ -166,6 +169,65 @@ namespace
 			pending.type = ValueType::StringArray;
 			pending.stringArrayValue = values;
 			StorePending(key, pending);
+		}
+
+		bool TryGetBoolean(const std::string& key, bool& value) const override
+		{
+			std::lock_guard<std::mutex> lock(const_cast<std::mutex&>(m_retainedMutex));
+			auto it = m_retained.find(key);
+			if (it == m_retained.end() || it->second.type != ValueType::Bool)
+				return false;
+			value = it->second.boolValue;
+			return true;
+		}
+
+		bool TryGetNumber(const std::string& key, double& value) const override
+		{
+			std::lock_guard<std::mutex> lock(const_cast<std::mutex&>(m_retainedMutex));
+			auto it = m_retained.find(key);
+			if (it == m_retained.end())
+				return false;
+			if (it->second.type == ValueType::Double)
+			{
+				value = it->second.doubleValue;
+				return true;
+			}
+			if (it->second.type == ValueType::String)
+			{
+				value = atof(it->second.stringValue.c_str());
+				return true;
+			}
+			if (it->second.type == ValueType::Bool)
+			{
+				value = it->second.boolValue ? 1.0 : 0.0;
+				return true;
+			}
+			return false;
+		}
+
+		bool TryGetString(const std::string& key, std::string& value) const override
+		{
+			std::lock_guard<std::mutex> lock(const_cast<std::mutex&>(m_retainedMutex));
+			auto it = m_retained.find(key);
+			if (it == m_retained.end())
+				return false;
+			if (it->second.type == ValueType::String)
+			{
+				value = it->second.stringValue;
+				return true;
+			}
+			if (it->second.type == ValueType::StringArray)
+			{
+				value.clear();
+				for (size_t i = 0; i < it->second.stringArrayValue.size(); ++i)
+				{
+					if (i > 0)
+						value += ",";
+					value += it->second.stringArrayValue[i];
+				}
+				return true;
+			}
+			return false;
 		}
 
 		bool FlushNow() override
@@ -986,6 +1048,7 @@ namespace
 public:
 		void Initialize() override
 		{
+			SmartDashboard::SetConnectionMode(SmartDashboardConnectionMode::eLegacySmartDashboard);
 			if (!SmartDashboard::is_initialized())
 				SmartDashboard::init();
 			OutputDebugStringW(L"[Transport] Legacy SmartDashboard backend initialized\n");
@@ -1020,6 +1083,7 @@ public:
 
 		void Initialize() override
 		{
+			SmartDashboard::SetConnectionMode(SmartDashboardConnectionMode::eDirectConnect);
 			SmartDashboard::SetDirectPublishSink(this);
 			SmartDashboard::SetDirectQuerySource(this);
 			m_running = (m_publisher && m_publisher->Start());
@@ -1038,6 +1102,7 @@ public:
 		{
 			SmartDashboard::ClearDirectPublishSink();
 			SmartDashboard::ClearDirectQuerySource();
+			SmartDashboard::SetConnectionMode(SmartDashboardConnectionMode::eDirectConnect);
 			if (m_commandSubscriber)
 				m_commandSubscriber->Stop();
 			if (m_publisher)
@@ -1074,26 +1139,33 @@ public:
 
 		bool TryGetBoolean(const std::string& keyName, bool& value) override
 		{
-			if (!m_commandSubscriber)
+			if (m_commandSubscriber && m_commandSubscriber->TryGetBoolean(keyName, value))
+				return true;
+			if (!m_publisher)
 				return false;
-			return m_commandSubscriber->TryGetBoolean(keyName, value);
+			return m_publisher->TryGetBoolean(keyName, value);
 		}
 
 		bool TryGetNumber(const std::string& keyName, double& value) override
 		{
-			if (!m_commandSubscriber)
+			if (m_commandSubscriber && m_commandSubscriber->TryGetNumber(keyName, value))
+				return true;
+			if (!m_publisher)
 				return false;
-			return m_commandSubscriber->TryGetNumber(keyName, value);
+			return m_publisher->TryGetNumber(keyName, value);
 		}
 
 		bool TryGetString(const std::string& keyName, std::string& value) override
 		{
-			if (!m_commandSubscriber)
+			if (m_commandSubscriber && m_commandSubscriber->TryGetString(keyName, value))
+				return true;
+			if (!m_publisher)
 				return false;
-			return m_commandSubscriber->TryGetString(keyName, value);
+			return m_publisher->TryGetString(keyName, value);
 		}
 
 	private:
+
 		std::unique_ptr<IDirectPublisher> m_publisher;
 		std::unique_ptr<DirectCommandSubscriber> m_commandSubscriber;
 		bool m_running = false;
@@ -1104,6 +1176,7 @@ public:
 	public:
 		void Initialize() override
 		{
+			SmartDashboard::SetConnectionMode(SmartDashboardConnectionMode::eShuffleboard);
 			if (!SmartDashboard::is_initialized())
 				SmartDashboard::init();
 			OutputDebugStringW(L"[Transport] Shuffleboard backend requested; using legacy transport path for now\n");

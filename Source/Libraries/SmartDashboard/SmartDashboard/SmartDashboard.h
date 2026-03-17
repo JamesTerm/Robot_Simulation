@@ -37,12 +37,21 @@ public:
 	virtual bool TryGetString(const std::string& keyName, std::string& value) = 0;
 };
 
+enum class SmartDashboardConnectionMode
+{
+	eLegacySmartDashboard = 0,
+	eDirectConnect = 1,
+	eShuffleboard = 2
+};
+
 class SmartDashboard //: public SensorBase
 {
 public:
 	static void init();
 	static bool is_initialized();
 	static void shutdown();
+	static void SetConnectionMode(SmartDashboardConnectionMode mode);
+	static SmartDashboardConnectionMode GetConnectionMode();
 	static void SetDirectPublishSink(SmartDashboardDirectPublishSink* sink);
 	static void ClearDirectPublishSink();
 	static void SetDirectQuerySource(SmartDashboardDirectQuerySource* source);
