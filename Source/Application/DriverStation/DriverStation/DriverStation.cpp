@@ -31,10 +31,86 @@ HWND g_hDlg = nullptr;
 RobotTester *s_pRobotTester = nullptr;  
 //void BindRobot(RobotTester &_robot_tester);  //forward declare
 void SetupPreferences();
-ConnectionMode s_InitialConnectionMode = ConnectionMode::eLegacySmartDashboard;
+ConnectionMode s_InitialConnectionMode = ConnectionMode::eDirectConnect;
 
 namespace
 {
+	const wchar_t* c_ConnectionSettingsDir = L"RobotSimulation";
+	const wchar_t* c_ConnectionSettingsFile = L"DriverStation.ini";
+	const wchar_t* c_ConnectionSettingsSection = L"Connection";
+	const wchar_t* c_ConnectionSettingsKey = L"Mode";
+
+	ConnectionMode GetDefaultConnectionMode()
+	{
+		return ConnectionMode::eDirectConnect;
+	}
+
+	bool TryGetConnectionSettingsPath(std::wstring& settingsPath)
+	{
+		DWORD required = GetEnvironmentVariableW(L"LOCALAPPDATA", nullptr, 0);
+		if (!required)
+			return false;
+
+		std::wstring basePath(required - 1, L'\0');
+		if (GetEnvironmentVariableW(L"LOCALAPPDATA", &basePath[0], required) != (required - 1))
+			return false;
+
+		wchar_t settingsDir[MAX_PATH];
+		wcscpy_s(settingsDir, basePath.c_str());
+		PathAppendW(settingsDir, c_ConnectionSettingsDir);
+		CreateDirectoryW(settingsDir, nullptr);
+
+		wchar_t settingsFile[MAX_PATH];
+		wcscpy_s(settingsFile, settingsDir);
+		PathAppendW(settingsFile, c_ConnectionSettingsFile);
+		settingsPath = settingsFile;
+		return true;
+	}
+
+	ConnectionMode NormalizeConnectionMode(int rawMode)
+	{
+		switch (rawMode)
+		{
+		case static_cast<int>(ConnectionMode::eLegacySmartDashboard):
+			return ConnectionMode::eLegacySmartDashboard;
+		case static_cast<int>(ConnectionMode::eDirectConnect):
+			return ConnectionMode::eDirectConnect;
+		case static_cast<int>(ConnectionMode::eShuffleboard):
+			return ConnectionMode::eShuffleboard;
+		default:
+			return GetDefaultConnectionMode();
+		}
+	}
+
+	ConnectionMode LoadPersistedConnectionMode()
+	{
+		std::wstring settingsPath;
+		if (!TryGetConnectionSettingsPath(settingsPath))
+			return GetDefaultConnectionMode();
+
+		const UINT rawMode = GetPrivateProfileIntW(
+			c_ConnectionSettingsSection,
+			c_ConnectionSettingsKey,
+			static_cast<UINT>(GetDefaultConnectionMode()),
+			settingsPath.c_str());
+		return NormalizeConnectionMode(static_cast<int>(rawMode));
+	}
+
+	void PersistConnectionMode(ConnectionMode mode)
+	{
+		std::wstring settingsPath;
+		if (!TryGetConnectionSettingsPath(settingsPath))
+			return;
+
+		wchar_t buffer[16];
+		_swprintf_p(buffer, _countof(buffer), L"%d", static_cast<int>(mode));
+		WritePrivateProfileStringW(
+			c_ConnectionSettingsSection,
+			c_ConnectionSettingsKey,
+			buffer,
+			settingsPath.c_str());
+	}
+
 	void PopulateConnectionModeCombo(HWND hWnd, ConnectionMode selectedMode)
 	{
 		HWND combo = GetDlgItem(hWnd, IDC_ConnectionMode);
@@ -70,22 +146,31 @@ namespace
 	}
 }
 
-ConnectionMode ParseConnectionModeFromCmdLine(LPWSTR cmd_line)
+bool TryParseConnectionModeFromCmdLine(LPWSTR cmd_line, ConnectionMode& mode)
 {
 	if (!cmd_line)
-		return ConnectionMode::eLegacySmartDashboard;
+		return false;
 
 	std::wstring cmd = cmd_line;
 	std::transform(cmd.begin(), cmd.end(), cmd.begin(), towlower);
 
 	if ((cmd.find(L"direct") != std::wstring::npos) || (cmd.find(L"conn=direct") != std::wstring::npos))
-		return ConnectionMode::eDirectConnect;
+	{
+		mode = ConnectionMode::eDirectConnect;
+		return true;
+	}
 	if ((cmd.find(L"shuffle") != std::wstring::npos) || (cmd.find(L"conn=shuffle") != std::wstring::npos))
-		return ConnectionMode::eShuffleboard;
+	{
+		mode = ConnectionMode::eShuffleboard;
+		return true;
+	}
 	if ((cmd.find(L"legacy") != std::wstring::npos) || (cmd.find(L"conn=legacy") != std::wstring::npos))
-		return ConnectionMode::eLegacySmartDashboard;
+	{
+		mode = ConnectionMode::eLegacySmartDashboard;
+		return true;
+	}
 
-	return ConnectionMode::eLegacySmartDashboard;
+	return false;
 }
 
 void ApplyConnectionMode(ConnectionMode mode)
@@ -95,6 +180,7 @@ void ApplyConnectionMode(ConnectionMode mode)
 		s_pRobotTester->SetConnectionMode(mode);
 	if (g_hDlg)
 		PopulateConnectionModeCombo(g_hDlg, mode);
+	PersistConnectionMode(mode);
 
 	std::wstring message = L"Connection Mode: ";
 	message += GetConnectionModeName(mode);
@@ -131,7 +217,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 		SetCurrentDirectoryW(path.c_str());
 	}
 	UNREFERENCED_PARAMETER(hPrevInstance);
-	s_InitialConnectionMode = ParseConnectionModeFromCmdLine(lpCmdLine);
+	s_InitialConnectionMode = LoadPersistedConnectionMode();
+	ConnectionMode commandLineMode = s_InitialConnectionMode;
+	if (TryParseConnectionModeFromCmdLine(lpCmdLine, commandLineMode))
+		s_InitialConnectionMode = commandLineMode;
 
 	// TODO: Place code here.
 
@@ -273,8 +362,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	RobotTester _robot_tester;
 	s_pRobotTester = &_robot_tester;
 	_robot_tester.RobotTester_create();
-	_robot_tester.SetConnectionMode(s_InitialConnectionMode);
-	SyncConnectionModeCombo(m_hDlg);
+	ApplyConnectionMode(s_InitialConnectionMode);
 	//Bind robot for Keyboard binding
 	//BindRobot(_robot_tester);
 	_robot_tester.RobotTester_init();
