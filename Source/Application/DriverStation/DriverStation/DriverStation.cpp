@@ -39,6 +39,9 @@ namespace
 	const wchar_t* c_ConnectionSettingsFile = L"DriverStation.ini";
 	const wchar_t* c_ConnectionSettingsSection = L"Connection";
 	const wchar_t* c_ConnectionSettingsKey = L"Mode";
+	const wchar_t* c_WindowSettingsSection = L"Window";
+	const wchar_t* c_WindowPosXKey = L"PosX";
+	const wchar_t* c_WindowPosYKey = L"PosY";
 
 	ConnectionMode GetDefaultConnectionMode()
 	{
@@ -109,6 +112,55 @@ namespace
 			c_ConnectionSettingsKey,
 			buffer,
 			settingsPath.c_str());
+	}
+
+	bool LoadPersistedWindowPosition(POINT& windowPosition)
+	{
+		std::wstring settingsPath;
+		if (!TryGetConnectionSettingsPath(settingsPath))
+			return false;
+
+		const int sentinel = 0x7fffffff;
+		const int posX = GetPrivateProfileIntW(c_WindowSettingsSection, c_WindowPosXKey, sentinel, settingsPath.c_str());
+		const int posY = GetPrivateProfileIntW(c_WindowSettingsSection, c_WindowPosYKey, sentinel, settingsPath.c_str());
+		if (posX == sentinel || posY == sentinel)
+			return false;
+
+		windowPosition.x = posX;
+		windowPosition.y = posY;
+		return true;
+	}
+
+	void PersistWindowPosition(HWND hWnd)
+	{
+		if (!hWnd)
+			return;
+
+		RECT windowRect = {};
+		if (!GetWindowRect(hWnd, &windowRect))
+			return;
+
+		std::wstring settingsPath;
+		if (!TryGetConnectionSettingsPath(settingsPath))
+			return;
+
+		wchar_t buffer[32];
+		_swprintf_p(buffer, _countof(buffer), L"%ld", windowRect.left);
+		WritePrivateProfileStringW(c_WindowSettingsSection, c_WindowPosXKey, buffer, settingsPath.c_str());
+		_swprintf_p(buffer, _countof(buffer), L"%ld", windowRect.top);
+		WritePrivateProfileStringW(c_WindowSettingsSection, c_WindowPosYKey, buffer, settingsPath.c_str());
+	}
+
+	void RestorePersistedWindowPosition(HWND hWnd)
+	{
+		if (!hWnd)
+			return;
+
+		POINT windowPosition = {};
+		if (!LoadPersistedWindowPosition(windowPosition))
+			return;
+
+		SetWindowPos(hWnd, nullptr, windowPosition.x, windowPosition.y, 0, 0, SWP_NOACTIVATE | SWP_NOSIZE | SWP_NOZORDER);
 	}
 
 	void PopulateConnectionModeCombo(HWND hWnd, ConnectionMode selectedMode)
@@ -244,6 +296,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 			CheckDlgButton(hWnd, IDC_Tele, BM_SETCHECK);
 			CheckDlgButton(hWnd, IDC_Stop, BM_SETCHECK);
 			PopulateConnectionModeCombo(hWnd, s_InitialConnectionMode);
+			RestorePersistedWindowPosition(hWnd);
 			//Button_SetState(hWnd, IDStop, BM_CLICK, true, 0);
 			return (INT_PTR)TRUE;
 		case WM_COMMAND:
@@ -342,7 +395,11 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 			EndPaint(hWnd, &ps);
 		}
 		break;
+		case WM_MOVE:
+			PersistWindowPosition(hWnd);
+			break;
 		case WM_DESTROY:
+			PersistWindowPosition(hWnd);
 			PostQuitMessage(0);
 			break;
 			//default:

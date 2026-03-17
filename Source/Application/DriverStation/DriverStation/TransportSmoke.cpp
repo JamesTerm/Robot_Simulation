@@ -23,7 +23,7 @@ int main(int argc, char** argv)
 	tester.SetConnectionMode(ConnectionMode::eDirectConnect);
 	tester.RobotTester_init();
 
-	SmartDashboard::PutString("Test/AutoChooser/.type", "String Chooser");
+	SmartDashboard::PutString("Test/AutonTest/AutoChooser/.type", "String Chooser");
 	std::vector<std::string> chooserOptions;
 	chooserOptions.push_back("Do Nothing");
 	chooserOptions.push_back("Just Move Forward");
@@ -31,11 +31,10 @@ int main(int argc, char** argv)
 	chooserOptions.push_back("Move Rotate Sequence");
 	chooserOptions.push_back("Box Waypoints");
 	chooserOptions.push_back("Smart Waypoints");
-	SmartDashboard::PutStringArray("Test/AutoChooser/options", chooserOptions);
-	SmartDashboard::PutString("Test/AutoChooser/default", "Do Nothing");
-	SmartDashboard::PutString("Test/AutoChooser/active", "Do Nothing");
-	SmartDashboard::PutString("Test/AutoChooser/selected", "Just Move Forward");
-	SmartDashboard::PutString("AutonTest", "Just Move Forward");
+	SmartDashboard::PutStringArray("Test/AutonTest/AutoChooser/options", chooserOptions);
+	SmartDashboard::PutString("Test/AutonTest/AutoChooser/default", "Do Nothing");
+	SmartDashboard::PutString("Test/AutonTest/AutoChooser/active", "Do Nothing");
+	SmartDashboard::PutString("Test/AutonTest/AutoChooser/selected", "Just Move Forward");
 	SmartDashboard::PutNumber("TestMove", 3.5);
 	printf("[TransportSmoke] seeded chooser selected='Just Move Forward' TestMove=3.5 run_ms=%lu\n", static_cast<unsigned long>(runMs));
 

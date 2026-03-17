@@ -47,7 +47,7 @@ Before starting Shuffleboard behavior, establish Direct Connect first.
 
 ## Chooser contract baseline
 
-Use chooser base key like `Test/AutoChooser` with:
+Use chooser base key like `Test/AutonTest/AutoChooser` with:
 
 - `<base>/.type` = `String Chooser`
 - `<base>/options`

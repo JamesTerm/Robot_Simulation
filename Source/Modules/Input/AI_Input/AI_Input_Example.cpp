@@ -306,7 +306,7 @@ public:
 		m_Timer = 0.0;
 		AutonType AutonTest = eDoNothing;
 		const char* const AutonTestSelection = "AutonTest";
-		const char* const AutonChooserBase = "Test/AutoChooser";
+		const char* const AutonChooserBase = "Test/AutonTest/AutoChooser";
 		size_t autonOptionCount = 0;
 		const AutonChooserOption* autonOptions = GetAutonChooserOptions(autonOptionCount);
 		auto tryReadAutonSelection = [&](double& outValue) -> bool
