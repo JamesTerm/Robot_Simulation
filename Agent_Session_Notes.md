@@ -9,6 +9,7 @@
 - `apply_patch` expects workspace-relative paths (forward slashes). Avoid absolute Windows paths to prevent separator errors.
 - Code style uses ANSI/Allman indentation; keep brace/indent alignment consistent with existing blocks to avoid drift.
 - Use Windows CRLF line endings for C++ source files in this repo.
+- Read nearby `Ian:` comments before editing a file. They mark intentional boundaries or historical lessons that should be preserved unless you deliberately mean to change behavior.
 
 ## Quick context for next session
 

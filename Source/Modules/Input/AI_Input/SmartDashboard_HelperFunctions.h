@@ -115,6 +115,9 @@ __inline double Auton_Smart_GetSingleValue(const char* SmartName, double default
 #if defined Robot_TesterCode
 	auto tryGetNumber = [&](const char* key, double& out) -> bool
 	{
+		// Ian: In Direct mode, a missing number must stay "missing" instead of
+		// looking like a valid zero. Use TryGet* first so auton commands do not
+		// silently collapse to 0-distance moves.
 		if (::SmartDashboard::TryGetNumber(key, out))
 			return true;
 
@@ -129,6 +132,9 @@ __inline double Auton_Smart_GetSingleValue(const char* SmartName, double default
 	};
 
 	const std::string scoped_name = std::string("Test/") + SmartName;
+	// Ian: Prefer the scoped key first because SmartDashboard control widgets in
+	// simulator layouts often publish as `Test/<key>`, but keep the flat alias
+	// for legacy compatibility.
 	if (SmartName && std::string(SmartName) == "TestMove")
 	{
 		char dbg[256] = {};

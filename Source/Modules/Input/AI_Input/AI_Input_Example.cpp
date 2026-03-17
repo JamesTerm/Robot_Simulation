@@ -323,6 +323,9 @@ public:
 		const char* const AutonChooserBase = "Test/Auton_Selection/AutoChooser";
 		size_t autonOptionCount = 0;
 		const AutonChooserOption* autonOptions = GetAutonChooserOptions(autonOptionCount);
+		// Ian: Keep chooser state on its own key path so Direct chooser work never
+		// masks the numeric `AutonTest` baseline that legacy NT and regression
+		// testing still depend on.
 		auto tryReadAutonSelectionChooser = [&](double& outValue) -> bool
 		{
 			std::string selectedLabel;
@@ -365,6 +368,9 @@ public:
 				!activeLabel.empty() ||
 				!defaultLabel.empty();
 
+			// Ian: Only treat chooser mode as active when the chooser actually has
+			// signal. Direct mode can be chooser-capable and still need to fall back
+			// to numeric `AutonTest` for baseline or legacy-style runs.
 			if (hasChooserSignal)
 			{
 				const int chooserIndex = ResolveAutonSelectionFromChooser(
@@ -445,6 +451,9 @@ public:
 		int autonIndex = ResolveAutonIndex(
 			[&](double& outSelection)
 			{
+				// Ian: Direct mode prefers chooser when present, but numeric fallback
+				// must remain alive or the baseline smoke test regresses back to
+				// `Do Nothing` whenever chooser widgets are absent.
 				if (useChooser)
 				{
 					if (tryReadAutonSelectionChooser(outSelection))
