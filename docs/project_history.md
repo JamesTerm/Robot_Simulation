@@ -1,5 +1,13 @@
 # Project history
 
+## 2026-03-17 - Direct numeric recovery and chooser-safe fallback
+
+- Added non-destructive SmartDashboard `TryGet*` reads so Direct-mode numeric lookups do not misinterpret missing values as valid zeroes.
+- Restored reliable Direct autonomous execution by fixing robot-side `TestMove` reads at activation time.
+- Kept chooser support available for Direct mode while preserving numeric fallback when chooser state is absent.
+- Added focused transport/auton tracing that made it easier to distinguish command-path bugs from harness/reporting bugs.
+- Expanded documentation structure with `docs/learning/` and `docs/journal/` for more student-friendly engineering context.
+
 ## 2026-03-16 - Direct transport stress harness and consumer-cursor hardening
 
 - Continued the Direct-mode dashboard interoperability push with a stronger harness around SmartDashboard pairing:

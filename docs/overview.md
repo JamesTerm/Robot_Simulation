@@ -41,3 +41,11 @@ This document preserves the longer-form project orientation that previously live
 
 - Older workflows sometimes used prebuilt OSG binaries dropped into module folders.
 - Current CMake migration path prefers package-managed OSG via vcpkg.
+
+## Documentation map
+
+- `docs/project_history.md` - lean milestone log
+- `docs/journal/` - longer-form dated engineering stories and debugging writeups
+- `docs/learning/` - reusable lessons and teaching-oriented engineering notes
+- `docs/testing.md` - build/test commands and validation flow
+- `docs/transport_modes_strategy.md` - transport direction and compatibility planning

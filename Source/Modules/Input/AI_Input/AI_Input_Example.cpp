@@ -9,10 +9,6 @@
 #include "../../../Properties/RegistryV1.h"
 using namespace Framework::Base;
 
-// Hardcoded pilot-run switch: comment this out only after the direct chooser
-// path is proven and we intentionally want chooser selection enabled.
-#define __DisableChooser__
-
 namespace Module
 {
 	namespace Input
@@ -21,11 +17,7 @@ namespace Module
 		{
 			inline bool IsChooserEnabledForCurrentConnection()
 			{
-			#ifdef __DisableChooser__
-				return false;
-			#else
 				return SmartDashboard::GetConnectionMode() == SmartDashboardConnectionMode::eDirectConnect;
-			#endif
 			}
 		}
 
@@ -394,9 +386,8 @@ public:
 		{
 			std::string rawAutonText;
 			std::string rawAutonScopedText;
-			try
+			if (SmartDashboard::TryGetNumber(AutonTestSelection, outValue))
 			{
-				outValue = SmartDashboard::GetNumber(AutonTestSelection);
 				printf("[AI AutonTest] source=number value=%g\n", outValue);
 				{
 					char dbg[256] = {};
@@ -405,13 +396,9 @@ public:
 				}
 				return true;
 			}
-			catch (...)
-			{
-			}
 
-			try
+			if (SmartDashboard::TryGetNumber(AutonTestSelectionScoped, outValue))
 			{
-				outValue = SmartDashboard::GetNumber(AutonTestSelectionScoped);
 				printf("[AI AutonTest] source=number(scoped) value=%g\n", outValue);
 				{
 					char dbg[256] = {};
@@ -420,13 +407,9 @@ public:
 				}
 				return true;
 			}
-			catch (...)
-			{
-			}
 
-			try
+			if (SmartDashboard::TryGetString(AutonTestSelection, rawAutonText))
 			{
-				rawAutonText = SmartDashboard::GetString(AutonTestSelection);
 				outValue = atof(rawAutonText.c_str());
 				printf("[AI AutonTest] source=string raw='%s' parsed=%g\n", rawAutonText.c_str(), outValue);
 				{
@@ -436,13 +419,9 @@ public:
 				}
 				return true;
 			}
-			catch (...)
-			{
-			}
 
-			try
+			if (SmartDashboard::TryGetString(AutonTestSelectionScoped, rawAutonScopedText))
 			{
-				rawAutonScopedText = SmartDashboard::GetString(AutonTestSelectionScoped);
 				outValue = atof(rawAutonScopedText.c_str());
 				printf("[AI AutonTest] source=string(scoped) raw='%s' parsed=%g\n", rawAutonScopedText.c_str(), outValue);
 				{
@@ -451,9 +430,6 @@ public:
 					AppendDirectAutonChainLog(dbg);
 				}
 				return true;
-			}
-			catch (...)
-			{
 			}
 
 			{
@@ -470,7 +446,10 @@ public:
 			[&](double& outSelection)
 			{
 				if (useChooser)
-					return tryReadAutonSelectionChooser(outSelection);
+				{
+					if (tryReadAutonSelectionChooser(outSelection))
+						return true;
+				}
 				return tryReadAutonSelectionDouble(outSelection);
 			},
 			(int)eDoNothing,
