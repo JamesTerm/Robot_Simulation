@@ -29,6 +29,16 @@ namespace
 		log.flush();
 	}
 
+	void AppendTransportLogLine(const wchar_t* line)
+	{
+		if (!line)
+			return;
+		char buffer[1024] = {};
+		size_t converted = 0;
+		wcstombs_s(&converted, buffer, line, _TRUNCATE);
+		AppendTransportLogLine(buffer);
+	}
+
 	class IDirectPublisher
 	{
 	public:
@@ -196,21 +206,53 @@ namespace
 			std::lock_guard<std::mutex> lock(const_cast<std::mutex&>(m_retainedMutex));
 			auto it = m_retained.find(key);
 			if (it == m_retained.end())
+			{
+				if (key == "TestMove" || key == "Test/TestMove")
+				{
+					char dbg[256] = {};
+					sprintf_s(dbg, "[DirectPublisherStub] TryGetNumber miss key='%s'", key.c_str());
+					AppendTransportLogLine(dbg);
+				}
 				return false;
+			}
 			if (it->second.type == ValueType::Double)
 			{
 				value = it->second.doubleValue;
+				if (key == "TestMove" || key == "Test/TestMove")
+				{
+					char dbg[256] = {};
+					sprintf_s(dbg, "[DirectPublisherStub] TryGetNumber key='%s' type=double value=%g", key.c_str(), value);
+					AppendTransportLogLine(dbg);
+				}
 				return true;
 			}
 			if (it->second.type == ValueType::String)
 			{
 				value = atof(it->second.stringValue.c_str());
+				if (key == "TestMove" || key == "Test/TestMove")
+				{
+					char dbg[256] = {};
+					sprintf_s(dbg, "[DirectPublisherStub] TryGetNumber key='%s' type=string raw='%s' parsed=%g", key.c_str(), it->second.stringValue.c_str(), value);
+					AppendTransportLogLine(dbg);
+				}
 				return true;
 			}
 			if (it->second.type == ValueType::Bool)
 			{
 				value = it->second.boolValue ? 1.0 : 0.0;
+				if (key == "TestMove" || key == "Test/TestMove")
+				{
+					char dbg[256] = {};
+					sprintf_s(dbg, "[DirectPublisherStub] TryGetNumber key='%s' type=bool value=%g", key.c_str(), value);
+					AppendTransportLogLine(dbg);
+				}
 				return true;
+			}
+			if (key == "TestMove" || key == "Test/TestMove")
+			{
+				char dbg[256] = {};
+				sprintf_s(dbg, "[DirectPublisherStub] TryGetNumber key='%s' unsupported_type=%u", key.c_str(), static_cast<unsigned>(it->second.type));
+				AppendTransportLogLine(dbg);
 			}
 			return false;
 		}
@@ -756,10 +798,21 @@ namespace
 				if (it != m_values.end())
 					OutputDebugStringA("[DirectCommandSubscriber] AutonTest alias hit via Test/AutonTest\n");
 			}
+			if (it == m_values.end() && keyName == "TestMove")
+			{
+				it = m_values.find("Test/TestMove");
+				if (it != m_values.end())
+					OutputDebugStringA("[DirectCommandSubscriber] TestMove alias hit via Test/TestMove\n");
+			}
 			if (it == m_values.end())
 			{
 				if (keyName == "AutonTest")
 					OutputDebugStringA("[DirectCommandSubscriber] AutonTest miss\n");
+				if (keyName == "TestMove")
+				{
+					OutputDebugStringA("[DirectCommandSubscriber] TestMove miss\n");
+					AppendTransportLogLine("[DirectCommandSubscriber] TestMove miss");
+				}
 				return false;
 			}
 			if (it->second.type == ValueType::Double)
@@ -770,6 +823,15 @@ namespace
 					char dbg[256] = {};
 					sprintf_s(dbg, "[DirectCommandSubscriber] AutonTest type=double value=%g\n", value);
 					OutputDebugStringA(dbg);
+				}
+				if (keyName == "TestMove")
+				{
+					char dbg[256] = {};
+					sprintf_s(dbg, "[DirectCommandSubscriber] TestMove type=double value=%g\n", value);
+					OutputDebugStringA(dbg);
+					char dbgFile[256] = {};
+					sprintf_s(dbgFile, "[DirectCommandSubscriber] TestMove type=double value=%g", value);
+					AppendTransportLogLine(dbgFile);
 				}
 				return true;
 			}
@@ -782,6 +844,15 @@ namespace
 					sprintf_s(dbg, "[DirectCommandSubscriber] AutonTest type=string raw='%s' parsed=%g\n", it->second.stringValue.c_str(), value);
 					OutputDebugStringA(dbg);
 				}
+				if (keyName == "TestMove")
+				{
+					char dbg[256] = {};
+					sprintf_s(dbg, "[DirectCommandSubscriber] TestMove type=string raw='%s' parsed=%g\n", it->second.stringValue.c_str(), value);
+					OutputDebugStringA(dbg);
+					char dbgFile[256] = {};
+					sprintf_s(dbgFile, "[DirectCommandSubscriber] TestMove type=string raw='%s' parsed=%g", it->second.stringValue.c_str(), value);
+					AppendTransportLogLine(dbgFile);
+				}
 				return true;
 			}
 			if (it->second.type == ValueType::Bool)
@@ -792,6 +863,15 @@ namespace
 					char dbg[256] = {};
 					sprintf_s(dbg, "[DirectCommandSubscriber] AutonTest type=bool value=%g\n", value);
 					OutputDebugStringA(dbg);
+				}
+				if (keyName == "TestMove")
+				{
+					char dbg[256] = {};
+					sprintf_s(dbg, "[DirectCommandSubscriber] TestMove type=bool value=%g\n", value);
+					OutputDebugStringA(dbg);
+					char dbgFile[256] = {};
+					sprintf_s(dbgFile, "[DirectCommandSubscriber] TestMove type=bool value=%g", value);
+					AppendTransportLogLine(dbgFile);
 				}
 				return true;
 			}
@@ -952,7 +1032,7 @@ namespace
 			std::string key;
 			while (ReadNextValue(key, value))
 			{
-				if (key == "AutonTest" || key == "Test/AutonTest")
+				if (key == "AutonTest" || key == "Test/AutonTest" || key == "TestMove" || key == "Test/TestMove")
 				{
 					char dbg[320] = {};
 					switch (value.type)
@@ -1232,10 +1312,25 @@ public:
 		bool TryGetNumber(const std::string& keyName, double& value) override
 		{
 			if (m_commandSubscriber && m_commandSubscriber->TryGetNumber(keyName, value))
+			{
+				if (keyName == "TestMove" || keyName == "Test/TestMove")
+				{
+					char dbg[256] = {};
+					sprintf_s(dbg, "[DirectConnectBackend] TryGetNumber source=command key='%s' value=%g", keyName.c_str(), value);
+					AppendTransportLogLine(dbg);
+				}
 				return true;
+			}
 			if (!m_publisher)
 				return false;
-			return m_publisher->TryGetNumber(keyName, value);
+			const bool ok = m_publisher->TryGetNumber(keyName, value);
+			if (keyName == "TestMove" || keyName == "Test/TestMove")
+			{
+				char dbg[256] = {};
+				sprintf_s(dbg, "[DirectConnectBackend] TryGetNumber source=publisher key='%s' ok=%d value=%g", keyName.c_str(), ok ? 1 : 0, ok ? value : 0.0);
+				AppendTransportLogLine(dbg);
+			}
+			return ok;
 		}
 
 		bool TryGetString(const std::string& keyName, std::string& value) override

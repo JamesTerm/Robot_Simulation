@@ -113,7 +113,8 @@ inline void PublishAutonChooser(
     size_t optionCount,
     int defaultIndex,
     int activeIndex,
-    int selectedIndex)
+    int selectedIndex,
+    bool publishSelected = true)
 {
     const std::string chooserBase = chooserBaseKey ? chooserBaseKey : "";
     std::vector<std::string> labels;
@@ -143,7 +144,8 @@ inline void PublishAutonChooser(
     SmartDashboard::PutStringArray(chooserBase + "/options", labels);
     SmartDashboard::PutString(chooserBase + "/default", defaultLabel);
     SmartDashboard::PutString(chooserBase + "/active", activeLabel);
-    SmartDashboard::PutString(chooserBase + "/selected", selectedLabel);
+    if (publishSelected)
+        SmartDashboard::PutString(chooserBase + "/selected", selectedLabel);
 }
 }
 }

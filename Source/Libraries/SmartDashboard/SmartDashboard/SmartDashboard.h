@@ -63,15 +63,18 @@ public:
 	
 	static void PutBoolean(std::string keyName, bool value);
 	static bool GetBoolean(std::string keyName);
+	static bool TryGetBoolean(std::string keyName, bool& value);
 	
 	static void PutNumber(std::string keyName, double value);
 	static double GetNumber(std::string keyName);
+	static bool TryGetNumber(std::string keyName, double& value);
 	
 	static void PutString(std::string keyName, std::string value);
 	static void PutStringArray(std::string keyName, const std::vector<std::string>& values);
 	static int GetString(std::string keyName, char *value, unsigned int valueLen);
 	static std::string GetString(std::string keyName);
 	static std::string GetString(std::string keyName,std::string defaultValue);
+	static bool TryGetString(std::string keyName, std::string& value);
 
 	
 	static void PutValue(std::string keyName, ComplexData& value);

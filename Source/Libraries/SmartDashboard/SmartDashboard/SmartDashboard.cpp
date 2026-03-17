@@ -390,6 +390,22 @@ bool SmartDashboard::GetBoolean(std::string keyName)
 	return m_table->GetBoolean(keyName);
 }
 
+bool SmartDashboard::TryGetBoolean(std::string keyName, bool& value)
+{
+	if (TryGetDirectBoolean(keyName, value))
+		return true;
+	if (HasDirectTransport())
+		return false;
+	if (!is_initialized())
+		init();
+	if (m_table == NULL)
+		return false;
+	if (!m_table->ContainsKey(keyName))
+		return false;
+	value = m_table->GetBoolean(keyName);
+	return true;
+}
+
 /**
  * Maps the specified key to the specified value in this table.
  * The key can not be NULL.
@@ -453,6 +469,22 @@ double SmartDashboard::GetNumber(std::string keyName)
 		OutputDebugStringA(dbg);
 	}
 	return value;
+}
+
+bool SmartDashboard::TryGetNumber(std::string keyName, double& value)
+{
+	if (TryGetDirectNumber(keyName, value))
+		return true;
+	if (HasDirectTransport())
+		return false;
+	if (!is_initialized())
+		init();
+	if (m_table == NULL)
+		return false;
+	if (!m_table->ContainsKey(keyName))
+		return false;
+	value = m_table->GetNumber(keyName);
+	return true;
 }
 
 /**
@@ -568,6 +600,22 @@ std::string SmartDashboard::GetString(std::string keyName)
 		return std::string();
 
 	return m_table->GetString(keyName);
+}
+
+bool SmartDashboard::TryGetString(std::string keyName, std::string& value)
+{
+	if (TryGetDirectString(keyName, value))
+		return true;
+	if (HasDirectTransport())
+		return false;
+	if (!is_initialized())
+		init();
+	if (m_table == NULL)
+		return false;
+	if (!m_table->ContainsKey(keyName))
+		return false;
+	value = m_table->GetString(keyName);
+	return true;
 }
 
 //This is the newer calling interface, but the underlying system doesn't support this, so we can implement it by using try..catch technique

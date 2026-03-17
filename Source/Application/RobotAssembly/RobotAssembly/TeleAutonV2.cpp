@@ -16,6 +16,7 @@
 #include "../../../Modules/Input/dx_Joystick_Controller/dx_Joystick_Controller/dx_Joystick.h"
 #include "../../../Modules/Input/JoystickConverter.h"
 #include "../../../Modules/Input/AI_Input/AI_Input_Example.h"
+#include "../../../Modules/Input/AI_Input/DirectAutonChainLog.h"
 #include "../../../Modules/Input/AI_Input/SmartDashboard_HelperFunctions.h"
 
 #include "../../../Modules/Robot/Entity2D/Entity2D/Entity2D.h"
@@ -493,6 +494,27 @@ private:
 				});
 			m_Goal.Set_DriveToLocation([&](double north, double east, bool absolute, bool stop_at_destination, double max_speed, bool can_strafe)
 				{
+					printf(
+						"[TeleAutonV2] DriveToLocation north=%g east=%g absolute=%d stop=%d max_speed=%g can_strafe=%d\n",
+						north,
+						east,
+						absolute ? 1 : 0,
+						stop_at_destination ? 1 : 0,
+						max_speed,
+						can_strafe ? 1 : 0);
+					{
+						char dbg[256] = {};
+						sprintf_s(
+							dbg,
+							"[TeleAutonV2] DriveToLocation north=%g east=%g absolute=%d stop=%d max_speed=%g can_strafe=%d",
+							north,
+							east,
+							absolute ? 1 : 0,
+							stop_at_destination ? 1 : 0,
+							max_speed,
+							can_strafe ? 1 : 0);
+						Module::Input::AppendDirectAutonChainLog(dbg);
+					}
 					m_robot.DriveToLocation(north, east, absolute, stop_at_destination, max_speed, can_strafe);
 				});
 			m_Goal.Set_SetIntendedOrientation([&](double intended_orientation, bool absolute)

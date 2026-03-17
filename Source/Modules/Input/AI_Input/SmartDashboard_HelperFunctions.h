@@ -1,5 +1,6 @@
 #pragma once
 #include "../../../Libraries/SmartDashboard/SmartDashboard_Import.h"
+#include "DirectAutonChainLog.h"
 
 #define Robot_TesterCode
 __inline bool Auton_Smart_GetSingleValue_Bool(const char* SmartName, bool default_value)
@@ -114,31 +115,34 @@ __inline double Auton_Smart_GetSingleValue(const char* SmartName, double default
 #if defined Robot_TesterCode
 	auto tryGetNumber = [&](const char* key, double& out) -> bool
 	{
-		try
-		{
-			out = SmartDashboard::GetNumber(key);
+		if (::SmartDashboard::TryGetNumber(key, out))
 			return true;
-		}
-		catch (...)
-		{
-		}
 
-		try
+		std::string str_value;
+		if (::SmartDashboard::TryGetString(key, str_value))
 		{
-			const std::string str_value = SmartDashboard::GetString(key);
 			out = atof(str_value.c_str());
 			return true;
-		}
-		catch (...)
-		{
 		}
 
 		return false;
 	};
 
 	const std::string scoped_name = std::string("Test/") + SmartName;
+	if (SmartName && std::string(SmartName) == "TestMove")
+	{
+		char dbg[256] = {};
+		sprintf_s(dbg, "[Auton_Smart_GetSingleValue] reading '%s' scoped='%s'", SmartName, scoped_name.c_str());
+		Module::Input::AppendDirectAutonChainLog(dbg);
+	}
 	bool hasValue = false;
 	hasValue = tryGetNumber(scoped_name.c_str(), result) || tryGetNumber(SmartName, result);
+	if (SmartName && std::string(SmartName) == "TestMove")
+	{
+		char dbg[256] = {};
+		sprintf_s(dbg, "[Auton_Smart_GetSingleValue] result '%s' has=%d value=%g", SmartName, hasValue ? 1 : 0, result);
+		Module::Input::AppendDirectAutonChainLog(dbg);
+	}
 	if (!hasValue)
 		result = default_value;
 #else
@@ -162,23 +166,14 @@ __inline void Auton_Smart_GetMultiValue(size_t NoItems, const char* const SmartN
 #if defined Robot_TesterCode
 	auto tryGetNumber = [&](const char* key, double& out) -> bool
 	{
-		try
-		{
-			out = SmartDashboard::GetNumber(key);
+		if (::SmartDashboard::TryGetNumber(key, out))
 			return true;
-		}
-		catch (...)
-		{
-		}
 
-		try
+		std::string str_value;
+		if (::SmartDashboard::TryGetString(key, str_value))
 		{
-			const std::string str_value = SmartDashboard::GetString(key);
 			out = atof(str_value.c_str());
 			return true;
-		}
-		catch (...)
-		{
 		}
 
 		return false;
