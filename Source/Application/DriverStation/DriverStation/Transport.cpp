@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <fstream>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -19,6 +20,15 @@
 
 namespace
 {
+	void AppendTransportLogLine(const std::string& line)
+	{
+		static std::mutex logMutex;
+		static std::ofstream log("D:/code/Robot_Simulation/.debug/direct_transport_debug_log.txt", std::ios::out | std::ios::trunc);
+		std::lock_guard<std::mutex> lock(logMutex);
+		log << line << '\n';
+		log.flush();
+	}
+
 	class IDirectPublisher
 	{
 	public:
@@ -317,10 +327,54 @@ namespace
 
 		void RunLoop()
 		{
+			std::uint64_t previousLoopUs = 0;
 			while (m_running.load())
 			{
+				const std::uint64_t nowUs = GetSteadyNowUs();
+				if (previousLoopUs != 0)
+				{
+					const std::uint64_t loopDeltaUs = nowUs - previousLoopUs;
+					if (loopDeltaUs > 250000ULL)
+					{
+						char dbgGap[256] = {};
+						sprintf_s(
+							dbgGap,
+							"[Transport] Telemetry run loop gap_us=%llu",
+							static_cast<unsigned long long>(loopDeltaUs));
+						AppendTransportLogLine(dbgGap);
+					}
+				}
+				previousLoopUs = nowUs;
+
 				MaybeReplayRetainedSnapshot();
 				FlushNow();
+				if (m_header != nullptr)
+				{
+					const std::uint64_t lastConsumerHeartbeatUs = m_header->lastConsumerHeartbeatUs.load(std::memory_order_acquire);
+					const bool consumerActive =
+						(lastConsumerHeartbeatUs != 0) &&
+						(nowUs >= lastConsumerHeartbeatUs) &&
+						((nowUs - lastConsumerHeartbeatUs) <= 500000ULL);
+					if (consumerActive != m_loggedConsumerActive)
+					{
+						wchar_t dbg[256] = {};
+						_swprintf_p(
+							dbg,
+							_countof(dbg),
+							L"[Transport] Telemetry consumer active=%d heartbeat_delta_us=%llu\n",
+							consumerActive ? 1 : 0,
+							static_cast<unsigned long long>(consumerActive ? (nowUs - lastConsumerHeartbeatUs) : 0ULL));
+						OutputDebugStringW(dbg);
+						char dbgA[256] = {};
+						sprintf_s(
+							dbgA,
+							"[Transport] Telemetry consumer active=%d heartbeat_delta_us=%llu",
+							consumerActive ? 1 : 0,
+							static_cast<unsigned long long>(consumerActive ? (nowUs - lastConsumerHeartbeatUs) : 0ULL));
+						AppendTransportLogLine(dbgA);
+						m_loggedConsumerActive = consumerActive;
+					}
+				}
 				std::this_thread::sleep_for(std::chrono::milliseconds(16));
 			}
 		}
@@ -383,6 +437,7 @@ namespace
 			}
 
 			OutputDebugStringW(L"[Transport] Direct publisher replayed retained snapshot for dashboard reconnect\n");
+			AppendTransportLogLine("[Transport] Direct publisher replayed retained snapshot for dashboard reconnect");
 		}
 
 		static std::uint32_t RingUsed(const RingHeader* header, std::uint32_t capacity)
@@ -559,6 +614,7 @@ namespace
 		std::unordered_map<std::string, PendingValue> m_retained;
 		bool m_consumerWasActive = false;
 		std::uint64_t m_lastObservedConsumerInstanceId = 0;
+		bool m_loggedConsumerActive = false;
 	};
 
 	class DirectCommandSubscriber
@@ -860,7 +916,33 @@ namespace
 					DrainPendingValues();
 				}
 				if (m_header != nullptr)
-					m_header->lastConsumerHeartbeatUs.store(GetSteadyNowUs(), std::memory_order_release);
+				{
+					const std::uint64_t nowUs = GetSteadyNowUs();
+					m_header->lastConsumerHeartbeatUs.store(nowUs, std::memory_order_release);
+					const std::uint64_t producerHeartbeatUs = m_header->lastProducerHeartbeatUs.load(std::memory_order_acquire);
+					const bool producerActive =
+						(producerHeartbeatUs != 0) &&
+						(nowUs >= producerHeartbeatUs) &&
+						((nowUs - producerHeartbeatUs) <= 500000ULL);
+					if (producerActive != m_loggedProducerActive)
+					{
+						char dbg[256] = {};
+						sprintf_s(
+							dbg,
+							"[DirectCommandSubscriber] producer active=%d heartbeat_delta_us=%llu\n",
+							producerActive ? 1 : 0,
+							static_cast<unsigned long long>(producerActive ? (nowUs - producerHeartbeatUs) : 0ULL));
+						OutputDebugStringA(dbg);
+						char dbgFile[256] = {};
+						sprintf_s(
+							dbgFile,
+							"[DirectCommandSubscriber] producer active=%d heartbeat_delta_us=%llu",
+							producerActive ? 1 : 0,
+							static_cast<unsigned long long>(producerActive ? (nowUs - producerHeartbeatUs) : 0ULL));
+						AppendTransportLogLine(dbgFile);
+						m_loggedProducerActive = producerActive;
+					}
+				}
 			}
 		}
 
@@ -1041,6 +1123,7 @@ namespace
 		std::unordered_map<std::string, StoredValue> m_values;
 		std::uint32_t m_readCursor = 0;
 		std::uint64_t m_instanceId = 0;
+		bool m_loggedProducerActive = false;
 	};
 
 	class LegacySmartDashboardBackend final : public IConnectionBackend
