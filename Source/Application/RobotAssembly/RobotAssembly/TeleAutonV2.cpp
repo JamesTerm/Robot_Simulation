@@ -16,6 +16,7 @@
 #include "../../../Modules/Input/dx_Joystick_Controller/dx_Joystick_Controller/dx_Joystick.h"
 #include "../../../Modules/Input/JoystickConverter.h"
 #include "../../../Modules/Input/AI_Input/AI_Input_Example.h"
+#include "../../../Modules/Input/AI_Input/DirectAutonChainLog.h"
 #include "../../../Modules/Input/AI_Input/SmartDashboard_HelperFunctions.h"
 
 #include "../../../Modules/Robot/Entity2D/Entity2D/Entity2D.h"
@@ -29,19 +30,6 @@
 #include "../../../Properties/RegistryV1.h"
 #include "TeleAutonV2.h"
 
-//We can specify the linking in code
-//https://www.dropbox.com/s/bn7ffxb7yqinzme/OSG_Viewer_x64.zip?dl=0
-//unzip this to here: .\Robot_Simulation\Source\Modules\Output\OSG_Viewer
-//if done correctly an x64 folder will be in the OSG_Viewer folder, then you can link and the 
-//custom build step will auto copy the dll's needed to run
-
-#ifdef _WIN64
-#ifdef _DEBUG
-#pragma comment(lib,"../../../Modules/Output/OSG_Viewer/x64/Debug/OSG_Viewer.lib")
-#else
-#pragma comment(lib,"../../../Modules/Output/OSG_Viewer/x64/Release/OSG_Viewer.lib")
-#endif
-#endif
 #pragma endregion
 
 namespace Application
@@ -506,6 +494,27 @@ private:
 				});
 			m_Goal.Set_DriveToLocation([&](double north, double east, bool absolute, bool stop_at_destination, double max_speed, bool can_strafe)
 				{
+					printf(
+						"[TeleAutonV2] DriveToLocation north=%g east=%g absolute=%d stop=%d max_speed=%g can_strafe=%d\n",
+						north,
+						east,
+						absolute ? 1 : 0,
+						stop_at_destination ? 1 : 0,
+						max_speed,
+						can_strafe ? 1 : 0);
+					{
+						char dbg[256] = {};
+						sprintf_s(
+							dbg,
+							"[TeleAutonV2] DriveToLocation north=%g east=%g absolute=%d stop=%d max_speed=%g can_strafe=%d",
+							north,
+							east,
+							absolute ? 1 : 0,
+							stop_at_destination ? 1 : 0,
+							max_speed,
+							can_strafe ? 1 : 0);
+						Module::Input::AppendDirectAutonChainLog(dbg);
+					}
 					m_robot.DriveToLocation(north, east, absolute, stop_at_destination, max_speed, can_strafe);
 				});
 			m_Goal.Set_SetIntendedOrientation([&](double intended_orientation, bool absolute)
@@ -623,7 +632,9 @@ public:
 			//Give driver station a default testing method by invoking here if we are in test mode
 			if (m_game_mode == game_mode::eTest)
 			{
-				int test_to_run = (int)Auton_Smart_GetSingleValue("AutonTest", 1.0);
+				int test_to_run = (int)Auton_Smart_GetSingleValue("AutonTest", 0.0);
+				if (test_to_run < 0)
+					test_to_run = 0;
 				test(test_to_run);
 			}
 			if (m_game_mode == game_mode::eAuton)

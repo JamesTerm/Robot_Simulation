@@ -4,6 +4,7 @@
 #include "../../../Base/Misc.h"
 #include "Goal_Types.h"
 #include "AI_Input.h"
+#include "DirectAutonChainLog.h"
 
 namespace Framework
 {
@@ -121,6 +122,25 @@ public:
 	virtual void Activate()
 	{
 		m_Status = eActive;
+		printf(
+			"[Goal_Ship_MoveToPosition] Activate north=%g east=%g power=%g lock=%d stop=%d\n",
+			m_Point.Position.y(),
+			m_Point.Position.x(),
+			m_Point.Power,
+			m_LockOrientation ? 1 : 0,
+			m_UseSafeStop ? 1 : 0);
+		{
+			char dbg[256] = {};
+			sprintf_s(
+				dbg,
+				"[Goal_Ship_MoveToPosition] Activate north=%g east=%g power=%g lock=%d stop=%d",
+				m_Point.Position.y(),
+				m_Point.Position.x(),
+				m_Point.Power,
+				m_LockOrientation ? 1 : 0,
+				m_UseSafeStop ? 1 : 0);
+			Module::Input::AppendDirectAutonChainLog(dbg);
+		}
 		//Unlike before the controller does all the work, we only have to monitor the waypoint activity
 		m_Controller->DriveToLocation(m_Point.Position.y(), m_Point.Position.x(), true, m_UseSafeStop, m_Point.Power, m_LockOrientation);
 	}

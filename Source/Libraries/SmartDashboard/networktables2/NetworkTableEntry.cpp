@@ -44,6 +44,13 @@ EntryValue NetworkTableEntry::GetValue(){
 }
 
 NetworkTableEntryType* NetworkTableEntry::GetType(){
+	if (type == NULL)
+	{
+		// Defensive hardening for rare legacy NT race windows where an entry can be observed
+		// while its type pointer has not been fully stabilized.
+		printf("NetworkTableEntry::GetType() encountered null type for key '%s'\n", name.c_str());
+		return NULL;
+	}
 	return type;
 }
 

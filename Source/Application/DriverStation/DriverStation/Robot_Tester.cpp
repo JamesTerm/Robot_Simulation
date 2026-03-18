@@ -1,5 +1,4 @@
 #include "stdafx.h"
-#include "../../../Libraries/SmartDashboard/SmartDashboard_Import.h"
 #include "Robot_Tester.h"
 #include "../../RobotAssembly/RobotAssembly/TeleOpV1.h"
 #include "../../RobotAssembly/RobotAssembly/TeleOpV2.h"
@@ -19,20 +18,21 @@ private:
 	//Application::TeleOp_V3 m_tele;
 	//Application::TeleAuton_V1 m_tele;
 	Application::TeleAuton_V2 m_tele;
+	DashboardTransportRouter m_transport_router;
 public:
-	RobotTester_Internal()
-	{
-		SmartDashboard::init();
-	}
+	RobotTester_Internal() = default;
 	void Shutdown()
 	{
 		StopStreaming();
-		//TODO do we really need this, why is it crashing
-		//SmartDashboard::shutdown();
+		m_transport_router.Shutdown();
 	}
-	void init()
+ 	void init()
 	{
 		m_tele.init();
+	}
+	void InitializeConnectionMode(ConnectionMode mode)
+	{
+		m_transport_router.Initialize(mode);
 	}
 	void StartStreaming()
 	{
@@ -46,6 +46,20 @@ public:
 	{
 		//Note: previous versions do not support this method
 		m_tele.SetGameMode(mode);
+	}
+	void SetConnectionMode(ConnectionMode mode)
+	{
+		m_transport_router.SetMode(mode);
+		std::wstring message = L"[RobotTester] Connection mode active: ";
+		message += GetConnectionModeName(mode);
+		message += L" (backend: ";
+		message += m_transport_router.GetActiveBackendName();
+		message += L")\n";
+		OutputDebugStringW(message.c_str());
+	}
+	ConnectionMode GetConnectionMode() const
+	{
+		return m_transport_router.GetMode();
 	}
 	void Test(int test)
 	{
@@ -63,6 +77,8 @@ void RobotTester::RobotTester_create(void)
 
 void RobotTester::RobotTester_init()
 {
+	if (m_p_RobotTester)
+		m_p_RobotTester->InitializeConnectionMode(m_ConnectionMode);
 	m_p_RobotTester->init();  //go ahead and init
 }
 
@@ -81,6 +97,20 @@ void RobotTester::Test(int test)
 void RobotTester::SetGameMode(int mode)
 {
 	m_p_RobotTester->SetGameMode(mode);
+}
+
+void RobotTester::SetConnectionMode(ConnectionMode mode)
+{
+	m_ConnectionMode = mode;
+	if (m_p_RobotTester)
+		m_p_RobotTester->SetConnectionMode(mode);
+}
+
+ConnectionMode RobotTester::GetConnectionMode() const
+{
+	if (m_p_RobotTester)
+		return m_p_RobotTester->GetConnectionMode();
+	return m_ConnectionMode;
 }
 
 void RobotTester::StartStreaming()

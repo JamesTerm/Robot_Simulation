@@ -4,8 +4,6 @@
 #include <algorithm>
 #include <functional>
 
-#pragma comment (lib,"winmm")
-#pragma comment (lib,"Shlwapi.lib")
 #include <timeapi.h>
 #include <shlwapi.h>
 //#include "../Robot_Tester.h"
@@ -27,11 +25,220 @@
 HINSTANCE hInst;                                // current instance
 WCHAR szTitle[MAX_LOADSTRING];                  // The title bar text
 WCHAR szWindowClass[MAX_LOADSTRING];            // the main window class name
+HWND g_hDlg = nullptr;
 
 //Since the lambda cannot capture, we must give it access to the robot here
 RobotTester *s_pRobotTester = nullptr;  
 //void BindRobot(RobotTester &_robot_tester);  //forward declare
 void SetupPreferences();
+ConnectionMode s_InitialConnectionMode = ConnectionMode::eDirectConnect;
+
+namespace
+{
+	const wchar_t* c_ConnectionSettingsDir = L"RobotSimulation";
+	const wchar_t* c_ConnectionSettingsFile = L"DriverStation.ini";
+	const wchar_t* c_ConnectionSettingsSection = L"Connection";
+	const wchar_t* c_ConnectionSettingsKey = L"Mode";
+	const wchar_t* c_WindowSettingsSection = L"Window";
+	const wchar_t* c_WindowPosXKey = L"PosX";
+	const wchar_t* c_WindowPosYKey = L"PosY";
+
+	ConnectionMode GetDefaultConnectionMode()
+	{
+		return ConnectionMode::eDirectConnect;
+	}
+
+	bool TryGetConnectionSettingsPath(std::wstring& settingsPath)
+	{
+		DWORD required = GetEnvironmentVariableW(L"LOCALAPPDATA", nullptr, 0);
+		if (!required)
+			return false;
+
+		std::wstring basePath(required - 1, L'\0');
+		if (GetEnvironmentVariableW(L"LOCALAPPDATA", &basePath[0], required) != (required - 1))
+			return false;
+
+		wchar_t settingsDir[MAX_PATH];
+		wcscpy_s(settingsDir, basePath.c_str());
+		PathAppendW(settingsDir, c_ConnectionSettingsDir);
+		CreateDirectoryW(settingsDir, nullptr);
+
+		wchar_t settingsFile[MAX_PATH];
+		wcscpy_s(settingsFile, settingsDir);
+		PathAppendW(settingsFile, c_ConnectionSettingsFile);
+		settingsPath = settingsFile;
+		return true;
+	}
+
+	ConnectionMode NormalizeConnectionMode(int rawMode)
+	{
+		switch (rawMode)
+		{
+		case static_cast<int>(ConnectionMode::eLegacySmartDashboard):
+			return ConnectionMode::eLegacySmartDashboard;
+		case static_cast<int>(ConnectionMode::eDirectConnect):
+			return ConnectionMode::eDirectConnect;
+		case static_cast<int>(ConnectionMode::eShuffleboard):
+			return ConnectionMode::eShuffleboard;
+		default:
+			return GetDefaultConnectionMode();
+		}
+	}
+
+	ConnectionMode LoadPersistedConnectionMode()
+	{
+		std::wstring settingsPath;
+		if (!TryGetConnectionSettingsPath(settingsPath))
+			return GetDefaultConnectionMode();
+
+		const UINT rawMode = GetPrivateProfileIntW(
+			c_ConnectionSettingsSection,
+			c_ConnectionSettingsKey,
+			static_cast<UINT>(GetDefaultConnectionMode()),
+			settingsPath.c_str());
+		return NormalizeConnectionMode(static_cast<int>(rawMode));
+	}
+
+	void PersistConnectionMode(ConnectionMode mode)
+	{
+		std::wstring settingsPath;
+		if (!TryGetConnectionSettingsPath(settingsPath))
+			return;
+
+		wchar_t buffer[16];
+		_swprintf_p(buffer, _countof(buffer), L"%d", static_cast<int>(mode));
+		WritePrivateProfileStringW(
+			c_ConnectionSettingsSection,
+			c_ConnectionSettingsKey,
+			buffer,
+			settingsPath.c_str());
+	}
+
+	bool LoadPersistedWindowPosition(POINT& windowPosition)
+	{
+		std::wstring settingsPath;
+		if (!TryGetConnectionSettingsPath(settingsPath))
+			return false;
+
+		const int sentinel = 0x7fffffff;
+		const int posX = GetPrivateProfileIntW(c_WindowSettingsSection, c_WindowPosXKey, sentinel, settingsPath.c_str());
+		const int posY = GetPrivateProfileIntW(c_WindowSettingsSection, c_WindowPosYKey, sentinel, settingsPath.c_str());
+		if (posX == sentinel || posY == sentinel)
+			return false;
+
+		windowPosition.x = posX;
+		windowPosition.y = posY;
+		return true;
+	}
+
+	void PersistWindowPosition(HWND hWnd)
+	{
+		if (!hWnd)
+			return;
+
+		RECT windowRect = {};
+		if (!GetWindowRect(hWnd, &windowRect))
+			return;
+
+		std::wstring settingsPath;
+		if (!TryGetConnectionSettingsPath(settingsPath))
+			return;
+
+		wchar_t buffer[32];
+		_swprintf_p(buffer, _countof(buffer), L"%ld", windowRect.left);
+		WritePrivateProfileStringW(c_WindowSettingsSection, c_WindowPosXKey, buffer, settingsPath.c_str());
+		_swprintf_p(buffer, _countof(buffer), L"%ld", windowRect.top);
+		WritePrivateProfileStringW(c_WindowSettingsSection, c_WindowPosYKey, buffer, settingsPath.c_str());
+	}
+
+	void RestorePersistedWindowPosition(HWND hWnd)
+	{
+		if (!hWnd)
+			return;
+
+		POINT windowPosition = {};
+		if (!LoadPersistedWindowPosition(windowPosition))
+			return;
+
+		SetWindowPos(hWnd, nullptr, windowPosition.x, windowPosition.y, 0, 0, SWP_NOACTIVATE | SWP_NOSIZE | SWP_NOZORDER);
+	}
+
+	void PopulateConnectionModeCombo(HWND hWnd, ConnectionMode selectedMode)
+	{
+		HWND combo = GetDlgItem(hWnd, IDC_ConnectionMode);
+		if (!combo)
+			return;
+
+		SendMessageW(combo, CB_RESETCONTENT, 0, 0);
+		const ConnectionMode modes[] =
+		{
+			ConnectionMode::eLegacySmartDashboard,
+			ConnectionMode::eDirectConnect,
+			ConnectionMode::eShuffleboard
+		};
+
+		int selectedIndex = 0;
+		for (int i = 0; i < static_cast<int>(_countof(modes)); ++i)
+		{
+			const wchar_t* label = GetConnectionModeName(modes[i]);
+			const LRESULT index = SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(label));
+			SendMessageW(combo, CB_SETITEMDATA, static_cast<WPARAM>(index), static_cast<LPARAM>(modes[i]));
+			if (modes[i] == selectedMode)
+				selectedIndex = static_cast<int>(index);
+		}
+
+		SendMessageW(combo, CB_SETCURSEL, static_cast<WPARAM>(selectedIndex), 0);
+	}
+
+	void SyncConnectionModeCombo(HWND hWnd)
+	{
+		if (!s_pRobotTester)
+			return;
+		PopulateConnectionModeCombo(hWnd, s_pRobotTester->GetConnectionMode());
+	}
+}
+
+bool TryParseConnectionModeFromCmdLine(LPWSTR cmd_line, ConnectionMode& mode)
+{
+	if (!cmd_line)
+		return false;
+
+	std::wstring cmd = cmd_line;
+	std::transform(cmd.begin(), cmd.end(), cmd.begin(), towlower);
+
+	if ((cmd.find(L"direct") != std::wstring::npos) || (cmd.find(L"conn=direct") != std::wstring::npos))
+	{
+		mode = ConnectionMode::eDirectConnect;
+		return true;
+	}
+	if ((cmd.find(L"shuffle") != std::wstring::npos) || (cmd.find(L"conn=shuffle") != std::wstring::npos))
+	{
+		mode = ConnectionMode::eShuffleboard;
+		return true;
+	}
+	if ((cmd.find(L"legacy") != std::wstring::npos) || (cmd.find(L"conn=legacy") != std::wstring::npos))
+	{
+		mode = ConnectionMode::eLegacySmartDashboard;
+		return true;
+	}
+
+	return false;
+}
+
+void ApplyConnectionMode(ConnectionMode mode)
+
+{
+	if (s_pRobotTester)
+		s_pRobotTester->SetConnectionMode(mode);
+	if (g_hDlg)
+		PopulateConnectionModeCombo(g_hDlg, mode);
+	PersistConnectionMode(mode);
+
+	std::wstring message = L"Connection Mode: ";
+	message += GetConnectionModeName(mode);
+	message += L"\n";
+	OutputDebugStringW(message.c_str());
+}
 //Keyboard *s_Keyboard = nullptr;
 
 __inline void GetParentDirectory(std::wstring &path)
@@ -54,7 +261,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	{
 		std::wstring path;
 		wchar_t Buffer[MAX_PATH];
-		GetModuleFileName(nullptr, Buffer, MAX_PATH);
+		GetModuleFileNameW(nullptr, Buffer, MAX_PATH);
 		PathRemoveFileSpecW(Buffer);
 		path = Buffer;
 		GetParentDirectory(path);
@@ -62,7 +269,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 		SetCurrentDirectoryW(path.c_str());
 	}
 	UNREFERENCED_PARAMETER(hPrevInstance);
-	UNREFERENCED_PARAMETER(lpCmdLine);
+	s_InitialConnectionMode = LoadPersistedConnectionMode();
+	ConnectionMode commandLineMode = s_InitialConnectionMode;
+	if (TryParseConnectionModeFromCmdLine(lpCmdLine, commandLineMode))
+		s_InitialConnectionMode = commandLineMode;
 
 	// TODO: Place code here.
 
@@ -74,7 +284,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	const HWND pParent = nullptr;  //just to show what the parameter is
 
 	// Display the main dialog box.  I've always wanted to put the callback in the same place!
-	HWND m_hDlg = CreateDialogW(hInstance, MAKEINTRESOURCE(IDD_DriveStation1), pParent,
+	HWND m_hDlg = CreateDialogW(hInstance, MAKEINTRESOURCEW(IDD_DriveStation1), pParent,
 		[](HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	{
 		INT_PTR ret = FALSE;
@@ -85,6 +295,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 			//TO avoid needing to read from the tester... match the current state against the current default
 			CheckDlgButton(hWnd, IDC_Tele, BM_SETCHECK);
 			CheckDlgButton(hWnd, IDC_Stop, BM_SETCHECK);
+			PopulateConnectionModeCombo(hWnd, s_InitialConnectionMode);
+			RestorePersistedWindowPosition(hWnd);
 			//Button_SetState(hWnd, IDStop, BM_CLICK, true, 0);
 			return (INT_PTR)TRUE;
 		case WM_COMMAND:
@@ -135,6 +347,18 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 				s_pRobotTester->SetGameMode(game_mode);
 				break;
 			}
+			case IDC_ConnectionMode:
+				if (HIWORD(wParam) == CBN_SELCHANGE)
+				{
+					const HWND combo = GetDlgItem(hWnd, IDC_ConnectionMode);
+					const LRESULT selectedIndex = SendMessageW(combo, CB_GETCURSEL, 0, 0);
+					if (selectedIndex != CB_ERR)
+					{
+						const LRESULT itemData = SendMessageW(combo, CB_GETITEMDATA, static_cast<WPARAM>(selectedIndex), 0);
+						ApplyConnectionMode(static_cast<ConnectionMode>(itemData));
+					}
+				}
+				break;
 			case IDM_EXIT:
 			case IDCANCEL:  //Not sure why this 2 is the same as the close button
 				printf("Shutting down\n");
@@ -171,7 +395,11 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 			EndPaint(hWnd, &ps);
 		}
 		break;
+		case WM_MOVE:
+			PersistWindowPosition(hWnd);
+			break;
 		case WM_DESTROY:
+			PersistWindowPosition(hWnd);
 			PostQuitMessage(0);
 			break;
 			//default:
@@ -185,11 +413,13 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	{
 		return FALSE;
 	}
+	g_hDlg = m_hDlg;
 
 	//We made it this far... start up the robot
 	RobotTester _robot_tester;
 	s_pRobotTester = &_robot_tester;
 	_robot_tester.RobotTester_create();
+	ApplyConnectionMode(s_InitialConnectionMode);
 	//Bind robot for Keyboard binding
 	//BindRobot(_robot_tester);
 	_robot_tester.RobotTester_init();
@@ -207,6 +437,22 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	{
 		if ((msg.message == WM_KEYDOWN)|| (msg.message == WM_KEYUP))
 		{
+			if (msg.message == WM_KEYDOWN)
+			{
+				switch (msg.wParam)
+				{
+				case VK_F5:
+					ApplyConnectionMode(ConnectionMode::eLegacySmartDashboard);
+					break;
+				case VK_F6:
+					ApplyConnectionMode(ConnectionMode::eDirectConnect);
+					break;
+				case VK_F7:
+					ApplyConnectionMode(ConnectionMode::eShuffleboard);
+					break;
+				}
+			}
+
 			bool ProcessKey = true;
 			WORD ascii = 0;
 			//Translate WM_Key messages to ascii

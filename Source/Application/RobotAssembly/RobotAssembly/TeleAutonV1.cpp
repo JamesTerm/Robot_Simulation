@@ -23,19 +23,6 @@
 #include "../../../Modules/Output/OSG_Viewer/OSG_Viewer/Keyboard_State.h"
 #include "TeleAutonV1.h"
 
-//We can specify the linking in code
-//https://www.dropbox.com/s/bn7ffxb7yqinzme/OSG_Viewer_x64.zip?dl=0
-//unzip this to here: .\Robot_Simulation\Source\Modules\Output\OSG_Viewer
-//if done correctly an x64 folder will be in the OSG_Viewer folder, then you can link and the 
-//custom build step will auto copy the dll's needed to run
-
-#ifdef _WIN64
-#ifdef _DEBUG
-#pragma comment(lib,"../../../Modules/Output/OSG_Viewer/x64/Debug/OSG_Viewer.lib")
-#else
-#pragma comment(lib,"../../../Modules/Output/OSG_Viewer/x64/Release/OSG_Viewer.lib")
-#endif
-#endif
 #pragma endregion
 
 namespace Application

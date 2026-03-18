@@ -12,6 +12,7 @@
 static const char *kDefault = "default";
 static const char *kOptions = "options";
 static const char *kSelected = "selected";
+static const char *kActive = "active";
 
 SendableChooser::SendableChooser()
 {
@@ -50,6 +51,8 @@ void SendableChooser::AddDefault(const char *name, void *object)
 void *SendableChooser::GetSelected()
 {
 	std::string selected = m_table->GetString(kSelected, m_defaultChoice);
+	if (m_table != NULL)
+		m_table->PutString(kActive, selected);
 	if (selected == "")
 		return NULL;
 	else
@@ -66,6 +69,9 @@ void SendableChooser::InitTable(ITable* subtable) {
 		}
 		m_table->PutValue(kOptions, keys);
 		m_table->PutString(kDefault, m_defaultChoice);
+		m_table->PutString(kActive, m_defaultChoice);
+		if (m_table->GetString(kSelected, "").empty())
+			m_table->PutString(kSelected, m_defaultChoice);
 	}
 }
 

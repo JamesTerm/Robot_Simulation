@@ -659,16 +659,6 @@ public:
 			switch (m_Tester_Selection)
 			{
 			case eTeleOpV1:
-			case eTeleOpV2:
-			case eTeleOpV3:
-			case eTeleAutonV1:
-			case eTeleAutonV2:
-				SmartDashboard::init();
-				break;
-			}
-			switch (m_Tester_Selection)
-			{
-			case eTeleOpV1:
 				m_RobotTester_V1.init();
 				break;
 			case eTeleOpV2:
@@ -1025,4 +1015,3 @@ int main()
 	return 0;
 }
 #pragma endregion
-

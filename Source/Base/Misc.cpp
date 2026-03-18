@@ -1,17 +1,18 @@
 #include <string>
 #include <stdarg.h>
 #include <string.h>
-#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-#ifdef _Win32
+#ifdef _WIN32
 // No C library depreciation warnings
 #pragma warning ( disable : 4995 )
 #pragma warning ( disable : 4996 )
 #pragma warning ( disable : 4477 )
 
+#ifndef _CRT_SECURE_NO_WARNINGS
 #define _CRT_SECURE_NO_WARNINGS
+#endif
 #endif
 
 namespace Framework
@@ -90,7 +91,7 @@ void StripCommentsAndTrailingWhiteSpace(char* line)
 }
 
 
-#ifndef _Win32
+#ifndef _WIN32
 //from http://www.koders.com/c/fid5F9B1CF12E947E5030A132D309A367C5CCB671CE.aspx
 char *itoa (int value, char *string, int radix)
 {

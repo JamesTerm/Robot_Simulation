@@ -176,3 +176,15 @@ bin/
 # Miscellaneous
 *.recipe
 
+# CMake
+/build-*/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+Testing/
+.debug/
+direct_control_debug_log.txt
+direct_tile_debug_log.txt
+direct_ui_debug_log.txt
+nul

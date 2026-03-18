@@ -1,6 +1,6 @@
 #pragma once
 
-#ifndef _Win32
+#ifndef _WIN32
 typedef long long __int64;
 #else
 // No C library depreciation warnings
@@ -8,7 +8,9 @@ typedef long long __int64;
 #pragma warning ( disable : 4996 )
 #pragma warning ( disable : 4477 )
 
+#ifndef _CRT_SECURE_NO_WARNINGS
 #define _CRT_SECURE_NO_WARNINGS
+#endif
 #endif
 
 //typedef unsigned long size_t;

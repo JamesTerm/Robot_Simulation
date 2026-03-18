@@ -2,7 +2,10 @@
 #include "AI_Input_Example.h"
 #include "Goal_Types.h"
 #include "SmartDashboard_HelperFunctions.h"
+#include "AutonChooser.h"
+#include "AutonSelection.h"
 #include "AI_BaseController_goals.h"
+#include "DirectAutonChainLog.h"
 #include "../../../Properties/RegistryV1.h"
 using namespace Framework::Base;
 
@@ -10,6 +13,13 @@ namespace Module
 {
 	namespace Input
 	{
+		namespace
+		{
+			inline bool IsChooserEnabledForCurrentConnection()
+			{
+				return SmartDashboard::GetConnectionMode() == SmartDashboardConnectionMode::eDirectConnect;
+			}
+		}
 
 //now this goal can be whatever we want with access to robot resources
 class AI_Example_internal : public AtomicGoal
@@ -132,6 +142,12 @@ private:
 		{
 			const char* const MoveSmartVar = "TestMove";
 			double DistanceFeet = Auton_Smart_GetSingleValue(MoveSmartVar, 1.0); //should be a safe default
+			printf("[MoveForward] Activate TestMove=%g\n", DistanceFeet);
+			{
+				char dbg[256] = {};
+				sprintf_s(dbg, "[MoveForward] Activate TestMove=%g", DistanceFeet);
+				AppendDirectAutonChainLog(dbg);
+			}
 
 			AddSubgoal(new Goal_Wait(0.500));
 			AddSubgoal(Move_Straight(m_Parent, DistanceFeet));
@@ -273,6 +289,21 @@ public:
 		eNoAutonTypes
 	};
 
+	static const AutonChooserOption* GetAutonChooserOptions(size_t& optionCount)
+	{
+		static const AutonChooserOption kOptions[] =
+		{
+			{eDoNothing, "Do Nothing"},
+			{eJustMoveForward, "Just Move Forward"},
+			{eJustRotate, "Just Rotate"},
+			{eSimpleMoveRotateSequence, "Move Rotate Sequence"},
+			{eTestBoxWayPoints, "Box Waypoints"},
+			{eTestSmartWayPoints, "Smart Waypoints"}
+		};
+		optionCount = _countof(kOptions);
+		return kOptions;
+	}
+
 	AI_Example_internal(AI_Input* parent) : m_pParent(parent), m_Timer(0.0),
 		m_Primer(false)  //who ever is done first on this will complete the goals (i.e. if time runs out)
 	{
@@ -289,16 +320,172 @@ public:
 		m_Timer = 0.0;
 		AutonType AutonTest = eDoNothing;
 		const char* const AutonTestSelection = "AutonTest";
+		const char* const AutonChooserBase = "Test/Auton_Selection/AutoChooser";
+		size_t autonOptionCount = 0;
+		const AutonChooserOption* autonOptions = GetAutonChooserOptions(autonOptionCount);
+		// Ian: Keep chooser state on its own key path so Direct chooser work never
+		// masks the numeric `AutonTest` baseline that legacy NT and regression
+		// testing still depend on.
+		auto tryReadAutonSelectionChooser = [&](double& outValue) -> bool
+		{
+			std::string selectedLabel;
+			std::string activeLabel;
+			std::string defaultLabel;
+			try
+			{
+				selectedLabel = SmartDashboard::GetString(std::string(AutonChooserBase) + "/selected");
+			}
+			catch (...)
+			{
+			}
+			try
+			{
+				activeLabel = SmartDashboard::GetString(std::string(AutonChooserBase) + "/active");
+			}
+			catch (...)
+			{
+			}
+			try
+			{
+				defaultLabel = SmartDashboard::GetString(std::string(AutonChooserBase) + "/default");
+			}
+			catch (...)
+			{
+			}
+			{
+				char dbg[512] = {};
+				sprintf_s(
+					dbg,
+					"[AI AutonTest] raw selected='%s' active='%s' default='%s'",
+					selectedLabel.c_str(),
+					activeLabel.c_str(),
+					defaultLabel.c_str());
+				AppendDirectAutonChainLog(dbg);
+			}
+
+			const bool hasChooserSignal =
+				!selectedLabel.empty() ||
+				!activeLabel.empty() ||
+				!defaultLabel.empty();
+
+			// Ian: Only treat chooser mode as active when the chooser actually has
+			// signal. Direct mode can be chooser-capable and still need to fall back
+			// to numeric `AutonTest` for baseline or legacy-style runs.
+			if (hasChooserSignal)
+			{
+				const int chooserIndex = ResolveAutonSelectionFromChooser(
+					AutonChooserBase,
+					AutonTestSelection,
+					autonOptions,
+					autonOptionCount,
+					(int)eDoNothing);
+				outValue = static_cast<double>(chooserIndex);
+				printf("[AI AutonTest] source=chooser final_index=%d\n", chooserIndex);
+				return true;
+			}
+
+			return false;
+		};
+
+			const char* const AutonTestSelectionScoped = "Test/AutonTest";
+		auto tryReadAutonSelectionDouble = [&](double& outValue) -> bool
+		{
+			std::string rawAutonText;
+			std::string rawAutonScopedText;
+			if (SmartDashboard::TryGetNumber(AutonTestSelection, outValue))
+			{
+				printf("[AI AutonTest] source=number value=%g\n", outValue);
+				{
+					char dbg[256] = {};
+					sprintf_s(dbg, "[AI AutonTest] source=number key='%s' value=%g", AutonTestSelection, outValue);
+					AppendDirectAutonChainLog(dbg);
+				}
+				return true;
+			}
+
+			if (SmartDashboard::TryGetNumber(AutonTestSelectionScoped, outValue))
+			{
+				printf("[AI AutonTest] source=number(scoped) value=%g\n", outValue);
+				{
+					char dbg[256] = {};
+					sprintf_s(dbg, "[AI AutonTest] source=number key='%s' value=%g", AutonTestSelectionScoped, outValue);
+					AppendDirectAutonChainLog(dbg);
+				}
+				return true;
+			}
+
+			if (SmartDashboard::TryGetString(AutonTestSelection, rawAutonText))
+			{
+				outValue = atof(rawAutonText.c_str());
+				printf("[AI AutonTest] source=string raw='%s' parsed=%g\n", rawAutonText.c_str(), outValue);
+				{
+					char dbg[256] = {};
+					sprintf_s(dbg, "[AI AutonTest] source=string key='%s' raw='%s' parsed=%g", AutonTestSelection, rawAutonText.c_str(), outValue);
+					AppendDirectAutonChainLog(dbg);
+				}
+				return true;
+			}
+
+			if (SmartDashboard::TryGetString(AutonTestSelectionScoped, rawAutonScopedText))
+			{
+				outValue = atof(rawAutonScopedText.c_str());
+				printf("[AI AutonTest] source=string(scoped) raw='%s' parsed=%g\n", rawAutonScopedText.c_str(), outValue);
+				{
+					char dbg[256] = {};
+					sprintf_s(dbg, "[AI AutonTest] source=string key='%s' raw='%s' parsed=%g", AutonTestSelectionScoped, rawAutonScopedText.c_str(), outValue);
+					AppendDirectAutonChainLog(dbg);
+				}
+				return true;
+			}
+
+			{
+				char dbg[256] = {};
+				sprintf_s(dbg, "[AI AutonTest] source=missing key='%s' scoped='%s'", AutonTestSelection, AutonTestSelectionScoped);
+				AppendDirectAutonChainLog(dbg);
+			}
+
+			return false;
+		};
+		const bool useChooser = IsChooserEnabledForCurrentConnection();
 		#if 1
-		try
+		int autonIndex = ResolveAutonIndex(
+			[&](double& outSelection)
+			{
+				// Ian: Direct mode prefers chooser when present, but numeric fallback
+				// must remain alive or the baseline smoke test regresses back to
+				// `Do Nothing` whenever chooser widgets are absent.
+				if (useChooser)
+				{
+					if (tryReadAutonSelectionChooser(outSelection))
+						return true;
+				}
+				return tryReadAutonSelectionDouble(outSelection);
+			},
+			(int)eDoNothing,
+			(int)eNoAutonTypes,
+			20,
+			std::chrono::milliseconds(10));
+
+		if (autonIndex == (int)eDoNothing)
+			printf("[AI AutonTest] source=missing_or_default final_index=%d\n", autonIndex);
+		printf("[AI AutonTest] final_index=%d\n", autonIndex);
 		{
-			AutonTest = (AutonType)((size_t)SmartDashboard::GetNumber(AutonTestSelection));
+			char dbg[256] = {};
+			sprintf_s(dbg, "[AI AutonTest] chooser_enabled=%d final_index=%d", useChooser ? 1 : 0, autonIndex);
+			AppendDirectAutonChainLog(dbg);
 		}
-		catch (...)
+		if (useChooser)
 		{
-			//set up default for nothing
-			SmartDashboard::PutNumber(AutonTestSelection, (double)eDoNothing);
+			PublishAutonChooser(
+				AutonChooserBase,
+				autonOptions,
+				autonOptionCount,
+				(int)eDoNothing,
+				autonIndex,
+				autonIndex,
+				false);
 		}
+		AutonTest = (AutonType)autonIndex;
 		#else
 		#if !defined __USE_LEGACY_WPI_LIBRARIES__
 		SmartDashboard::SetDefaultNumber(AutonTestSelection, 0.0);

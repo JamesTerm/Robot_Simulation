@@ -1,6 +1,6 @@
 #pragma once
 
-#ifndef _Win32
+#ifndef _WIN32
 typedef long long __int64;
 #endif
 

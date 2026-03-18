@@ -1,4 +1,4 @@
-#ifdef _Win32
+#ifdef _WIN32
 #include <windows.h>
 #else
 #include "frc/Timer.h"
@@ -115,7 +115,7 @@ bool time_type::operator<= (const time_type &Value) const
 	return (__int64)m_Time<=(__int64)Value;
 }
 
-#ifdef _Win32
+#ifdef _WIN32
 time_type time_type::get_current_time()
 {
 	LARGE_INTEGER freq, current;

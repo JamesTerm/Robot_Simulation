@@ -33,28 +33,6 @@
 #include <osgGA/GUIEventHandler> //for keyboard support
 
 
-//TODO find out why I can't use release OSG for debug builds, then I can make my own macro here
-
-#ifndef _DEBUG
-#pragma comment (lib,"OpenThreads.lib")
-#pragma comment (lib,"osg.lib")
-#pragma comment (lib,"osgUtil.lib")
-#pragma comment (lib,"osgDB.lib")
-#pragma comment (lib,"osgText.lib")
-#pragma comment (lib,"osgGA.lib")
-#pragma comment (lib,"osgViewer.lib")
-#else
-#pragma comment (lib,"OpenThreadsd.lib")
-#pragma comment (lib,"osgd.lib")
-#pragma comment (lib,"osgUtild.lib")
-#pragma comment (lib,"osgDBd.lib")
-#pragma comment (lib,"osgTextd.lib")
-#pragma comment (lib,"osgGAd.lib")
-#pragma comment (lib,"osgViewerd.lib")
-#endif
-
-#pragma comment (lib,"OpenGL32.lib")
-
 #pragma endregion
 
 #pragma region _Robot Tester (framework)_
@@ -6477,4 +6455,3 @@ void SwerveRobot_UI::TimeChange(double dTime_s)
 #pragma endregion
 }}
 #pragma endregion
-

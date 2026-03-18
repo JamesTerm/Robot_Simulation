@@ -3,6 +3,8 @@
 #include "OSG_Viewer.h"
 #include "SwerveRobot_UI.h"
 
+using namespace Module::Output;
+
 #pragma region _main_
 
 void cls(HANDLE hConsole = NULL)
