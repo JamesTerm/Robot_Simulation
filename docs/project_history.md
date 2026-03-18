@@ -1,5 +1,19 @@
 # Project history
 
+## 2026-03-17 - Direct survive replay simplification and paired restart recovery
+
+- Simplified robot-side Direct retained-command replay during dashboard reconnects:
+  - retained replay now keys off the inactive->active consumer heartbeat transition instead of waiting for a changed `consumerInstanceId`
+  - this avoids missing dashboard restarts where the dashboard preserves command intent but the subscriber-side identity logic no longer produces the old change signal.
+- Hardened direct command subscriber identity generation:
+  - subscriber instance ids now mix process id, steady-clock time, and local counter state instead of using only a simple in-process increment.
+- Paired result with the SmartDashboard survive/startup fixes:
+  - remembered `TestMove=3.5` survives dashboard restart
+  - chooser selection survives dashboard restart
+  - subsequent robot-survive activation reads the remembered value correctly and passes the paired stress flow.
+- Practical takeaway:
+  - the final remaining survive fix was mostly startup/reconnect ordering and reconnect detection, not a major transport rewrite.
+
 ## 2026-03-17 - Direct numeric recovery and chooser-safe fallback
 
 - Added non-destructive SmartDashboard `TryGet*` reads so Direct-mode numeric lookups do not misinterpret missing values as valid zeroes.

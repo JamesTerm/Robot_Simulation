@@ -437,7 +437,6 @@ namespace
 				return;
 
 			const std::uint64_t lastConsumerHeartbeatUs = m_header->lastConsumerHeartbeatUs.load(std::memory_order_acquire);
-			const std::uint64_t consumerInstanceId = m_header->consumerInstanceId.load(std::memory_order_acquire);
 			const std::uint64_t nowUs = GetSteadyNowUs();
 			const bool consumerActive =
 				(lastConsumerHeartbeatUs != 0) &&
@@ -447,21 +446,13 @@ namespace
 			if (!consumerActive)
 			{
 				m_consumerWasActive = false;
-				if (consumerInstanceId != 0)
-					m_lastObservedConsumerInstanceId = consumerInstanceId;
 				return;
 			}
 
-			const bool consumerChanged =
-				(consumerInstanceId != 0) &&
-				(consumerInstanceId != m_lastObservedConsumerInstanceId);
-
-			if (m_consumerWasActive && !consumerChanged)
+			if (m_consumerWasActive)
 				return;
 
 			m_consumerWasActive = true;
-			if (consumerInstanceId != 0)
-				m_lastObservedConsumerInstanceId = consumerInstanceId;
 
 			std::unordered_map<std::string, PendingValue> retainedCopy;
 			{
@@ -634,7 +625,6 @@ namespace
 			m_capacity = 0;
 			m_sequence = 0;
 			m_consumerWasActive = false;
-			m_lastObservedConsumerInstanceId = 0;
 		}
 
 		std::wstring m_mappingName;
@@ -655,7 +645,6 @@ namespace
 		std::mutex m_retainedMutex;
 		std::unordered_map<std::string, PendingValue> m_retained;
 		bool m_consumerWasActive = false;
-		std::uint64_t m_lastObservedConsumerInstanceId = 0;
 		bool m_loggedConsumerActive = false;
 	};
 
@@ -972,7 +961,9 @@ namespace
 		static std::uint64_t NextInstanceId()
 		{
 			static std::atomic<std::uint64_t> nextId {1};
-			return nextId.fetch_add(1, std::memory_order_relaxed);
+			const std::uint64_t localId = nextId.fetch_add(1, std::memory_order_relaxed);
+			const std::uint64_t nowUs = GetSteadyNowUs();
+			return (static_cast<std::uint64_t>(::GetCurrentProcessId()) << 32) ^ nowUs ^ localId;
 		}
 
 		void RunLoop()
@@ -982,22 +973,12 @@ namespace
 				const DWORD waitResult = WaitForSingleObject(m_dataEvent, 50);
 				if (waitResult == WAIT_OBJECT_0 || waitResult == WAIT_TIMEOUT)
 				{
-					if (m_header != nullptr)
-					{
-						const std::uint64_t previousInstanceId =
-							m_header->consumerInstanceId.exchange(m_instanceId, std::memory_order_acq_rel);
-						if (previousInstanceId != m_instanceId)
-						{
-							const std::uint32_t writeIndex = m_header->writeIndex.load(std::memory_order_acquire);
-							m_readCursor = writeIndex;
-							m_header->consumerReadIndex.store(writeIndex, std::memory_order_release);
-						}
-					}
 					DrainPendingValues();
 				}
 				if (m_header != nullptr)
 				{
 					const std::uint64_t nowUs = GetSteadyNowUs();
+					m_header->consumerInstanceId.store(m_instanceId, std::memory_order_release);
 					m_header->lastConsumerHeartbeatUs.store(nowUs, std::memory_order_release);
 					const std::uint64_t producerHeartbeatUs = m_header->lastProducerHeartbeatUs.load(std::memory_order_acquire);
 					const bool producerActive =

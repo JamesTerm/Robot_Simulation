@@ -34,9 +34,12 @@
     - `DriverStation_TransportSmoke` is a reliable harness entry point and now explicitly runs in `Direct Connect`
     - SmartDashboard process control helper exists at `D:/code/SmartDashboard/tools/smartdashboard_process.py`
     - repeated robot restart stress improved after fixing publisher free-space accounting against the active consumer cursor rather than obsolete shared `readIndex`
+    - direct command subscriber instance ids now include process/time entropy, matching the SmartDashboard-side hardening against multi-process collisions
+    - publisher retained-command replay no longer waits for a consumer-instance-id change; it keys off the inactive->active heartbeat transition so dashboard restarts still receive the retained command snapshot
+    - paired validation with `D:/code/SmartDashboard/tools/survive_sequence.py` now passes again for dashboard survive, chooser survival, `TestMove=3.5`, and the robot-survive handoff
   - Remaining blocker/reference point:
-    - real single-dashboard runs are much healthier, but robot-survive stress is still somewhat race-sensitive over repeated cycles
-    - passive extra observers (debug watchers) still destabilize repeated runs, so transport is not yet truly multi-observer safe
+    - direct mode is good again for the real single-dashboard path, but passive extra observers/watchers still destabilize repeated runs, so transport is not yet truly multi-observer safe
+    - the short immediate post-dashboard-restart probe window can still under-report early telemetry even when the later robot-survive phase succeeds
     - for the real dashboard path, setup-state tiles (`TestMove`, chooser) can appear visually stale even when robot behavior proves command values were applied; use `Timer` / `Y_ft` as live paint indicators in current harness layout
 
 ## Active constraints
@@ -47,14 +50,15 @@
 ## Current known issues / follow-up log
 
 - Direct chooser manual validation now passes for basic operator flow: selecting `Just Move Forward` and enabling auton works, and dashboard restart no longer overwrites robot chooser state.
-- Remaining reconnect gap: repeated robot restart stress is improved but still not fully deterministic across long sequences; extra concurrent observers still expose race/session weaknesses.
+- Paired survive validation now also passes for remembered numeric control recovery: `TestMove=3.5` survives dashboard restart and is read correctly on auton activation.
+- Remaining reconnect gap: extra concurrent observers still expose race/session weaknesses, so the current Direct path is still best treated as single-real-client.
 - Current manual interpretation: when smoke behavior is correct but chooser/TestMove look static, that may be a visibility/expectation issue because those are setup-state values; live telemetry keys like `Timer` and `Y_ft` are better paint verification signals.
 - Keep monitoring for any remaining control keys that may require scoped alias support (`Test/<key>` fallback) when dashboards mix flat and scoped naming.
 - Official SmartDashboard historically supported `SendableChooser`; use that as compatibility guidance rather than keeping long-term numeric-only fallback in this feature branch.
 
 ## Next-session checklist
 
-1. Finish hardening robot-survive stress for repeated restart cycles with a single real SmartDashboard client.
-2. Decide whether to keep current single-real-client direct assumptions or invest in true multi-observer broadcast semantics for tooling/watchers.
+1. Decide whether to keep current single-real-client direct assumptions or invest in true multi-observer broadcast semantics for tooling/watchers.
+2. Reduce remaining chooser/status republish churn if it becomes a practical performance or readability issue during longer runs.
 3. Clean up harness instrumentation/logging once behavior is stable, but keep the process-control + smoke/probe workflow documented.
 4. Once Direct behavior is stable enough, compare against local Shuffleboard rather than relying on official SmartDashboard localhost behavior.
