@@ -80,6 +80,8 @@ namespace
 			return ConnectionMode::eDirectConnect;
 		case static_cast<int>(ConnectionMode::eShuffleboard):
 			return ConnectionMode::eShuffleboard;
+		case static_cast<int>(ConnectionMode::eNativeLink):
+			return ConnectionMode::eNativeLink;
 		default:
 			return GetDefaultConnectionMode();
 		}
@@ -174,7 +176,8 @@ namespace
 		{
 			ConnectionMode::eLegacySmartDashboard,
 			ConnectionMode::eDirectConnect,
-			ConnectionMode::eShuffleboard
+			ConnectionMode::eShuffleboard,
+			ConnectionMode::eNativeLink
 		};
 
 		int selectedIndex = 0;
@@ -214,6 +217,11 @@ bool TryParseConnectionModeFromCmdLine(LPWSTR cmd_line, ConnectionMode& mode)
 	if ((cmd.find(L"shuffle") != std::wstring::npos) || (cmd.find(L"conn=shuffle") != std::wstring::npos))
 	{
 		mode = ConnectionMode::eShuffleboard;
+		return true;
+	}
+	if ((cmd.find(L"native") != std::wstring::npos) || (cmd.find(L"conn=native") != std::wstring::npos))
+	{
+		mode = ConnectionMode::eNativeLink;
 		return true;
 	}
 	if ((cmd.find(L"legacy") != std::wstring::npos) || (cmd.find(L"conn=legacy") != std::wstring::npos))
@@ -449,6 +457,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 					break;
 				case VK_F7:
 					ApplyConnectionMode(ConnectionMode::eShuffleboard);
+					break;
+				case VK_F8:
+					ApplyConnectionMode(ConnectionMode::eNativeLink);
 					break;
 				}
 			}

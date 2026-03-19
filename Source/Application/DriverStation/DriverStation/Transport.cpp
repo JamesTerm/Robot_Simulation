@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "Transport.h"
+#include "NativeLink.h"
 
 #include "../../../Libraries/SmartDashboard/SmartDashboard_Import.h"
 
@@ -1361,6 +1362,8 @@ const wchar_t* GetConnectionModeName(ConnectionMode mode)
 		return L"Direct Connect";
 	case ConnectionMode::eShuffleboard:
 		return L"Shuffleboard";
+	case ConnectionMode::eNativeLink:
+		return L"Native Link";
 	default:
 		return L"Unknown";
 	}
@@ -1417,7 +1420,8 @@ bool DashboardTransportRouter::UsesLegacyTransportPath(ConnectionMode mode)
 {
 	return (mode == ConnectionMode::eLegacySmartDashboard) ||
 		(mode == ConnectionMode::eDirectConnect) ||
-		(mode == ConnectionMode::eShuffleboard);
+		(mode == ConnectionMode::eShuffleboard) ||
+		(mode == ConnectionMode::eNativeLink);
 }
 
 ConnectionMode DashboardTransportRouter::GetMode() const
@@ -1450,6 +1454,14 @@ void DashboardTransportRouter::EnsureBackend()
 		break;
 	case ConnectionMode::eShuffleboard:
 		m_backend = std::make_unique<ShuffleboardBackend>();
+		break;
+	case ConnectionMode::eNativeLink:
+		// Ian: Keep Native Link as a separate backend beside Direct instead of
+		// folding it into the existing path. Direct is our known-good 1:1
+		// behavioral reference, and this separation lets us compare parity first
+		// before layering on the semantics Direct never had (session reset,
+		// retained snapshot, multi-client fan-out, lease ownership).
+		m_backend = NativeLink::CreateNativeLinkBackend();
 		break;
 	default:
 		m_backend = std::make_unique<LegacySmartDashboardBackend>();

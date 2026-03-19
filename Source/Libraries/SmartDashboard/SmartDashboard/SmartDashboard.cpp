@@ -66,6 +66,8 @@ namespace
 			return SmartDashboardConnectionMode::eDirectConnect;
 		case static_cast<int>(SmartDashboardConnectionMode::eShuffleboard):
 			return SmartDashboardConnectionMode::eShuffleboard;
+		case static_cast<int>(SmartDashboardConnectionMode::eNativeLink):
+			return SmartDashboardConnectionMode::eNativeLink;
 		default:
 			return GetDefaultConnectionMode();
 		}
@@ -87,12 +89,14 @@ namespace
 
 	bool HasDirectTransport()
 	{
-		return g_connectionMode == SmartDashboardConnectionMode::eDirectConnect;
+		return (g_connectionMode == SmartDashboardConnectionMode::eDirectConnect) ||
+			(g_connectionMode == SmartDashboardConnectionMode::eNativeLink);
 	}
 
 	bool UsesNetworkTablesTransport()
 	{
-		return g_connectionMode != SmartDashboardConnectionMode::eDirectConnect;
+		return (g_connectionMode != SmartDashboardConnectionMode::eDirectConnect) &&
+			(g_connectionMode != SmartDashboardConnectionMode::eNativeLink);
 	}
 
 	void EnsureConnectionModeLoaded()

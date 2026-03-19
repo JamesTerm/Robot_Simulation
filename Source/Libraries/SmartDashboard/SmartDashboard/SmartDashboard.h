@@ -41,7 +41,8 @@ enum class SmartDashboardConnectionMode
 {
 	eLegacySmartDashboard = 0,
 	eDirectConnect = 1,
-	eShuffleboard = 2
+	eShuffleboard = 2,
+	eNativeLink = 3
 };
 
 class SmartDashboard //: public SensorBase

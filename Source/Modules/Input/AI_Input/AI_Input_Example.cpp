@@ -13,13 +13,15 @@ namespace Module
 {
 	namespace Input
 	{
-		namespace
-		{
-			inline bool IsChooserEnabledForCurrentConnection()
+			namespace
 			{
-				return SmartDashboard::GetConnectionMode() == SmartDashboardConnectionMode::eDirectConnect;
+				inline bool IsChooserEnabledForCurrentConnection()
+				{
+					const SmartDashboardConnectionMode mode = SmartDashboard::GetConnectionMode();
+					return (mode == SmartDashboardConnectionMode::eDirectConnect) ||
+						(mode == SmartDashboardConnectionMode::eNativeLink);
+				}
 			}
-		}
 
 //now this goal can be whatever we want with access to robot resources
 class AI_Example_internal : public AtomicGoal
