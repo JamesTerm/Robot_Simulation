@@ -114,3 +114,31 @@ TEST(NativeLinkCoreTests, InProcessServerFansOutTelemetryToTwoClients)
 	dashboardB.Stop();
 	server.Stop();
 }
+
+TEST(NativeLinkCoreTests, CarrierParserRecognizesSharedMemoryAndTcpNames)
+{
+	NativeLink::CarrierKind kind = NativeLink::CarrierKind::Tcp;
+	EXPECT_TRUE(NativeLink::TryParseCarrierKind("shm", kind));
+	EXPECT_EQ(kind, NativeLink::CarrierKind::SharedMemory);
+	EXPECT_TRUE(NativeLink::TryParseCarrierKind("shared-memory", kind));
+	EXPECT_EQ(kind, NativeLink::CarrierKind::SharedMemory);
+	EXPECT_TRUE(NativeLink::TryParseCarrierKind("tcp", kind));
+	EXPECT_EQ(kind, NativeLink::CarrierKind::Tcp);
+	EXPECT_FALSE(NativeLink::TryParseCarrierKind("udp", kind));
+}
+
+TEST(NativeLinkCoreTests, ExplicitTcpCarrierSelectionFailsUntilTcpBackendExists)
+{
+	NativeLink::ServerConfig serverConfig;
+	serverConfig.carrierKind = NativeLink::CarrierKind::Tcp;
+	serverConfig.channelId = "native-link-tcp-placeholder";
+	NativeLink::Server server(serverConfig);
+	EXPECT_FALSE(server.Start());
+
+	NativeLink::TestClientConfig clientConfig;
+	clientConfig.carrierKind = NativeLink::CarrierKind::Tcp;
+	clientConfig.channelId = "native-link-tcp-placeholder";
+	clientConfig.clientId = "dashboard-a";
+	NativeLink::TestClient client(clientConfig);
+	EXPECT_FALSE(client.Start());
+}

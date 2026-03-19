@@ -75,11 +75,20 @@
 - Current cross-repo blocker: SmartDashboard's real IPC client startup/restart handshake is still flaky even after the carrier/layout cleanup. Robot_Simulation-side Native Link tests are green, but the dashboard-side combined slice still needs more ordering work before paired validation should be treated as deterministic.
 - Follow-on roadmap note: keep the current shared-memory + named-events authority path available as the simpler diagnostic/reference carrier even after a future TCP carrier is added. The longer-term plan is carrier parity under one Native Link semantic contract, not a one-way delete-and-replace of the current IPC path.
 - Important DriverStation app/runtime difference from `DriverStation_TransportSmoke`: the smoke tool initializes directly into Native Link before transport startup, but the real app can switch modes at runtime. A real bug here was that `DashboardTransportRouter::UsesLegacyTransportPath()` incorrectly included `eNativeLink`, so selecting Native Link in the UI could keep the old legacy backend alive underneath and look like a transport that never connected. That reuse shortcut must exclude Native Link.
+- First carrier-boundary checkpoint is now in place for Native Link:
+  - `Source/Application/DriverStation/DriverStation/NativeLink.h` now exposes an explicit carrier enum/config boundary for the simulator-owned authority and test client
+  - current SHM authority/client code remains the working reference backend under that boundary
+  - explicit `tcp` carrier selection now fails cleanly until the socket backend exists, which protects future TCP bring-up from accidentally reusing SHM while still reporting success
+- Rollout strategy checkpoint after cross-repo planning discussion:
+  - `D:\code\SmartDashboard\docs\native_link_rollout_strategy.md` is now the canonical note for long-term Native Link rollout, packaging, and adapter/carrier strategy
+  - Robot_Simulation should continue to serve as the first reference authority and teaching example for Native Link semantics, but not become the permanent home of all reusable authority-side logic
+  - future simulator-side cleanup should preserve a clean example of server-authoritative session/snapshot/lease behavior while still moving reusable carrier/authority helpers toward sharable components
+  - compatibility-first adoption matters: the example/use-case story should support future dashboard adapters or bridges for existing NT/Shuffleboard/Elastic workflows, not only a robot-code-rewrite story
 
 ## Next-session checklist
 
-1. Decide whether to keep current single-real-client direct assumptions or invest in true multi-observer broadcast semantics for tooling/watchers.
-2. Reduce remaining chooser/status republish churn if it becomes a practical performance or readability issue during longer runs.
-3. Clean up harness instrumentation/logging once behavior is stable, but keep the process-control + smoke/probe workflow documented.
-4. Once Direct behavior is stable enough, compare against local Shuffleboard rather than relying on official SmartDashboard localhost behavior.
+1. Keep Native Link cleanup aligned with `D:\code\SmartDashboard\docs\native_link_rollout_strategy.md`, especially the rule that one semantic core must support multiple carriers and multiple adapters.
+2. Extract simulator-side authority/carrier helpers cleanly enough that Robot_Simulation remains a good student-facing reference implementation instead of a one-off app-specific embedding.
+3. Reduce remaining chooser/status republish churn if it becomes a practical performance or readability issue during longer runs.
+4. Clean up harness instrumentation/logging once behavior is stable, but keep the process-control + smoke/probe workflow documented.
 5. Before ending a Native Link session, scan changed tricky paths for missing `Ian:` comments and capture the same rationale in these notes if it would help a future handoff.

@@ -11,10 +11,19 @@
 #include <string>
 #include <vector>
 
-namespace NativeLink
-{
-	enum class TopicKind
+	namespace NativeLink
 	{
+		enum class CarrierKind
+		{
+			SharedMemory,
+			Tcp
+		};
+
+		const char* ToString(CarrierKind kind);
+		bool TryParseCarrierKind(const std::string& text, CarrierKind& outKind);
+
+		enum class TopicKind
+		{
 		State,
 		Command,
 		Event
@@ -150,11 +159,24 @@ namespace NativeLink
 		std::vector<SnapshotEvent> snapshotEvents;
 	};
 
-	struct TopicLeaseInfo
-	{
-		bool hasLeaseHolder = false;
-		std::string leaseHolderClientId;
-	};
+		struct TopicLeaseInfo
+		{
+			bool hasLeaseHolder = false;
+			std::string leaseHolderClientId;
+		};
+
+		struct ServerConfig
+		{
+			CarrierKind carrierKind = CarrierKind::SharedMemory;
+			std::string channelId = "native-link-default";
+		};
+
+		struct TestClientConfig
+		{
+			CarrierKind carrierKind = CarrierKind::SharedMemory;
+			std::string channelId;
+			std::string clientId;
+		};
 
 	class Core
 	{
@@ -224,11 +246,12 @@ namespace NativeLink
 		std::chrono::steady_clock::time_point Now() const;
 	};
 
-	class Server
-	{
-	public:
-		explicit Server(const std::string& channelId = "native-link-default");
-		~Server();
+		class Server
+		{
+		public:
+			explicit Server(const ServerConfig& config = ServerConfig());
+			explicit Server(const std::string& channelId);
+			~Server();
 
 		bool Start();
 		void Stop();
@@ -249,11 +272,12 @@ namespace NativeLink
 		std::unique_ptr<Impl> m_impl;
 	};
 
-	class TestClient
-	{
-	public:
-		TestClient(const std::string& channelId, const std::string& clientId);
-		~TestClient();
+		class TestClient
+		{
+		public:
+			TestClient(const TestClientConfig& config);
+			TestClient(const std::string& channelId, const std::string& clientId);
+			~TestClient();
 
 		bool Start();
 		void Stop();

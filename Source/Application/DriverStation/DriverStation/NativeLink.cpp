@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cctype>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -165,6 +166,16 @@ namespace NativeLink
 			return name;
 		}
 
+		std::string ToLowerCopy(const std::string& text)
+		{
+			std::string normalized(text);
+			for (std::size_t i = 0; i < normalized.size(); ++i)
+			{
+				normalized[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(normalized[i])));
+			}
+			return normalized;
+		}
+
 		std::vector<unsigned char> SerializeValue(const TopicValue& value)
 		{
 			std::vector<unsigned char> bytes;
@@ -251,6 +262,36 @@ namespace NativeLink
 				handle = newHandle;
 			}
 		};
+	}
+
+	const char* ToString(CarrierKind kind)
+	{
+		switch (kind)
+		{
+		case CarrierKind::SharedMemory:
+			return "shm";
+		case CarrierKind::Tcp:
+			return "tcp";
+		}
+
+		return "unknown";
+	}
+
+	bool TryParseCarrierKind(const std::string& text, CarrierKind& outKind)
+	{
+		const std::string normalized = ToLowerCopy(text);
+		if (normalized == "shm" || normalized == "shared_memory" || normalized == "shared-memory")
+		{
+			outKind = CarrierKind::SharedMemory;
+			return true;
+		}
+		if (normalized == "tcp")
+		{
+			outKind = CarrierKind::Tcp;
+			return true;
+		}
+
+		return false;
 	}
 
 	TopicValue TopicValue::Bool(bool value)
@@ -681,6 +722,7 @@ namespace NativeLink
 
 	struct Server::Impl
 	{
+		ServerConfig config;
 		std::string channelId;
 		Core core;
 		mutable std::mutex mutex;
@@ -693,8 +735,9 @@ namespace NativeLink
 		std::atomic<bool> running;
 		std::atomic<bool> stopRequested;
 
-		Impl(const std::string& inChannelId)
-			: channelId(inChannelId)
+		Impl(const ServerConfig& inConfig)
+			: config(inConfig)
+			, channelId(inConfig.channelId)
 			, running(false)
 			, stopRequested(false)
 		{
@@ -777,6 +820,15 @@ namespace NativeLink
 		{
 			if (running.load())
 				return true;
+
+			if (config.carrierKind != CarrierKind::SharedMemory)
+			{
+				// Ian: This checkpoint freezes SHM as the reference carrier while
+				// making carrier choice explicit in the simulator-owned authority.
+				// Return a clean failure for TCP until the real socket carrier exists
+				// so selection bugs do not silently fall back to SHM semantics.
+				return false;
+			}
 
 			const std::wstring mappingName = MakeKernelObjectName(L"Local\\NativeLink.Shared.", channelId);
 			const std::wstring clientEventName = MakeKernelObjectName(L"Local\\NativeLink.ClientData.", channelId);
@@ -1085,8 +1137,13 @@ namespace NativeLink
 		}
 	};
 
+	Server::Server(const ServerConfig& config)
+		: m_impl(new Impl(config))
+	{
+	}
+
 	Server::Server(const std::string& channelId)
-		: m_impl(new Impl(channelId))
+		: Server(ServerConfig{ CarrierKind::SharedMemory, channelId })
 	{
 	}
 
@@ -1252,6 +1309,7 @@ namespace NativeLink
 
 	struct TestClient::Impl
 	{
+		TestClientConfig config;
 		std::string channelId;
 		std::string clientId;
 		std::wstring mappingName;
@@ -1265,9 +1323,10 @@ namespace NativeLink
 		std::uint32_t slotIndex = kMaxClients;
 		std::uint64_t clientTag = 0;
 
-		Impl(const std::string& inChannelId, const std::string& inClientId)
-			: channelId(inChannelId)
-			, clientId(inClientId)
+		Impl(const TestClientConfig& inConfig)
+			: config(inConfig)
+			, channelId(inConfig.channelId)
+			, clientId(inConfig.clientId)
 		{
 			mappingName = MakeKernelObjectName(L"Local\\NativeLink.Shared.", channelId);
 			clientEventName = MakeKernelObjectName(L"Local\\NativeLink.ClientData.", channelId);
@@ -1281,6 +1340,11 @@ namespace NativeLink
 
 		bool Start()
 		{
+			if (config.carrierKind != CarrierKind::SharedMemory)
+			{
+				return false;
+			}
+
 			mapping.Reset(OpenFileMappingW(FILE_MAP_ALL_ACCESS, FALSE, mappingName.c_str()));
 			if (!mapping.handle)
 				return false;
@@ -1399,8 +1463,13 @@ namespace NativeLink
 		}
 	};
 
+	TestClient::TestClient(const TestClientConfig& config)
+		: m_impl(new Impl(config))
+	{
+	}
+
 	TestClient::TestClient(const std::string& channelId, const std::string& clientId)
-		: m_impl(new Impl(channelId, clientId))
+		: TestClient(TestClientConfig{ CarrierKind::SharedMemory, channelId, clientId })
 	{
 	}
 
