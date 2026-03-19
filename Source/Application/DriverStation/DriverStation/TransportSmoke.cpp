@@ -20,7 +20,7 @@ int main(int argc, char** argv)
 
 	RobotTester tester;
 	tester.RobotTester_create();
-	tester.SetConnectionMode(ConnectionMode::eDirectConnect);
+	tester.SetConnectionMode(ConnectionMode::eNativeLink);
 	tester.RobotTester_init();
 
 	SmartDashboard::PutString("Test/Auton_Selection/AutoChooser/.type", "String Chooser");

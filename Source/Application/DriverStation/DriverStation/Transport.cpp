@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "Transport.h"
+#include "NativeLink.h"
 
 #include "../../../Libraries/SmartDashboard/SmartDashboard_Import.h"
 
@@ -1361,6 +1362,8 @@ const wchar_t* GetConnectionModeName(ConnectionMode mode)
 		return L"Direct Connect";
 	case ConnectionMode::eShuffleboard:
 		return L"Shuffleboard";
+	case ConnectionMode::eNativeLink:
+		return L"Native Link";
 	default:
 		return L"Unknown";
 	}
@@ -1396,6 +1399,12 @@ void DashboardTransportRouter::SetMode(ConnectionMode mode)
 
 	if (UsesLegacyTransportPath(m_mode) && UsesLegacyTransportPath(mode))
 	{
+		// Ian: Native Link must *not* ride this legacy-backend reuse shortcut.
+		// The transport smoke initializes directly into Native Link and works, but
+		// the real DriverStation app often switches modes at runtime. If Native Link
+		// is treated as "legacy enough" here, the UI can say "Native Link" while the
+		// old backend keeps running underneath, which looks exactly like a transport
+		// that never connects.
 		m_mode = mode;
 		std::wstring message = L"[Transport] Mode switch retained existing legacy backend to avoid NT reinit race: ";
 		message += GetConnectionModeName(mode);
@@ -1450,6 +1459,14 @@ void DashboardTransportRouter::EnsureBackend()
 		break;
 	case ConnectionMode::eShuffleboard:
 		m_backend = std::make_unique<ShuffleboardBackend>();
+		break;
+	case ConnectionMode::eNativeLink:
+		// Ian: Keep Native Link as a separate backend beside Direct instead of
+		// folding it into the existing path. Direct is our known-good 1:1
+		// behavioral reference, and this separation lets us compare parity first
+		// before layering on the semantics Direct never had (session reset,
+		// retained snapshot, multi-client fan-out, lease ownership).
+		m_backend = NativeLink::CreateNativeLinkBackend();
 		break;
 	default:
 		m_backend = std::make_unique<LegacySmartDashboardBackend>();

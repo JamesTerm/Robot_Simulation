@@ -1,5 +1,17 @@
 # Project history
 
+## 2026-03-19 - Native Link IPC carrier alignment checkpoint
+
+- Updated the simulator-owned Native Link shared-memory carrier to stay in lockstep with the SmartDashboard checkpoint work:
+  - removed the packed-struct dependency around shared atomics
+  - added explicit layout/alignment assertions
+  - added `snapshotCompleteSessionId` so snapshot completion is tracked independently from client write acknowledgements.
+- Kept the simulator authority semantics unchanged while making the transport contract safer for continued cross-process startup debugging.
+- Validation checkpoint:
+  - `DriverStation` and `robot_unit_tests` still build
+  - `robot_unit_tests.exe --gtest_filter=*NativeLink*` still passes
+  - the remaining blocker is still on the SmartDashboard client startup/restart side, not the simulator-owned carrier update itself.
+
 ## 2026-03-17 - Direct survive replay simplification and paired restart recovery
 
 - Simplified robot-side Direct retained-command replay during dashboard reconnects:

@@ -218,6 +218,7 @@ add_executable(DriverStation_TransportSmoke
     Source/Application/DriverStation/DriverStation/TransportSmoke.cpp
     Source/Application/DriverStation/DriverStation/Robot_Tester.cpp
     Source/Application/DriverStation/DriverStation/Transport.cpp
+    Source/Application/DriverStation/DriverStation/NativeLink.cpp
 )
 target_link_libraries(DriverStation_TransportSmoke
     PRIVATE
@@ -232,9 +233,11 @@ if(BUILD_UNIT_TESTS)
 
     add_executable(robot_unit_tests
         tests/auton_selection_tests.cpp
+        tests/native_link_core_tests.cpp
         tests/entity1d_tests.cpp
         tests/entity2d_tests.cpp
         tests/drivekinematics_tests.cpp
+        Source/Application/DriverStation/DriverStation/NativeLink.cpp
         Source/Modules/Robot/Entity1D/Entity1D/Entity1D.cpp
         Source/Modules/Robot/Entity2D/Entity2D/Entity2D.cpp
         Source/Modules/Robot/DriveKinematics/DriveKinematics/Vehicle_Drive.cpp
@@ -242,10 +245,12 @@ if(BUILD_UNIT_TESTS)
     target_include_directories(robot_unit_tests
         PRIVATE
             "${CMAKE_CURRENT_SOURCE_DIR}/Source"
+            "${CMAKE_CURRENT_SOURCE_DIR}/Source/Application/DriverStation/DriverStation"
     )
     target_link_libraries(robot_unit_tests
         PRIVATE
             BaseCore
+            SmartDashboard
             GTest::gtest
             GTest::gtest_main
     )
@@ -258,6 +263,7 @@ if(BUILD_DRIVER_STATION)
         Source/Application/DriverStation/DriverStation/Keyboard.cpp
         Source/Application/DriverStation/DriverStation/Robot_Tester.cpp
         Source/Application/DriverStation/DriverStation/Transport.cpp
+        Source/Application/DriverStation/DriverStation/NativeLink.cpp
         Source/Application/DriverStation/DriverStation/stdafx.cpp
         Source/Application/DriverStation/DriverStation/DriverStation.rc
     )

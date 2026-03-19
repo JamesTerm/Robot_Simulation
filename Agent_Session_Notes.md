@@ -11,6 +11,14 @@
 - Use Windows CRLF line endings for C++ source files in this repo.
 - Read nearby `Ian:` comments before editing a file. They mark intentional boundaries or historical lessons that should be preserved unless you deliberately mean to change behavior.
 
+## Documentation and teaching comments rule
+
+- Treat this codebase as both working simulator code and a carry-forward engineering notebook.
+- Add concise `Ian:` comments in `.cpp` files when behavior depends on non-obvious reasoning, ordering, cross-process/state lifetime lessons, or semantics learned by trial and error.
+- Focus those comments on *why* a path is shaped the way it is, especially where future sessions might otherwise repeat an old mistake.
+- Good targets include transport/session behavior, retained vs live state flow, multi-client fan-out, ownership/lease decisions, reconnect ordering, and any place we are intentionally following Direct as a temporary parity baseline.
+- Keep comments high-signal; avoid narrating obvious code.
+
 ## Quick context for next session
 
 - Primary app target is `DriverStation`; legacy apps/testers are optional CMake groups.
@@ -19,6 +27,7 @@
 - Long-form repository orientation moved to `docs/overview.md`.
 - GoogleTest integration is now in place (`find_package(GTest CONFIG REQUIRED)` + `gtest_discover_tests`).
 - New transport feature direction is documented in `docs/transport_modes_strategy.md`.
+- Current working vcpkg path on this machine is `D:/Git/vcpkg`, not the older `D:/code/vcpkg` examples that still appear in some docs/notes.
 - Transport iteration progress:
   - Iteration 1: runtime mode selection plumbing added (cmdline + hotkeys) with legacy behavior preserved.
   - Iteration 2: extracted connection backend/router (`Transport.h/.cpp`) and routed `RobotTester` through it.
@@ -27,8 +36,16 @@
   - Deeper hardening: removed implicit `std::map::operator[]` insertions in NT entry stores to avoid accidental null entry publication.
   - Startup/reconnect stability: direct command startup now preserves dashboard-owned `AutonTest` and related test keys across repeated simulator restarts without restarting SmartDashboard.
   - Added `DriverStation_TransportSmoke` target and `ResolveAutonIndex` unit-tested helper to reproduce startup sequencing in a fast harness.
-  - Direct chooser contract is now in place for simulator work: `Test/AutoChooser/.type`, `options`, `default`, `active`, `selected`, with string-array `options` on the direct path.
-  - DriverStation now has an in-app connection dropdown wired to legacy/direct/shuffle modes in addition to existing hotkeys.
+	  - Direct chooser contract is now in place for simulator work: `Test/AutoChooser/.type`, `options`, `default`, `active`, `selected`, with string-array `options` on the direct path.
+	  - DriverStation now has an in-app connection dropdown wired to legacy/direct/shuffle modes in addition to existing hotkeys.
+	  - Native Link first simulator-owned slice is now in place behind its own selectable backend using local shared memory + named events as the v1 carrier.
+	  - Preserve Direct as the known-good single-dashboard reference path; use it as the rough template when Native Link behavior is surprising during early 1:1 validation.
+	  - First Native Link simulator topics are aligned with the proven Direct harness keys: `Test/Auton_Selection/AutoChooser/selected`, `TestMove`, `Timer`, and `Y_ft`.
+	  - Native Link session behavior intentionally treats the simulator as the authority: a simulator restart advances the server session even if the local mapping/channel name stays the same.
+	  - Native Link fan-out intentionally uses per-client read progress instead of the old shared-consumer pattern that previously caused Direct watcher/observer interference.
+	  - Current v1 lease behavior opportunistically claims a lease on first client writer contact for lease-controlled topics to keep the initial 1:1 operator experience close to Direct while still exercising explicit ownership in the core.
+	  - Latest IPC protocol carry-forward change: the shared carrier no longer relies on packed structs around atomics, and both repos now include a dedicated `snapshotCompleteSessionId` field so snapshot completion is not overloaded onto write-ack state.
+	  - `robot_unit_tests.exe` currently passes with the new Native Link tests when run directly from `build-vcpkg/bin/Debug`; if `ctest` disagrees, suspect stale test-discovery metadata in the build directory before assuming a code regression.
   - Current direct status checkpoint:
     - simulator and dashboard both now use independent consumer-cursor semantics on the telemetry ring instead of one shared consumed cursor
     - `DriverStation_TransportSmoke` is a reliable harness entry point and now explicitly runs in `Direct Connect`
@@ -55,6 +72,9 @@
 - Current manual interpretation: when smoke behavior is correct but chooser/TestMove look static, that may be a visibility/expectation issue because those are setup-state values; live telemetry keys like `Timer` and `Y_ft` are better paint verification signals.
 - Keep monitoring for any remaining control keys that may require scoped alias support (`Test/<key>` fallback) when dashboards mix flat and scoped naming.
 - Official SmartDashboard historically supported `SendableChooser`; use that as compatibility guidance rather than keeping long-term numeric-only fallback in this feature branch.
+- Current cross-repo blocker: SmartDashboard's real IPC client startup/restart handshake is still flaky even after the carrier/layout cleanup. Robot_Simulation-side Native Link tests are green, but the dashboard-side combined slice still needs more ordering work before paired validation should be treated as deterministic.
+- Follow-on roadmap note: keep the current shared-memory + named-events authority path available as the simpler diagnostic/reference carrier even after a future TCP carrier is added. The longer-term plan is carrier parity under one Native Link semantic contract, not a one-way delete-and-replace of the current IPC path.
+- Important DriverStation app/runtime difference from `DriverStation_TransportSmoke`: the smoke tool initializes directly into Native Link before transport startup, but the real app can switch modes at runtime. A real bug here was that `DashboardTransportRouter::UsesLegacyTransportPath()` incorrectly included `eNativeLink`, so selecting Native Link in the UI could keep the old legacy backend alive underneath and look like a transport that never connected. That reuse shortcut must exclude Native Link.
 
 ## Next-session checklist
 
@@ -62,3 +82,4 @@
 2. Reduce remaining chooser/status republish churn if it becomes a practical performance or readability issue during longer runs.
 3. Clean up harness instrumentation/logging once behavior is stable, but keep the process-control + smoke/probe workflow documented.
 4. Once Direct behavior is stable enough, compare against local Shuffleboard rather than relying on official SmartDashboard localhost behavior.
+5. Before ending a Native Link session, scan changed tricky paths for missing `Ian:` comments and capture the same rationale in these notes if it would help a future handoff.
