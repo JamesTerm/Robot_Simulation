@@ -1399,6 +1399,12 @@ void DashboardTransportRouter::SetMode(ConnectionMode mode)
 
 	if (UsesLegacyTransportPath(m_mode) && UsesLegacyTransportPath(mode))
 	{
+		// Ian: Native Link must *not* ride this legacy-backend reuse shortcut.
+		// The transport smoke initializes directly into Native Link and works, but
+		// the real DriverStation app often switches modes at runtime. If Native Link
+		// is treated as "legacy enough" here, the UI can say "Native Link" while the
+		// old backend keeps running underneath, which looks exactly like a transport
+		// that never connects.
 		m_mode = mode;
 		std::wstring message = L"[Transport] Mode switch retained existing legacy backend to avoid NT reinit race: ";
 		message += GetConnectionModeName(mode);
@@ -1420,8 +1426,7 @@ bool DashboardTransportRouter::UsesLegacyTransportPath(ConnectionMode mode)
 {
 	return (mode == ConnectionMode::eLegacySmartDashboard) ||
 		(mode == ConnectionMode::eDirectConnect) ||
-		(mode == ConnectionMode::eShuffleboard) ||
-		(mode == ConnectionMode::eNativeLink);
+		(mode == ConnectionMode::eShuffleboard);
 }
 
 ConnectionMode DashboardTransportRouter::GetMode() const
