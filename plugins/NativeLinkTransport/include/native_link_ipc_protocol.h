@@ -1,12 +1,13 @@
 #pragma once
 
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 
 namespace sd::nativelink
 {
     constexpr std::uint32_t kSharedMagic = 0x4E4C4E4B;
-    constexpr std::uint32_t kSharedVersion = 1;
+    constexpr std::uint32_t kSharedVersion = 3;
     constexpr std::uint32_t kMaxClients = 8;
     constexpr std::uint32_t kMaxMessages = 1024;
     constexpr std::uint32_t kMaxPayloadBytes = 1024;
@@ -15,7 +16,6 @@ namespace sd::nativelink
     constexpr std::uint32_t kSnapshotEndTopicId = 0xFFFFFFF1u;
     constexpr std::uint32_t kLiveBeginTopicId = 0xFFFFFFF2u;
 
-    #pragma pack(push, 1)
     struct SharedMessage
     {
         std::uint32_t size = 0;
@@ -34,6 +34,7 @@ namespace sd::nativelink
     {
         std::atomic<std::uint64_t> clientTag;
         std::atomic<std::uint64_t> lastHeartbeatUs;
+        std::atomic<std::uint64_t> snapshotCompleteSessionId;
         std::atomic<std::uint64_t> lastAckedSequence;
         std::atomic<std::uint32_t> serverWriteIndex;
         std::atomic<std::uint32_t> clientReadIndex;
@@ -51,8 +52,23 @@ namespace sd::nativelink
         std::atomic<std::uint64_t> serverBootTimeUs;
         std::atomic<std::uint64_t> lastServerHeartbeatUs;
         std::atomic<std::uint32_t> clientCount;
+        // Ian: The mapped clients array carries 64-bit atomics, so preserve
+        // 8-byte alignment in the on-disk/shared-memory layout instead of
+        // relying on packed-struct luck.
+        std::uint32_t reserved0 = 0;
         char channelId[64];
         SharedClientSlot clients[kMaxClients];
     };
-    #pragma pack(pop)
+
+    // Ian: Fixed-width fields already make this IPC layout deterministic.
+    // Avoid packed structs here so the shared atomics keep their natural
+    // alignment instead of depending on compiler-specific packed behavior.
+
+    static_assert(offsetof(SharedClientSlot, clientTag) % alignof(std::atomic<std::uint64_t>) == 0);
+    static_assert(offsetof(SharedClientSlot, lastHeartbeatUs) % alignof(std::atomic<std::uint64_t>) == 0);
+    static_assert(offsetof(SharedClientSlot, snapshotCompleteSessionId) % alignof(std::atomic<std::uint64_t>) == 0);
+    static_assert(offsetof(SharedClientSlot, lastAckedSequence) % alignof(std::atomic<std::uint64_t>) == 0);
+    static_assert(offsetof(SharedClientSlot, clientWriteSequence) % alignof(std::atomic<std::uint64_t>) == 0);
+    static_assert(offsetof(SharedState, clients) % alignof(std::atomic<std::uint64_t>) == 0);
+    static_assert(sizeof(SharedClientSlot) % alignof(std::atomic<std::uint64_t>) == 0);
 }

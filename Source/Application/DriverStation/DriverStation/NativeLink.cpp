@@ -22,7 +22,7 @@ namespace NativeLink
 	namespace
 	{
 		const std::uint32_t kSharedMagic = 0x4E4C4E4B;
-		const std::uint32_t kSharedVersion = 1;
+		const std::uint32_t kSharedVersion = 3;
 		const std::uint32_t kMaxClients = 8;
 		const std::uint32_t kMaxMessages = 1024;
 		const std::uint32_t kMaxPayloadBytes = 1024;
@@ -32,7 +32,6 @@ namespace NativeLink
 
 		const char* const kServerClientId = "server";
 
-		#pragma pack(push, 1)
 		struct SharedMessage
 		{
 			std::uint32_t size = 0;
@@ -51,6 +50,7 @@ namespace NativeLink
 		{
 			std::atomic<std::uint64_t> clientTag;
 			std::atomic<std::uint64_t> lastHeartbeatUs;
+			std::atomic<std::uint64_t> snapshotCompleteSessionId;
 			std::atomic<std::uint64_t> lastAckedSequence;
 			std::atomic<std::uint32_t> serverWriteIndex;
 			std::atomic<std::uint32_t> clientReadIndex;
@@ -68,10 +68,25 @@ namespace NativeLink
 			std::atomic<std::uint64_t> serverBootTimeUs;
 			std::atomic<std::uint64_t> lastServerHeartbeatUs;
 			std::atomic<std::uint32_t> clientCount;
+			// Ian: The mapped client slots contain 64-bit atomics. Keep the array
+			// 8-byte aligned in the carrier layout or startup/ack behavior becomes
+			// undefined memory access instead of a normal transport ordering bug.
+			std::uint32_t reserved0 = 0;
 			char channelId[64];
 			SharedClientSlot clients[kMaxClients];
 		};
-		#pragma pack(pop)
+
+		// Ian: The shared carrier already uses fixed-width fields. Keeping the
+		// atomics naturally aligned is safer than forcing a packed layout around
+		// cross-process atomic state.
+
+		static_assert(offsetof(SharedClientSlot, clientTag) % alignof(std::atomic<std::uint64_t>) == 0, "clientTag alignment");
+		static_assert(offsetof(SharedClientSlot, lastHeartbeatUs) % alignof(std::atomic<std::uint64_t>) == 0, "lastHeartbeatUs alignment");
+		static_assert(offsetof(SharedClientSlot, snapshotCompleteSessionId) % alignof(std::atomic<std::uint64_t>) == 0, "snapshotCompleteSessionId alignment");
+		static_assert(offsetof(SharedClientSlot, lastAckedSequence) % alignof(std::atomic<std::uint64_t>) == 0, "lastAckedSequence alignment");
+		static_assert(offsetof(SharedClientSlot, clientWriteSequence) % alignof(std::atomic<std::uint64_t>) == 0, "clientWriteSequence alignment");
+		static_assert(offsetof(SharedState, clients) % alignof(std::atomic<std::uint64_t>) == 0, "clients alignment");
+		static_assert(sizeof(SharedClientSlot) % alignof(std::atomic<std::uint64_t>) == 0, "slot size alignment");
 
 		bool TopicValueMatches(ValueType type, const TopicValue& value)
 		{
@@ -801,6 +816,7 @@ namespace NativeLink
 				shared->clients[i].serverWriteIndex.store(0, std::memory_order_release);
 				shared->clients[i].clientReadIndex.store(0, std::memory_order_release);
 				shared->clients[i].clientWriteSequence.store(0, std::memory_order_release);
+				shared->clients[i].snapshotCompleteSessionId.store(0, std::memory_order_release);
 				shared->clients[i].lastAckedSequence.store(0, std::memory_order_release);
 			}
 
@@ -1030,10 +1046,10 @@ namespace NativeLink
 						continue;
 					}
 
-					if (slot.lastAckedSequence.load(std::memory_order_acquire) == 0)
+					if (slot.snapshotCompleteSessionId.load(std::memory_order_acquire) != core.GetServerSessionId())
 					{
 						PublishSnapshotForClient(clientId);
-						slot.lastAckedSequence.store(1, std::memory_order_release);
+						slot.snapshotCompleteSessionId.store(core.GetServerSessionId(), std::memory_order_release);
 					}
 
 					const std::uint64_t clientWriteSequence = slot.clientWriteSequence.load(std::memory_order_acquire);
@@ -1278,6 +1294,7 @@ namespace NativeLink
 					slotIndex = i;
 					CopyUtf8(slot.clientId, sizeof(slot.clientId), clientId);
 					slot.lastHeartbeatUs.store(GetSteadyNowUs(), std::memory_order_release);
+					slot.snapshotCompleteSessionId.store(0, std::memory_order_release);
 					slot.lastAckedSequence.store(0, std::memory_order_release);
 					slot.serverWriteIndex.store(0, std::memory_order_release);
 					slot.clientReadIndex.store(0, std::memory_order_release);

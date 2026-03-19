@@ -44,6 +44,7 @@
 	  - Native Link session behavior intentionally treats the simulator as the authority: a simulator restart advances the server session even if the local mapping/channel name stays the same.
 	  - Native Link fan-out intentionally uses per-client read progress instead of the old shared-consumer pattern that previously caused Direct watcher/observer interference.
 	  - Current v1 lease behavior opportunistically claims a lease on first client writer contact for lease-controlled topics to keep the initial 1:1 operator experience close to Direct while still exercising explicit ownership in the core.
+	  - Latest IPC protocol carry-forward change: the shared carrier no longer relies on packed structs around atomics, and both repos now include a dedicated `snapshotCompleteSessionId` field so snapshot completion is not overloaded onto write-ack state.
 	  - `robot_unit_tests.exe` currently passes with the new Native Link tests when run directly from `build-vcpkg/bin/Debug`; if `ctest` disagrees, suspect stale test-discovery metadata in the build directory before assuming a code regression.
   - Current direct status checkpoint:
     - simulator and dashboard both now use independent consumer-cursor semantics on the telemetry ring instead of one shared consumed cursor
@@ -71,6 +72,7 @@
 - Current manual interpretation: when smoke behavior is correct but chooser/TestMove look static, that may be a visibility/expectation issue because those are setup-state values; live telemetry keys like `Timer` and `Y_ft` are better paint verification signals.
 - Keep monitoring for any remaining control keys that may require scoped alias support (`Test/<key>` fallback) when dashboards mix flat and scoped naming.
 - Official SmartDashboard historically supported `SendableChooser`; use that as compatibility guidance rather than keeping long-term numeric-only fallback in this feature branch.
+- Current cross-repo blocker: SmartDashboard's real IPC client startup/restart handshake is still flaky even after the carrier/layout cleanup. Robot_Simulation-side Native Link tests are green, but the dashboard-side combined slice still needs more ordering work before paired validation should be treated as deterministic.
 
 ## Next-session checklist
 
