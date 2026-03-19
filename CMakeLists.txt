@@ -218,7 +218,13 @@ add_executable(DriverStation_TransportSmoke
     Source/Application/DriverStation/DriverStation/TransportSmoke.cpp
     Source/Application/DriverStation/DriverStation/Robot_Tester.cpp
     Source/Application/DriverStation/DriverStation/Transport.cpp
+    Source/Application/DriverStation/DriverStation/NativeLinkAuthorityHelpers.cpp
     Source/Application/DriverStation/DriverStation/NativeLink.cpp
+    Source/Application/DriverStation/DriverStation/NativeLinkSharedMemory.cpp
+)
+target_include_directories(DriverStation_TransportSmoke
+    PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/plugins/NativeLinkTransport/include"
 )
 target_link_libraries(DriverStation_TransportSmoke
     PRIVATE
@@ -237,7 +243,9 @@ if(BUILD_UNIT_TESTS)
         tests/entity1d_tests.cpp
         tests/entity2d_tests.cpp
         tests/drivekinematics_tests.cpp
+        Source/Application/DriverStation/DriverStation/NativeLinkAuthorityHelpers.cpp
         Source/Application/DriverStation/DriverStation/NativeLink.cpp
+        Source/Application/DriverStation/DriverStation/NativeLinkSharedMemory.cpp
         Source/Modules/Robot/Entity1D/Entity1D/Entity1D.cpp
         Source/Modules/Robot/Entity2D/Entity2D/Entity2D.cpp
         Source/Modules/Robot/DriveKinematics/DriveKinematics/Vehicle_Drive.cpp
@@ -246,6 +254,7 @@ if(BUILD_UNIT_TESTS)
         PRIVATE
             "${CMAKE_CURRENT_SOURCE_DIR}/Source"
             "${CMAKE_CURRENT_SOURCE_DIR}/Source/Application/DriverStation/DriverStation"
+            "${CMAKE_CURRENT_SOURCE_DIR}/plugins/NativeLinkTransport/include"
     )
     target_link_libraries(robot_unit_tests
         PRIVATE
@@ -263,9 +272,15 @@ if(BUILD_DRIVER_STATION)
         Source/Application/DriverStation/DriverStation/Keyboard.cpp
         Source/Application/DriverStation/DriverStation/Robot_Tester.cpp
         Source/Application/DriverStation/DriverStation/Transport.cpp
+        Source/Application/DriverStation/DriverStation/NativeLinkAuthorityHelpers.cpp
         Source/Application/DriverStation/DriverStation/NativeLink.cpp
+        Source/Application/DriverStation/DriverStation/NativeLinkSharedMemory.cpp
         Source/Application/DriverStation/DriverStation/stdafx.cpp
         Source/Application/DriverStation/DriverStation/DriverStation.rc
+    )
+    target_include_directories(DriverStation
+        PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/plugins/NativeLinkTransport/include"
     )
     target_link_libraries(DriverStation
         PRIVATE

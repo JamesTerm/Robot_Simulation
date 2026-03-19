@@ -1,93 +1,37 @@
 #include "stdafx.h"
 #include "NativeLink.h"
+#include "NativeLinkAuthorityHelpers.h"
+#include "NativeLinkSharedMemory.h"
 
 #include <Windows.h>
 
 #include <algorithm>
-#include <array>
 #include <atomic>
 #include <cctype>
 #include <chrono>
-#include <cstddef>
 #include <cstdint>
-#include <cstdio>
-#include <cstring>
 #include <mutex>
 #include <string>
 #include <thread>
-#include <utility>
 #include <vector>
 
 namespace NativeLink
 {
 	namespace
 	{
-		const std::uint32_t kSharedMagic = 0x4E4C4E4B;
-		const std::uint32_t kSharedVersion = 3;
-		const std::uint32_t kMaxClients = 8;
-		const std::uint32_t kMaxMessages = 1024;
-		const std::uint32_t kMaxPayloadBytes = 1024;
-		const std::uint32_t kSnapshotStartTopicId = 0xFFFFFFF0u;
-		const std::uint32_t kSnapshotEndTopicId = 0xFFFFFFF1u;
-		const std::uint32_t kLiveBeginTopicId = 0xFFFFFFF2u;
-
-		const char* const kServerClientId = "server";
-
-		struct SharedMessage
-		{
-			std::uint32_t size = 0;
-			std::uint32_t topicId = 0;
-			std::uint32_t deliveryKind = 0;
-			std::uint32_t valueType = 0;
-			std::uint64_t serverSessionId = 0;
-			std::uint64_t serverSequence = 0;
-			std::uint64_t flags = 0;
-			char topicPath[192] = {};
-			char sourceClientId[64] = {};
-			unsigned char payload[kMaxPayloadBytes] = {};
-		};
-
-		struct SharedClientSlot
-		{
-			std::atomic<std::uint64_t> clientTag;
-			std::atomic<std::uint64_t> lastHeartbeatUs;
-			std::atomic<std::uint64_t> snapshotCompleteSessionId;
-			std::atomic<std::uint64_t> lastAckedSequence;
-			std::atomic<std::uint32_t> serverWriteIndex;
-			std::atomic<std::uint32_t> clientReadIndex;
-			std::atomic<std::uint64_t> clientWriteSequence;
-			char clientId[64];
-			SharedMessage clientWriteMessage;
-			SharedMessage messages[kMaxMessages];
-		};
-
-		struct SharedState
-		{
-			std::uint32_t magic = 0;
-			std::uint32_t version = 0;
-			std::atomic<std::uint64_t> serverSessionId;
-			std::atomic<std::uint64_t> serverBootTimeUs;
-			std::atomic<std::uint64_t> lastServerHeartbeatUs;
-			std::atomic<std::uint32_t> clientCount;
-			// Ian: The mapped client slots contain 64-bit atomics. Keep the array
-			// 8-byte aligned in the carrier layout or startup/ack behavior becomes
-			// undefined memory access instead of a normal transport ordering bug.
-			std::uint32_t reserved0 = 0;
-			char channelId[64];
-			SharedClientSlot clients[kMaxClients];
-		};
-
-		// Ian: The shared carrier already uses fixed-width fields. Keeping the
-		// atomics naturally aligned is safer than forcing a packed layout around
-		// cross-process atomic state.
-
-		static_assert(offsetof(SharedClientSlot, clientTag) % alignof(std::atomic<std::uint64_t>) == 0, "clientTag alignment");
-		static_assert(offsetof(SharedClientSlot, lastHeartbeatUs) % alignof(std::atomic<std::uint64_t>) == 0, "lastHeartbeatUs alignment");
-		static_assert(offsetof(SharedClientSlot, snapshotCompleteSessionId) % alignof(std::atomic<std::uint64_t>) == 0, "snapshotCompleteSessionId alignment");
-		static_assert(offsetof(SharedClientSlot, lastAckedSequence) % alignof(std::atomic<std::uint64_t>) == 0, "lastAckedSequence alignment");
-		static_assert(offsetof(SharedClientSlot, clientWriteSequence) % alignof(std::atomic<std::uint64_t>) == 0, "clientWriteSequence alignment");
-		static_assert(offsetof(SharedState, clients) % alignof(std::atomic<std::uint64_t>) == 0, "clients alignment");
-		static_assert(sizeof(SharedClientSlot) % alignof(std::atomic<std::uint64_t>) == 0, "slot size alignment");
+		using detail::AutoHandle;
+		using detail::CopyUtf8;
+		using detail::DeserializeValue;
+		using detail::GetSteadyNowUs;
+		using detail::kMaxClients;
+		using detail::kMaxMessages;
+		using detail::kSharedMagic;
+		using detail::kSharedVersion;
+		using detail::MakeKernelObjectName;
+		using detail::ReadUtf8;
+		using detail::SharedClientSlot;
+		using detail::SharedMessage;
+		using detail::SharedState;
 
 		bool TopicValueMatches(ValueType type, const TopicValue& value)
 		{
@@ -106,66 +50,6 @@ namespace NativeLink
 			return false;
 		}
 
-		std::uint64_t GetSteadyNowUs()
-		{
-			return static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(
-				std::chrono::steady_clock::now().time_since_epoch()).count());
-		}
-
-		void CopyUtf8(char* dest, std::size_t destCount, const std::string& value)
-		{
-			if (!dest || destCount == 0)
-				return;
-
-			const std::size_t maxCopy = destCount > 0 ? destCount - 1 : 0;
-			const std::size_t copyCount = (std::min)(maxCopy, value.size());
-			memcpy(dest, value.data(), copyCount);
-			dest[copyCount] = '\0';
-		}
-
-		std::string ReadUtf8(const char* src, std::size_t srcCount)
-		{
-			if (!src || srcCount == 0)
-				return std::string();
-
-			const char* end = static_cast<const char*>(memchr(src, '\0', srcCount));
-			if (!end)
-				return std::string(src, src + srcCount);
-
-			return std::string(src, end);
-		}
-
-		std::wstring Utf8ToWide(const std::string& value)
-		{
-			if (value.empty())
-				return std::wstring();
-
-			const int required = MultiByteToWideChar(CP_UTF8, 0, value.c_str(), static_cast<int>(value.size()), nullptr, 0);
-			if (required <= 0)
-				return std::wstring(value.begin(), value.end());
-
-			std::wstring wide(required, L'\0');
-			MultiByteToWideChar(CP_UTF8, 0, value.c_str(), static_cast<int>(value.size()), &wide[0], required);
-			return wide;
-		}
-
-		std::wstring MakeKernelObjectName(const wchar_t* prefix, const std::string& channelId)
-		{
-			std::wstring name = prefix;
-			std::wstring wideChannel = Utf8ToWide(channelId);
-			for (std::size_t i = 0; i < wideChannel.size(); ++i)
-			{
-				wchar_t ch = wideChannel[i];
-				const bool safe =
-					(ch >= L'0' && ch <= L'9') ||
-					(ch >= L'a' && ch <= L'z') ||
-					(ch >= L'A' && ch <= L'Z') ||
-					ch == L'-' || ch == L'_';
-				name += safe ? ch : L'_';
-			}
-			return name;
-		}
-
 		std::string ToLowerCopy(const std::string& text)
 		{
 			std::string normalized(text);
@@ -176,92 +60,6 @@ namespace NativeLink
 			return normalized;
 		}
 
-		std::vector<unsigned char> SerializeValue(const TopicValue& value)
-		{
-			std::vector<unsigned char> bytes;
-			switch (value.type)
-			{
-			case ValueType::Bool:
-				bytes.resize(1);
-				bytes[0] = value.boolValue ? 1 : 0;
-				break;
-			case ValueType::Double:
-				bytes.resize(sizeof(double));
-				memcpy(bytes.data(), &value.doubleValue, sizeof(double));
-				break;
-			case ValueType::String:
-				bytes.assign(value.stringValue.begin(), value.stringValue.end());
-				break;
-			case ValueType::StringArray:
-				for (std::size_t i = 0; i < value.stringArrayValue.size(); ++i)
-				{
-					const std::string& item = value.stringArrayValue[i];
-					const std::uint32_t len = static_cast<std::uint32_t>(item.size());
-					const unsigned char* rawLen = reinterpret_cast<const unsigned char*>(&len);
-					bytes.insert(bytes.end(), rawLen, rawLen + sizeof(std::uint32_t));
-					bytes.insert(bytes.end(), item.begin(), item.end());
-				}
-				break;
-			}
-			return bytes;
-		}
-
-		bool DeserializeValue(ValueType type, const unsigned char* bytes, std::size_t byteCount, TopicValue& outValue)
-		{
-			outValue = TopicValue();
-			outValue.type = type;
-
-			switch (type)
-			{
-			case ValueType::Bool:
-				if (byteCount < 1)
-					return false;
-				outValue.boolValue = bytes[0] != 0;
-				return true;
-			case ValueType::Double:
-				if (byteCount < sizeof(double))
-					return false;
-				memcpy(&outValue.doubleValue, bytes, sizeof(double));
-				return true;
-			case ValueType::String:
-				outValue.stringValue.assign(reinterpret_cast<const char*>(bytes), reinterpret_cast<const char*>(bytes) + byteCount);
-				return true;
-			case ValueType::StringArray:
-				{
-					std::size_t offset = 0;
-					while (offset + sizeof(std::uint32_t) <= byteCount)
-					{
-						std::uint32_t len = 0;
-						memcpy(&len, bytes + offset, sizeof(std::uint32_t));
-						offset += sizeof(std::uint32_t);
-						if (offset + len > byteCount)
-							return false;
-						outValue.stringArrayValue.push_back(std::string(reinterpret_cast<const char*>(bytes + offset), reinterpret_cast<const char*>(bytes + offset + len)));
-						offset += len;
-					}
-					return offset == byteCount;
-				}
-			}
-
-			return false;
-		}
-
-		struct AutoHandle
-		{
-			HANDLE handle = nullptr;
-
-			~AutoHandle()
-			{
-				Reset();
-			}
-
-			void Reset(HANDLE newHandle = nullptr)
-			{
-				if (handle)
-					CloseHandle(handle);
-				handle = newHandle;
-			}
-		};
 	}
 
 	const char* ToString(CarrierKind kind)
@@ -411,7 +209,7 @@ namespace NativeLink
 
 	WriteResult Core::PublishFromServer(const std::string& topicPath, const TopicValue& value)
 	{
-		return PublishInternal(topicPath, value, kServerClientId, true);
+		return PublishInternal(topicPath, value, detail::kServerClientId, true);
 	}
 
 	WriteResult Core::PublishInternal(const std::string& topicPath, const TopicValue& value, const std::string& sourceClientId, bool allowServerOnly)
@@ -750,70 +548,7 @@ namespace NativeLink
 
 		void RegisterDefaultTopics()
 		{
-			if (core.IsTopicRegistered("Test/Auton_Selection/AutoChooser/selected"))
-				return;
-
-			// Ian: Start the first simulator-owned contract with the same keys that
-			// already proved useful in the Direct harness. That gives us a stable
-			// parity baseline for 1:1 validation, while Native Link changes the
-			// transport semantics underneath (retained snapshot, leases, session
-			// authority) instead of also moving the application-level goalposts.
-			TopicDescriptor chooserOptions;
-			chooserOptions.topicPath = "Test/Auton_Selection/AutoChooser/options";
-			chooserOptions.topicKind = TopicKind::State;
-			chooserOptions.valueType = ValueType::StringArray;
-			chooserOptions.retentionMode = RetentionMode::LatestValue;
-			chooserOptions.replayOnSubscribe = true;
-			chooserOptions.writerPolicy = WriterPolicy::ServerOnly;
-			core.RegisterTopic(chooserOptions);
-
-			TopicDescriptor chooserDefault;
-			chooserDefault.topicPath = "Test/Auton_Selection/AutoChooser/default";
-			chooserDefault.topicKind = TopicKind::State;
-			chooserDefault.valueType = ValueType::String;
-			chooserDefault.retentionMode = RetentionMode::LatestValue;
-			chooserDefault.replayOnSubscribe = true;
-			chooserDefault.writerPolicy = WriterPolicy::ServerOnly;
-			core.RegisterTopic(chooserDefault);
-
-			TopicDescriptor chooserActive = chooserDefault;
-			chooserActive.topicPath = "Test/Auton_Selection/AutoChooser/active";
-			core.RegisterTopic(chooserActive);
-
-			TopicDescriptor chooserSelected = chooserDefault;
-			chooserSelected.topicPath = "Test/Auton_Selection/AutoChooser/selected";
-			chooserSelected.writerPolicy = WriterPolicy::LeaseSingleWriter;
-			core.RegisterTopic(chooserSelected);
-
-			TopicDescriptor testMove;
-			testMove.topicPath = "TestMove";
-			testMove.topicKind = TopicKind::State;
-			testMove.valueType = ValueType::Double;
-			testMove.retentionMode = RetentionMode::LatestValue;
-			testMove.replayOnSubscribe = true;
-			testMove.writerPolicy = WriterPolicy::LeaseSingleWriter;
-			core.RegisterTopic(testMove);
-
-			TopicDescriptor timer;
-			timer.topicPath = "Timer";
-			timer.topicKind = TopicKind::State;
-			timer.valueType = ValueType::Double;
-			timer.retentionMode = RetentionMode::LatestValue;
-			timer.replayOnSubscribe = true;
-			timer.writerPolicy = WriterPolicy::ServerOnly;
-			core.RegisterTopic(timer);
-
-			TopicDescriptor yFeet = timer;
-			yFeet.topicPath = "Y_ft";
-			core.RegisterTopic(yFeet);
-
-			core.PublishFromServer("Test/Auton_Selection/AutoChooser/options", TopicValue::StringArray(std::vector<std::string>{ "Do Nothing", "Just Move Forward", "Just Rotate", "Move Rotate Sequence", "Box Waypoints", "Smart Waypoints" }));
-			core.PublishFromServer("Test/Auton_Selection/AutoChooser/default", TopicValue::String("Do Nothing"));
-			core.PublishFromServer("Test/Auton_Selection/AutoChooser/active", TopicValue::String("Do Nothing"));
-			core.PublishFromServer("Test/Auton_Selection/AutoChooser/selected", TopicValue::String("Do Nothing"));
-			core.PublishFromServer("TestMove", TopicValue::Double(0.0));
-			core.PublishFromServer("Timer", TopicValue::Double(0.0));
-			core.PublishFromServer("Y_ft", TopicValue::Double(0.0));
+			detail::RegisterDefaultTopics(core);
 		}
 
 		bool Start()
@@ -913,22 +648,7 @@ namespace NativeLink
 			// that shared-consumer semantics make extra observers/watchers perturb the
 			// main dashboard path, so Native Link starts with one producer stream and
 			// independent reader progress per client slot.
-			SharedMessage message;
-			message.size = sizeof(SharedMessage);
-			message.topicId = static_cast<std::uint32_t>(envelope.topicId);
-			message.deliveryKind = static_cast<std::uint32_t>(envelope.deliveryKind);
-			message.valueType = static_cast<std::uint32_t>(envelope.value.type);
-			message.serverSessionId = envelope.serverSessionId;
-			message.serverSequence = envelope.serverSequence;
-			message.flags = 0;
-			CopyUtf8(message.topicPath, sizeof(message.topicPath), envelope.topicPath);
-			CopyUtf8(message.sourceClientId, sizeof(message.sourceClientId), envelope.sourceClientId);
-
-			const std::vector<unsigned char> payload = SerializeValue(envelope.value);
-			const std::size_t payloadBytes = (std::min<std::size_t>)(payload.size(), sizeof(message.payload));
-			if (payloadBytes > 0)
-				memcpy(message.payload, payload.data(), payloadBytes);
-			message.flags = static_cast<std::uint64_t>(payloadBytes);
+			const SharedMessage message = detail::BuildSharedMessage(envelope);
 
 			for (std::uint32_t i = 0; i < kMaxClients; ++i)
 			{
@@ -948,51 +668,7 @@ namespace NativeLink
 			const std::vector<SnapshotEvent> snapshot = core.ConnectClient(clientId).snapshotEvents;
 			for (std::size_t i = 0; i < snapshot.size(); ++i)
 			{
-				const SnapshotEvent& event = snapshot[i];
-				UpdateEnvelope envelope;
-				if (event.kind == SnapshotEventKind::Update && event.hasUpdate)
-				{
-					envelope = event.update;
-				}
-				else
-				{
-					envelope.serverSessionId = core.GetServerSessionId();
-					envelope.sourceClientId = kServerClientId;
-					envelope.value = TopicValue::String(std::string());
-					envelope.deliveryKind = DeliveryKind::LiveEvent;
-					switch (event.kind)
-					{
-					case SnapshotEventKind::DescriptorSnapshotBegin:
-						envelope.topicId = kSnapshotStartTopicId;
-						envelope.topicPath = "__snapshot_begin__";
-						break;
-					case SnapshotEventKind::DescriptorSnapshotEnd:
-						envelope.topicId = kSnapshotEndTopicId;
-						envelope.topicPath = "__descriptor_end__";
-						break;
-					case SnapshotEventKind::StateSnapshotBegin:
-						envelope.topicId = kSnapshotStartTopicId;
-						envelope.topicPath = "__state_begin__";
-						break;
-					case SnapshotEventKind::StateSnapshotEnd:
-						envelope.topicId = kSnapshotEndTopicId;
-						envelope.topicPath = "__state_end__";
-						break;
-					case SnapshotEventKind::LiveBegin:
-						envelope.topicId = kLiveBeginTopicId;
-						envelope.topicPath = "__live_begin__";
-						break;
-					case SnapshotEventKind::Descriptor:
-						envelope.topicId = static_cast<std::uint32_t>(event.descriptor.schemaVersion);
-						envelope.topicPath = event.descriptor.topicPath;
-						envelope.value = TopicValue::String(event.descriptor.topicPath);
-						break;
-					default:
-						break;
-					}
-				}
-
-				PublishEnvelopeToSingleClient(clientId, envelope);
+				PublishEnvelopeToSingleClient(clientId, detail::SnapshotEventToEnvelope(snapshot[i], core.GetServerSessionId()));
 			}
 		}
 
@@ -1001,22 +677,7 @@ namespace NativeLink
 			if (!shared)
 				return;
 
-			SharedMessage message;
-			message.size = sizeof(SharedMessage);
-			message.topicId = static_cast<std::uint32_t>(envelope.topicId);
-			message.deliveryKind = static_cast<std::uint32_t>(envelope.deliveryKind);
-			message.valueType = static_cast<std::uint32_t>(envelope.value.type);
-			message.serverSessionId = envelope.serverSessionId;
-			message.serverSequence = envelope.serverSequence;
-			message.flags = 0;
-			CopyUtf8(message.topicPath, sizeof(message.topicPath), envelope.topicPath);
-			CopyUtf8(message.sourceClientId, sizeof(message.sourceClientId), envelope.sourceClientId);
-
-			const std::vector<unsigned char> payload = SerializeValue(envelope.value);
-			const std::size_t payloadBytes = (std::min<std::size_t>)(payload.size(), sizeof(message.payload));
-			if (payloadBytes > 0)
-				memcpy(message.payload, payload.data(), payloadBytes);
-			message.flags = static_cast<std::uint64_t>(payloadBytes);
+			const SharedMessage message = detail::BuildSharedMessage(envelope);
 
 			for (std::uint32_t i = 0; i < kMaxClients; ++i)
 			{
@@ -1052,23 +713,12 @@ namespace NativeLink
 
 			if (result.accepted)
 			{
-				TopicValue latest;
-				if (core.TryGetLatestValue(message.topicPath, latest))
+				UpdateEnvelope live;
+				if (detail::BuildLiveEnvelopeForTopic(core, message.topicPath, clientId, result.serverSequence, live))
 				{
-					const Core::TopicRuntime* topic = core.LookupTopic(message.topicPath);
-					if (!topic)
-						return;
-					UpdateEnvelope live;
-					live.serverSessionId = core.GetServerSessionId();
-					live.serverSequence = result.serverSequence;
-					live.topicId = topic->topicId;
-					live.topicPath = message.topicPath;
-					live.sourceClientId = clientId;
-					live.value = latest;
 					// Ian: Snapshot replay and live delivery are separate on purpose. A
 					// reconnecting dashboard should first rebuild retained state from the
 					// snapshot path and only then treat later writes as live deltas.
-					live.deliveryKind = core.GetLiveDeliveryKind(topic->descriptor.topicKind);
 					PublishEnvelopeToAllClients(live);
 				}
 			}
@@ -1165,21 +815,10 @@ namespace NativeLink
 		if (!m_impl)
 			return;
 		std::lock_guard<std::mutex> lock(m_impl->mutex);
-		const WriteResult result = m_impl->core.PublishFromServer(keyName, TopicValue::Bool(value));
-		if (result.accepted)
+		UpdateEnvelope event;
+		if (detail::PublishServerValue(m_impl->core, keyName, TopicValue::Bool(value), event))
 		{
-			TopicValue latest;
-			if (m_impl->core.TryGetLatestValue(keyName, latest))
-			{
-				UpdateEnvelope event;
-				event.serverSessionId = m_impl->core.GetServerSessionId();
-				event.serverSequence = result.serverSequence;
-				event.topicPath = keyName;
-				event.sourceClientId = kServerClientId;
-				event.value = latest;
-				event.deliveryKind = DeliveryKind::LiveState;
-				m_impl->PublishEnvelopeToAllClients(event);
-			}
+			m_impl->PublishEnvelopeToAllClients(event);
 		}
 	}
 
@@ -1188,21 +827,10 @@ namespace NativeLink
 		if (!m_impl)
 			return;
 		std::lock_guard<std::mutex> lock(m_impl->mutex);
-		const WriteResult result = m_impl->core.PublishFromServer(keyName, TopicValue::Double(value));
-		if (result.accepted)
+		UpdateEnvelope event;
+		if (detail::PublishServerValue(m_impl->core, keyName, TopicValue::Double(value), event))
 		{
-			TopicValue latest;
-			if (m_impl->core.TryGetLatestValue(keyName, latest))
-			{
-				UpdateEnvelope event;
-				event.serverSessionId = m_impl->core.GetServerSessionId();
-				event.serverSequence = result.serverSequence;
-				event.topicPath = keyName;
-				event.sourceClientId = kServerClientId;
-				event.value = latest;
-				event.deliveryKind = DeliveryKind::LiveState;
-				m_impl->PublishEnvelopeToAllClients(event);
-			}
+			m_impl->PublishEnvelopeToAllClients(event);
 		}
 	}
 
@@ -1211,21 +839,10 @@ namespace NativeLink
 		if (!m_impl)
 			return;
 		std::lock_guard<std::mutex> lock(m_impl->mutex);
-		const WriteResult result = m_impl->core.PublishFromServer(keyName, TopicValue::String(value));
-		if (result.accepted)
+		UpdateEnvelope event;
+		if (detail::PublishServerValue(m_impl->core, keyName, TopicValue::String(value), event))
 		{
-			TopicValue latest;
-			if (m_impl->core.TryGetLatestValue(keyName, latest))
-			{
-				UpdateEnvelope event;
-				event.serverSessionId = m_impl->core.GetServerSessionId();
-				event.serverSequence = result.serverSequence;
-				event.topicPath = keyName;
-				event.sourceClientId = kServerClientId;
-				event.value = latest;
-				event.deliveryKind = DeliveryKind::LiveState;
-				m_impl->PublishEnvelopeToAllClients(event);
-			}
+			m_impl->PublishEnvelopeToAllClients(event);
 		}
 	}
 
@@ -1234,21 +851,10 @@ namespace NativeLink
 		if (!m_impl)
 			return;
 		std::lock_guard<std::mutex> lock(m_impl->mutex);
-		const WriteResult result = m_impl->core.PublishFromServer(keyName, TopicValue::StringArray(values));
-		if (result.accepted)
+		UpdateEnvelope event;
+		if (detail::PublishServerValue(m_impl->core, keyName, TopicValue::StringArray(values), event))
 		{
-			TopicValue latest;
-			if (m_impl->core.TryGetLatestValue(keyName, latest))
-			{
-				UpdateEnvelope event;
-				event.serverSessionId = m_impl->core.GetServerSessionId();
-				event.serverSequence = result.serverSequence;
-				event.topicPath = keyName;
-				event.sourceClientId = kServerClientId;
-				event.value = latest;
-				event.deliveryKind = DeliveryKind::LiveState;
-				m_impl->PublishEnvelopeToAllClients(event);
-			}
+			m_impl->PublishEnvelopeToAllClients(event);
 		}
 	}
 
@@ -1419,17 +1025,7 @@ namespace NativeLink
 			const std::uint32_t writeIndex = slot.serverWriteIndex.load(std::memory_order_acquire);
 			while (readIndex < writeIndex)
 			{
-				const SharedMessage& message = slot.messages[readIndex % kMaxMessages];
-				UpdateEnvelope event;
-				event.serverSessionId = message.serverSessionId;
-				event.serverSequence = message.serverSequence;
-				event.topicId = message.topicId;
-				event.topicPath = ReadUtf8(message.topicPath, sizeof(message.topicPath));
-				event.sourceClientId = ReadUtf8(message.sourceClientId, sizeof(message.sourceClientId));
-				event.deliveryKind = static_cast<DeliveryKind>(message.deliveryKind);
-				event.rejectionReason = WriteRejectReason::None;
-				DeserializeValue(static_cast<ValueType>(message.valueType), message.payload, static_cast<std::size_t>(message.flags), event.value);
-				result.push_back(event);
+				result.push_back(detail::SharedMessageToUpdateEnvelope(slot.messages[readIndex % kMaxMessages]));
 				++readIndex;
 			}
 			slot.clientReadIndex.store(readIndex, std::memory_order_release);
@@ -1443,18 +1039,7 @@ namespace NativeLink
 
 			SharedClientSlot& slot = shared->clients[slotIndex];
 			const std::uint64_t writeSequence = slot.clientWriteSequence.load(std::memory_order_acquire) + 1;
-			SharedMessage& message = slot.clientWriteMessage;
-			memset(&message, 0, sizeof(message));
-			message.size = sizeof(message);
-			message.valueType = static_cast<std::uint32_t>(value.type);
-			CopyUtf8(message.topicPath, sizeof(message.topicPath), keyName);
-			CopyUtf8(message.sourceClientId, sizeof(message.sourceClientId), clientId);
-
-			const std::vector<unsigned char> payload = SerializeValue(value);
-			const std::size_t payloadBytes = (std::min<std::size_t>)(payload.size(), sizeof(message.payload));
-			if (payloadBytes > 0)
-				memcpy(message.payload, payload.data(), payloadBytes);
-			message.flags = static_cast<std::uint64_t>(payloadBytes);
+			slot.clientWriteMessage = detail::BuildClientWriteMessage(keyName, clientId, value);
 
 			slot.clientWriteSequence.store(writeSequence, std::memory_order_release);
 			slot.lastHeartbeatUs.store(GetSteadyNowUs(), std::memory_order_release);
