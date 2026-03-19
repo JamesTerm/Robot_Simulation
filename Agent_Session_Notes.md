@@ -73,6 +73,7 @@
 - Keep monitoring for any remaining control keys that may require scoped alias support (`Test/<key>` fallback) when dashboards mix flat and scoped naming.
 - Official SmartDashboard historically supported `SendableChooser`; use that as compatibility guidance rather than keeping long-term numeric-only fallback in this feature branch.
 - Current cross-repo blocker: SmartDashboard's real IPC client startup/restart handshake is still flaky even after the carrier/layout cleanup. Robot_Simulation-side Native Link tests are green, but the dashboard-side combined slice still needs more ordering work before paired validation should be treated as deterministic.
+- Follow-on roadmap note: keep the current shared-memory + named-events authority path available as the simpler diagnostic/reference carrier even after a future TCP carrier is added. The longer-term plan is carrier parity under one Native Link semantic contract, not a one-way delete-and-replace of the current IPC path.
 
 ## Next-session checklist
 

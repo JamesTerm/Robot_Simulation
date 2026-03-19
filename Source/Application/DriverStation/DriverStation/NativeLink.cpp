@@ -1038,10 +1038,24 @@ namespace NativeLink
 						continue;
 
 					const std::string clientId = ReadUtf8(slot.clientId, sizeof(slot.clientId));
-					const std::uint64_t heartbeatAgeUs = GetSteadyNowUs() - slot.lastHeartbeatUs.load(std::memory_order_acquire);
+					const std::uint64_t nowUs = GetSteadyNowUs();
+					// Ian: The authority samples `nowUs` once, but a dashboard client can
+					// refresh `lastHeartbeatUs` immediately afterward. Clamp instead of
+					// letting unsigned underflow turn a healthy client into a bogus stale
+					// disconnect and slot clear.
+					const std::uint64_t heartbeatAgeUs = nowUs >= slot.lastHeartbeatUs.load(std::memory_order_acquire)
+						? (nowUs - slot.lastHeartbeatUs.load(std::memory_order_acquire))
+						: 0;
 					if (heartbeatAgeUs > 5000000ULL)
 					{
 						core.DisconnectClient(clientId);
+						memset(slot.clientId, 0, sizeof(slot.clientId));
+						slot.lastHeartbeatUs.store(0, std::memory_order_release);
+						slot.snapshotCompleteSessionId.store(0, std::memory_order_release);
+						slot.lastAckedSequence.store(0, std::memory_order_release);
+						slot.serverWriteIndex.store(0, std::memory_order_release);
+						slot.clientReadIndex.store(0, std::memory_order_release);
+						slot.clientWriteSequence.store(0, std::memory_order_release);
 						slot.clientTag.store(0, std::memory_order_release);
 						continue;
 					}
@@ -1292,6 +1306,8 @@ namespace NativeLink
 				if (slot.clientTag.compare_exchange_strong(expected, clientTag, std::memory_order_acq_rel))
 				{
 					slotIndex = i;
+					memset(slot.clientId, 0, sizeof(slot.clientId));
+					slot.lastHeartbeatUs.store(0, std::memory_order_release);
 					CopyUtf8(slot.clientId, sizeof(slot.clientId), clientId);
 					slot.lastHeartbeatUs.store(GetSteadyNowUs(), std::memory_order_release);
 					slot.snapshotCompleteSessionId.store(0, std::memory_order_release);
