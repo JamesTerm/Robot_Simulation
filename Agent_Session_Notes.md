@@ -21,10 +21,11 @@
 
 - Keep simulator-side cleanup aligned with the one-contract / many-carriers / many-adapters roadmap.
 - Preserve SHM as the diagnostic/reference carrier while TCP authority work is added.
+- Product stance: TCP is the intended normal runtime carrier. SHM remains the internal diagnostic/reference carrier and should stay reachable through developer overrides, not as a normal team-facing mode toggle.
 - Favor extraction that keeps this repo a clean teaching example of server-authoritative session/snapshot/lease behavior.
 
 ## Immediate next-session focus
 
-1. Extract simulator-side authority/carrier helpers so SHM and TCP can share the same semantic core cleanly.
+1. Keep runtime TCP integration environment-driven/internal first; do not add a public SHM/TCP selector unless there is a clear product need.
 2. Keep the example/use-case story adapter-friendly for future SmartDashboard / Shuffleboard / Elastic / bridge integrations.
-3. After the next cleanup slice, rerun focused Native Link tests and compare against SmartDashboard TCP/SHM validation.
+3. After the next cleanup slice, rerun focused Native Link tests plus the SmartDashboard SHM and TCP runtime probes.
