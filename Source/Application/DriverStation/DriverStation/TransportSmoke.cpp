@@ -1,15 +1,18 @@
 #include "stdafx.h"
 
+#include "NativeLink.h"
 #include "Robot_Tester.h"
 #include "../../../Libraries/SmartDashboard/SmartDashboard_Import.h"
 
 #include <Windows.h>
 
 #include <cstdlib>
+#include <string>
 #include <thread>
 
 int main(int argc, char** argv)
 {
+	const NativeLink::ServerConfig nativeLinkConfig = NativeLink::LoadServerConfigFromEnvironment();
 	DWORD runMs = 500;
 	if (argc > 1)
 	{
@@ -22,6 +25,11 @@ int main(int argc, char** argv)
 	tester.RobotTester_create();
 	tester.SetConnectionMode(ConnectionMode::eNativeLink);
 	tester.RobotTester_init();
+	printf("[TransportSmoke] native_link carrier=%s channel=%s host=%s port=%u\n",
+		NativeLink::ToString(nativeLinkConfig.carrierKind),
+		nativeLinkConfig.channelId.c_str(),
+		nativeLinkConfig.host.c_str(),
+		static_cast<unsigned>(nativeLinkConfig.port));
 
 	SmartDashboard::PutString("Test/Auton_Selection/AutoChooser/.type", "String Chooser");
 	std::vector<std::string> chooserOptions;

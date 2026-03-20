@@ -161,3 +161,71 @@ TEST(NativeLinkCoreTests, ExplicitTcpCarrierSelectionFailsUntilTcpBackendExists)
 	client.Stop();
 	server.Stop();
 }
+
+TEST(NativeLinkCoreTests, ServerConfigLoadsTcpSettingsFromEnvironment)
+{
+	char* oldCarrier = nullptr;
+	char* oldChannel = nullptr;
+	char* oldHost = nullptr;
+	char* oldPort = nullptr;
+	std::size_t ignored = 0;
+	_dupenv_s(&oldCarrier, &ignored, "NATIVE_LINK_CARRIER");
+	_dupenv_s(&oldChannel, &ignored, "NATIVE_LINK_CHANNEL_ID");
+	_dupenv_s(&oldHost, &ignored, "NATIVE_LINK_HOST");
+	_dupenv_s(&oldPort, &ignored, "NATIVE_LINK_PORT");
+
+	_putenv("NATIVE_LINK_CARRIER=tcp");
+	_putenv("NATIVE_LINK_CHANNEL_ID=native-link-env-test");
+	_putenv("NATIVE_LINK_HOST=127.0.0.1");
+	_putenv("NATIVE_LINK_PORT=5821");
+
+	const NativeLink::ServerConfig config = NativeLink::LoadServerConfigFromEnvironment();
+	EXPECT_EQ(config.carrierKind, NativeLink::CarrierKind::Tcp);
+	EXPECT_EQ(config.channelId, "native-link-env-test");
+	EXPECT_EQ(config.host, "127.0.0.1");
+	EXPECT_EQ(config.port, 5821);
+
+	if (oldCarrier != nullptr)
+	{
+		std::string restore = std::string("NATIVE_LINK_CARRIER=") + oldCarrier;
+		_putenv(restore.c_str());
+		free(oldCarrier);
+	}
+	else
+	{
+		_putenv("NATIVE_LINK_CARRIER=");
+	}
+
+	if (oldChannel != nullptr)
+	{
+		std::string restore = std::string("NATIVE_LINK_CHANNEL_ID=") + oldChannel;
+		_putenv(restore.c_str());
+		free(oldChannel);
+	}
+	else
+	{
+		_putenv("NATIVE_LINK_CHANNEL_ID=");
+	}
+
+	if (oldHost != nullptr)
+	{
+		std::string restore = std::string("NATIVE_LINK_HOST=") + oldHost;
+		_putenv(restore.c_str());
+		free(oldHost);
+	}
+	else
+	{
+		_putenv("NATIVE_LINK_HOST=");
+	}
+
+	if (oldPort != nullptr)
+	{
+		std::string restore = std::string("NATIVE_LINK_PORT=") + oldPort;
+		_putenv(restore.c_str());
+		free(oldPort);
+	}
+	else
+	{
+		_putenv("NATIVE_LINK_PORT=");
+	}
+}

@@ -11,6 +11,7 @@
 #include <cctype>
 #include <chrono>
 #include <cstdint>
+#include <cstdlib>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -91,6 +92,40 @@ namespace NativeLink
 		}
 
 		return false;
+	}
+
+	ServerConfig LoadServerConfigFromEnvironment()
+	{
+		ServerConfig config;
+
+		char buffer[256] = {};
+		char* value = nullptr;
+		std::size_t required = 0;
+		if (_dupenv_s(&value, &required, "NATIVE_LINK_CARRIER") == 0 && value != nullptr)
+		{
+			CarrierKind parsed = config.carrierKind;
+			if (TryParseCarrierKind(value, parsed))
+				config.carrierKind = parsed;
+			free(value);
+		}
+
+		DWORD len = GetEnvironmentVariableA("NATIVE_LINK_CHANNEL_ID", buffer, static_cast<DWORD>(sizeof(buffer)));
+		if (len > 0 && len < sizeof(buffer))
+			config.channelId = buffer;
+
+		len = GetEnvironmentVariableA("NATIVE_LINK_HOST", buffer, static_cast<DWORD>(sizeof(buffer)));
+		if (len > 0 && len < sizeof(buffer))
+			config.host = buffer;
+
+		len = GetEnvironmentVariableA("NATIVE_LINK_PORT", buffer, static_cast<DWORD>(sizeof(buffer)));
+		if (len > 0 && len < sizeof(buffer))
+		{
+			const unsigned long parsed = std::strtoul(buffer, nullptr, 10);
+			if (parsed > 0 && parsed <= 65535UL)
+				config.port = static_cast<std::uint16_t>(parsed);
+		}
+
+		return config;
 	}
 
 	TopicValue TopicValue::Bool(bool value)
@@ -1207,7 +1242,7 @@ namespace NativeLink
 	{
 	public:
 		NativeLinkBackend()
-			: m_server("native-link-default")
+			: m_server(LoadServerConfigFromEnvironment())
 		{
 		}
 

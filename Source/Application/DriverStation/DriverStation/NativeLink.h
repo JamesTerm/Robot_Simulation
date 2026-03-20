@@ -173,6 +173,8 @@
 			std::uint16_t port = 5810;
 		};
 
+		ServerConfig LoadServerConfigFromEnvironment();
+
 		struct TestClientConfig
 		{
 			CarrierKind carrierKind = CarrierKind::SharedMemory;
