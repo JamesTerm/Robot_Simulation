@@ -132,13 +132,32 @@ TEST(NativeLinkCoreTests, ExplicitTcpCarrierSelectionFailsUntilTcpBackendExists)
 	NativeLink::ServerConfig serverConfig;
 	serverConfig.carrierKind = NativeLink::CarrierKind::Tcp;
 	serverConfig.channelId = "native-link-tcp-placeholder";
+	serverConfig.port = 5820;
 	NativeLink::Server server(serverConfig);
-	EXPECT_FALSE(server.Start());
+	EXPECT_TRUE(server.Start());
 
 	NativeLink::TestClientConfig clientConfig;
 	clientConfig.carrierKind = NativeLink::CarrierKind::Tcp;
 	clientConfig.channelId = "native-link-tcp-placeholder";
 	clientConfig.clientId = "dashboard-a";
+	clientConfig.port = 5820;
 	NativeLink::TestClient client(clientConfig);
-	EXPECT_FALSE(client.Start());
+	ASSERT_TRUE(client.Start());
+
+	const std::vector<NativeLink::SnapshotEvent> snapshot = client.Connect(1000);
+	ASSERT_FALSE(snapshot.empty());
+	server.PublishNumber("Timer", 6.25);
+	const std::vector<NativeLink::UpdateEnvelope> live = DrainUntilTopic(client, "Timer");
+	const NativeLink::UpdateEnvelope* timer = FindEventByTopic(live, "Timer");
+	ASSERT_NE(timer, nullptr);
+	EXPECT_DOUBLE_EQ(timer->value.doubleValue, 6.25);
+
+	ASSERT_TRUE(client.PublishNumber("TestMove", 8.5));
+	std::this_thread::sleep_for(std::chrono::milliseconds(100));
+	double latestMove = 0.0;
+	EXPECT_TRUE(server.TryGetNumber("TestMove", latestMove));
+	EXPECT_DOUBLE_EQ(latestMove, 8.5);
+
+	client.Stop();
+	server.Stop();
 }

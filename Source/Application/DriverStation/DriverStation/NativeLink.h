@@ -169,6 +169,8 @@
 		{
 			CarrierKind carrierKind = CarrierKind::SharedMemory;
 			std::string channelId = "native-link-default";
+			std::string host = "127.0.0.1";
+			std::uint16_t port = 5810;
 		};
 
 		struct TestClientConfig
@@ -176,6 +178,8 @@
 			CarrierKind carrierKind = CarrierKind::SharedMemory;
 			std::string channelId;
 			std::string clientId;
+			std::string host = "127.0.0.1";
+			std::uint16_t port = 5810;
 		};
 
 	class Core

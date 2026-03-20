@@ -2,6 +2,7 @@
 #include "NativeLink.h"
 #include "NativeLinkAuthorityHelpers.h"
 #include "NativeLinkSharedMemory.h"
+#include "NativeLinkTcp.h"
 
 #include <Windows.h>
 
@@ -529,6 +530,7 @@ namespace NativeLink
 		SharedState* shared = nullptr;
 		AutoHandle clientDataEvent;
 		AutoHandle serverHeartbeatEvent;
+		std::unique_ptr<detail::ITcpServerCarrier> tcpCarrier;
 		std::thread worker;
 		std::atomic<bool> running;
 		std::atomic<bool> stopRequested;
@@ -555,6 +557,22 @@ namespace NativeLink
 		{
 			if (running.load())
 				return true;
+
+			if (config.carrierKind == CarrierKind::Tcp)
+			{
+				RegisterDefaultTopics();
+				core.BeginNewSession();
+				tcpCarrier = detail::CreateTcpServerCarrier(config, core);
+				if (!tcpCarrier || !tcpCarrier->Start())
+				{
+					tcpCarrier.reset();
+					return false;
+				}
+				stopRequested.store(false);
+				running.store(true);
+				worker = std::thread(&Impl::RunLoop, this);
+				return true;
+			}
 
 			if (config.carrierKind != CarrierKind::SharedMemory)
 			{
@@ -630,6 +648,12 @@ namespace NativeLink
 				worker.join();
 			running.store(false);
 
+			if (tcpCarrier)
+			{
+				tcpCarrier->Stop();
+				tcpCarrier.reset();
+			}
+
 			if (mappingView)
 			{
 				UnmapViewOfFile(mappingView);
@@ -640,6 +664,11 @@ namespace NativeLink
 
 		void PublishEnvelopeToAllClients(const UpdateEnvelope& envelope)
 		{
+			if (tcpCarrier)
+			{
+				tcpCarrier->PublishEnvelopeToAllClients(envelope);
+				return;
+			}
 			if (!shared)
 				return;
 
@@ -666,6 +695,11 @@ namespace NativeLink
 		void PublishSnapshotForClient(const std::string& clientId)
 		{
 			const std::vector<SnapshotEvent> snapshot = core.ConnectClient(clientId).snapshotEvents;
+			if (tcpCarrier)
+			{
+				tcpCarrier->PublishSnapshotForClient(clientId, snapshot);
+				return;
+			}
 			for (std::size_t i = 0; i < snapshot.size(); ++i)
 			{
 				PublishEnvelopeToSingleClient(clientId, detail::SnapshotEventToEnvelope(snapshot[i], core.GetServerSessionId()));
@@ -674,6 +708,11 @@ namespace NativeLink
 
 		void PublishEnvelopeToSingleClient(const std::string& clientId, const UpdateEnvelope& envelope)
 		{
+			if (tcpCarrier)
+			{
+				tcpCarrier->PublishEnvelopeToSingleClient(clientId, envelope);
+				return;
+			}
 			if (!shared)
 				return;
 
@@ -728,6 +767,26 @@ namespace NativeLink
 		{
 			while (!stopRequested.load())
 			{
+				if (tcpCarrier)
+				{
+					std::vector<std::pair<std::string, std::pair<std::string, TopicValue>>> writes;
+					tcpCarrier->DrainClientWrites(writes);
+					for (std::size_t i = 0; i < writes.size(); ++i)
+					{
+						UpdateEnvelope live;
+						if (!core.GetTopicLeaseInfo(writes[i].second.first).hasLeaseHolder)
+							core.AcquireLease(writes[i].second.first, writes[i].first);
+						const WriteResult result = core.Publish(writes[i].second.first, writes[i].second.second, writes[i].first);
+						std::vector<UpdateEnvelope> clientEvents = core.DrainClientEvents(writes[i].first);
+						for (std::size_t j = 0; j < clientEvents.size(); ++j)
+							PublishEnvelopeToSingleClient(writes[i].first, clientEvents[j]);
+						if (result.accepted && detail::BuildLiveEnvelopeForTopic(core, writes[i].second.first, writes[i].first, result.serverSequence, live))
+							PublishEnvelopeToAllClients(live);
+					}
+					std::this_thread::sleep_for(std::chrono::milliseconds(10));
+					continue;
+				}
+
 				shared->lastServerHeartbeatUs.store(GetSteadyNowUs(), std::memory_order_release);
 				if (serverHeartbeatEvent.handle)
 					SetEvent(serverHeartbeatEvent.handle);
@@ -926,6 +985,7 @@ namespace NativeLink
 		SharedState* shared = nullptr;
 		AutoHandle clientDataEvent;
 		AutoHandle heartbeatEvent;
+		std::unique_ptr<detail::ITcpClientCarrier> tcpCarrier;
 		std::uint32_t slotIndex = kMaxClients;
 		std::uint64_t clientTag = 0;
 
@@ -946,6 +1006,12 @@ namespace NativeLink
 
 		bool Start()
 		{
+			if (config.carrierKind == CarrierKind::Tcp)
+			{
+				tcpCarrier = detail::CreateTcpClientCarrier(config);
+				return tcpCarrier && tcpCarrier->Start();
+			}
+
 			if (config.carrierKind != CarrierKind::SharedMemory)
 			{
 				return false;
@@ -995,6 +1061,12 @@ namespace NativeLink
 
 		void Stop()
 		{
+			if (tcpCarrier)
+			{
+				tcpCarrier->Stop();
+				tcpCarrier.reset();
+			}
+
 			if (shared && slotIndex < kMaxClients)
 			{
 				shared->clients[slotIndex].clientTag.store(0, std::memory_order_release);
@@ -1012,6 +1084,8 @@ namespace NativeLink
 		std::vector<UpdateEnvelope> DrainMessages(std::uint32_t timeoutMs)
 		{
 			std::vector<UpdateEnvelope> result;
+			if (tcpCarrier)
+				return tcpCarrier->DrainMessages(timeoutMs);
 			if (!shared || slotIndex >= kMaxClients)
 				return result;
 
@@ -1034,6 +1108,8 @@ namespace NativeLink
 
 		bool Publish(const std::string& keyName, const TopicValue& value)
 		{
+			if (tcpCarrier)
+				return tcpCarrier->Publish(keyName, value);
 			if (!shared || slotIndex >= kMaxClients)
 				return false;
 

@@ -221,6 +221,7 @@ add_executable(DriverStation_TransportSmoke
     Source/Application/DriverStation/DriverStation/NativeLinkAuthorityHelpers.cpp
     Source/Application/DriverStation/DriverStation/NativeLink.cpp
     Source/Application/DriverStation/DriverStation/NativeLinkSharedMemory.cpp
+    Source/Application/DriverStation/DriverStation/NativeLinkTcp.cpp
 )
 target_include_directories(DriverStation_TransportSmoke
     PRIVATE
@@ -230,6 +231,7 @@ target_link_libraries(DriverStation_TransportSmoke
     PRIVATE
         RobotAssembly_static
         SmartDashboard
+        ws2_32
 )
 
 if(BUILD_UNIT_TESTS)
@@ -246,6 +248,7 @@ if(BUILD_UNIT_TESTS)
         Source/Application/DriverStation/DriverStation/NativeLinkAuthorityHelpers.cpp
         Source/Application/DriverStation/DriverStation/NativeLink.cpp
         Source/Application/DriverStation/DriverStation/NativeLinkSharedMemory.cpp
+        Source/Application/DriverStation/DriverStation/NativeLinkTcp.cpp
         Source/Modules/Robot/Entity1D/Entity1D/Entity1D.cpp
         Source/Modules/Robot/Entity2D/Entity2D/Entity2D.cpp
         Source/Modules/Robot/DriveKinematics/DriveKinematics/Vehicle_Drive.cpp
@@ -262,6 +265,7 @@ if(BUILD_UNIT_TESTS)
             SmartDashboard
             GTest::gtest
             GTest::gtest_main
+            ws2_32
     )
     gtest_discover_tests(robot_unit_tests)
 endif()
@@ -275,6 +279,7 @@ if(BUILD_DRIVER_STATION)
         Source/Application/DriverStation/DriverStation/NativeLinkAuthorityHelpers.cpp
         Source/Application/DriverStation/DriverStation/NativeLink.cpp
         Source/Application/DriverStation/DriverStation/NativeLinkSharedMemory.cpp
+        Source/Application/DriverStation/DriverStation/NativeLinkTcp.cpp
         Source/Application/DriverStation/DriverStation/stdafx.cpp
         Source/Application/DriverStation/DriverStation/DriverStation.rc
     )
@@ -288,6 +293,7 @@ if(BUILD_DRIVER_STATION)
             RobotAssembly_static
             shlwapi
             winmm
+            ws2_32
     )
 
     add_custom_command(TARGET DriverStation POST_BUILD
