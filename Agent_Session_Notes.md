@@ -13,7 +13,7 @@
 ## Active Native Link context
 
 - `Source/Application/DriverStation/DriverStation/NativeLink.h` now exposes the active carrier/config boundary for the simulator-owned authority and test client.
-- Current working backend is still SHM + named events; explicit `tcp` selection currently fails cleanly as a placeholder.
+- Current working backends are SHM + named events for diagnostics and localhost TCP for the reference/runtime path.
 - `Robot_Simulation` is the first reference authority/example for Native Link semantics, but should not become the permanent home of all reusable authority-side logic.
 - Important runtime lesson: `eNativeLink` must stay out of `DashboardTransportRouter::UsesLegacyTransportPath()` or the UI can claim Native Link while the old backend is still running underneath.
 
@@ -26,6 +26,6 @@
 
 ## Immediate next-session focus
 
-1. Keep runtime TCP integration environment-driven/internal first; do not add a public SHM/TCP selector unless there is a clear product need.
+1. User testing / pre-merge verification of the Native Link TCP checkpoint.
 2. Keep the example/use-case story adapter-friendly for future SmartDashboard / Shuffleboard / Elastic / bridge integrations.
-3. After the next cleanup slice, rerun focused Native Link tests plus the SmartDashboard SHM and TCP runtime probes.
+3. If follow-up fixes land, rerun focused Native Link tests plus the SmartDashboard SHM and TCP runtime probes.
