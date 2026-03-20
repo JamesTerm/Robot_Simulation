@@ -116,14 +116,14 @@ namespace NativeLink::detail
 			return true;
 		}
 
-		bool ReceiveFrame(SOCKET socketHandle, std::uint32_t timeoutMs, TcpFrameKind& outKind, std::vector<unsigned char>& outPayload)
+		ReceiveStatus ReceiveFrame(SOCKET socketHandle, std::uint32_t timeoutMs, TcpFrameKind& outKind, std::vector<unsigned char>& outPayload)
 		{
 			TcpFrameHeader header {};
 			const ReceiveStatus headerStatus = RecvAllWithTimeout(socketHandle, reinterpret_cast<char*>(&header), static_cast<int>(sizeof(header)), timeoutMs);
 			if (headerStatus != ReceiveStatus::Success)
-				return false;
+				return headerStatus;
 			if (header.magic != kTcpFrameMagic || header.version != kTcpFrameVersion || header.payloadBytes > sizeof(SharedMessage))
-				return false;
+				return ReceiveStatus::Error;
 
 			outKind = static_cast<TcpFrameKind>(header.kind);
 			outPayload.resize(header.payloadBytes);
@@ -131,9 +131,9 @@ namespace NativeLink::detail
 			{
 				const ReceiveStatus payloadStatus = RecvAllWithTimeout(socketHandle, reinterpret_cast<char*>(outPayload.data()), static_cast<int>(outPayload.size()), timeoutMs);
 				if (payloadStatus != ReceiveStatus::Success)
-					return false;
+					return payloadStatus;
 			}
-			return true;
+			return ReceiveStatus::Success;
 		}
 	}
 
@@ -327,7 +327,7 @@ namespace NativeLink::detail
 		{
 			TcpFrameKind kind = TcpFrameKind::Heartbeat;
 			std::vector<unsigned char> payload;
-			if (!ReceiveFrame(client->socketHandle, 2000, kind, payload)
+			if (ReceiveFrame(client->socketHandle, 2000, kind, payload) != ReceiveStatus::Success
 				|| kind != TcpFrameKind::ClientHello
 				|| payload.size() != sizeof(TcpHelloPayload))
 			{
@@ -355,7 +355,10 @@ namespace NativeLink::detail
 
 			while (!m_stopRequested.load() && client->alive.load())
 			{
-				if (!ReceiveFrame(client->socketHandle, 100, kind, payload))
+				const ReceiveStatus status = ReceiveFrame(client->socketHandle, 100, kind, payload);
+				if (status == ReceiveStatus::Timeout)
+					continue;
+				if (status != ReceiveStatus::Success)
 					break;
 				client->lastHeartbeatUs.store(GetSteadyNowUs());
 				if (kind == TcpFrameKind::Heartbeat)
@@ -432,7 +435,7 @@ namespace NativeLink::detail
 
 			TcpFrameKind kind = TcpFrameKind::Heartbeat;
 			std::vector<unsigned char> payload;
-			if (!ReceiveFrame(m_socket, 2000, kind, payload)
+			if (ReceiveFrame(m_socket, 2000, kind, payload) != ReceiveStatus::Success
 				|| kind != TcpFrameKind::ServerHello
 				|| payload.size() != sizeof(TcpServerHelloPayload))
 				return false;
@@ -459,8 +462,13 @@ namespace NativeLink::detail
 			std::vector<unsigned char> payload;
 			const std::uint32_t firstTimeoutMs = timeoutMs > 0 ? timeoutMs : 1;
 			std::uint32_t currentTimeoutMs = firstTimeoutMs;
-			while (ReceiveFrame(m_socket, currentTimeoutMs, kind, payload))
+			while (true)
 			{
+				const ReceiveStatus status = ReceiveFrame(m_socket, currentTimeoutMs, kind, payload);
+				if (status == ReceiveStatus::Timeout)
+					break;
+				if (status != ReceiveStatus::Success)
+					break;
 				if (kind == TcpFrameKind::ServerMessage && payload.size() == sizeof(SharedMessage))
 				{
 					SharedMessage message {};
