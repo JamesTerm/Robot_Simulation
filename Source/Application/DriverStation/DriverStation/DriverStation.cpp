@@ -56,7 +56,16 @@ namespace
 
 	NativeLink::CarrierKind GetDefaultNativeLinkCarrier()
 	{
+		// Ian: TCP is the intended normal runtime carrier. SharedMemory is only
+		// used in Debug when the developer explicitly selects it via the carrier
+		// combo (which is #ifdef _DEBUG only). In Release there is no UI to change
+		// this, so always default to TCP so a clean release build just works
+		// without requiring a DriverStation.ini on the target machine.
+#ifdef _DEBUG
 		return NativeLink::CarrierKind::SharedMemory;
+#else
+		return NativeLink::CarrierKind::Tcp;
+#endif
 	}
 
 	bool TryGetConnectionSettingsPath(std::wstring& settingsPath)
