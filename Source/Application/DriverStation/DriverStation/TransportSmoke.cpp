@@ -14,11 +14,29 @@ int main(int argc, char** argv)
 {
 	const NativeLink::ServerConfig nativeLinkConfig = NativeLink::LoadServerConfigFromEnvironment();
 	DWORD runMs = 500;
+	DWORD startupDelayMs = 0;
+	double testMove = 3.5;
 	if (argc > 1)
 	{
 		const long parsed = std::strtol(argv[1], nullptr, 10);
 		if (parsed > 0)
 			runMs = static_cast<DWORD>(parsed);
+	}
+	for (int i = 2; i < argc; ++i)
+	{
+		const std::string arg = argv[i] ? argv[i] : "";
+		if (arg == "--startup-delay-ms" && (i + 1) < argc)
+		{
+			const long parsed = std::strtol(argv[++i], nullptr, 10);
+			if (parsed > 0)
+				startupDelayMs = static_cast<DWORD>(parsed);
+		}
+		else if (arg == "--test-move" && (i + 1) < argc)
+		{
+			const double parsed = std::strtod(argv[++i], nullptr);
+			if (parsed > 0.0)
+				testMove = parsed;
+		}
 	}
 
 	RobotTester tester;
@@ -30,6 +48,12 @@ int main(int argc, char** argv)
 		nativeLinkConfig.channelId.c_str(),
 		nativeLinkConfig.host.c_str(),
 		static_cast<unsigned>(nativeLinkConfig.port));
+
+	if (startupDelayMs > 0)
+	{
+		printf("[TransportSmoke] startup_delay_ms=%lu\n", static_cast<unsigned long>(startupDelayMs));
+		Sleep(startupDelayMs);
+	}
 
 	SmartDashboard::PutString("Test/Auton_Selection/AutoChooser/.type", "String Chooser");
 	std::vector<std::string> chooserOptions;
@@ -43,8 +67,8 @@ int main(int argc, char** argv)
 	SmartDashboard::PutString("Test/Auton_Selection/AutoChooser/default", "Do Nothing");
 	SmartDashboard::PutString("Test/Auton_Selection/AutoChooser/active", "Do Nothing");
 	SmartDashboard::PutString("Test/Auton_Selection/AutoChooser/selected", "Just Move Forward");
-	SmartDashboard::PutNumber("TestMove", 3.5);
-	printf("[TransportSmoke] seeded chooser selected='Just Move Forward' TestMove=3.5 run_ms=%lu\n", static_cast<unsigned long>(runMs));
+	SmartDashboard::PutNumber("TestMove", testMove);
+	printf("[TransportSmoke] seeded chooser selected='Just Move Forward' TestMove=%g run_ms=%lu\n", testMove, static_cast<unsigned long>(runMs));
 
 	tester.SetGameMode(0); // auton
 	tester.StartStreaming();

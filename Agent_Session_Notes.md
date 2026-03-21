@@ -16,6 +16,14 @@
 - Current working backends are SHM + named events for diagnostics and localhost TCP for the reference/runtime path.
 - `Robot_Simulation` is the first reference authority/example for Native Link semantics, but should not become the permanent home of all reusable authority-side logic.
 - Important runtime lesson: `eNativeLink` must stay out of `DashboardTransportRouter::UsesLegacyTransportPath()` or the UI can claim Native Link while the old backend is still running underneath.
+- Debug builds now expose a manual Native Link carrier picker in the DriverStation dialog so the simulator side can match SmartDashboard's SHM vs TCP manual comparisons.
+- `DriverStation_TransportSmoke` now supports `--startup-delay-ms` and `--test-move` for longer manual observe runs without rebuilding.
+
+## Current manual-debug checkpoint
+
+- SmartDashboard and DriverStation now both have debug-only Native Link carrier overrides for manual SHM vs TCP parity checks.
+- The latest one-dashboard SHM observe flow can connect reliably when the authority starts first.
+- Current paired gap still under investigation: Native Link retained/default state arrives, but live motion telemetry like `Velocity` still does not yet match Direct Connect behavior in the latest manual observe pass.
 
 ## Strategy reminders
 
@@ -26,6 +34,6 @@
 
 ## Immediate next-session focus
 
-1. User testing / pre-merge verification of the Native Link TCP checkpoint.
-2. Keep the example/use-case story adapter-friendly for future SmartDashboard / Shuffleboard / Elastic / bridge integrations.
+1. Compare the same manual Native Link flow on SHM vs TCP with both apps explicitly aligned on carrier.
+2. Trace why live motion telemetry still falls short of Direct Connect after Native Link connect succeeds.
 3. If follow-up fixes land, rerun focused Native Link tests plus the SmartDashboard SHM and TCP runtime probes.

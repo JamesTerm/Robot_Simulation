@@ -1,5 +1,14 @@
 # Project history
 
+## 2026-03-20 - Native Link manual carrier toggle and observe helper alignment
+
+- Added a debug-only Native Link carrier picker to the `DriverStation` dialog so local manual validation can switch the simulator authority between `Shared Memory (SHM)` and `TCP/IP` without editing environment variables by hand.
+- The picker persists the selected carrier in the local `DriverStation.ini` settings file and reapplies the matching `NATIVE_LINK_*` environment before Native Link backend initialization.
+- Added runtime knobs to `DriverStation_TransportSmoke` so manual/paired Native Link observe flows can:
+  - delay the initial chooser/`TestMove` seed after startup
+  - override `TestMove` (for example `10`) without rebuilding.
+- This keeps Robot_Simulation aligned with the current SmartDashboard-side manual debugging workflow, where both apps now need explicit carrier agreement to compare SHM and TCP behavior cleanly.
+
 ## 2026-03-19 - Native Link IPC carrier alignment checkpoint
 
 - Updated the simulator-owned Native Link shared-memory carrier to stay in lockstep with the SmartDashboard checkpoint work:
