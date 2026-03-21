@@ -142,11 +142,17 @@ namespace
 		if (!TryGetConnectionSettingsPath(settingsPath))
 			return GetDefaultNativeLinkCarrier();
 
+		// Ian: use GetDefaultNativeLinkCarrier() as the INI fallback so a clean
+		// machine (no DriverStation.ini) gets the same default as a fresh launch.
+		// In Release that is Tcp; in Debug it is SharedMemory.
+		const wchar_t* defaultCarrierStr =
+			GetDefaultNativeLinkCarrier() == NativeLink::CarrierKind::Tcp ? L"tcp" : L"shm";
+
 		wchar_t buffer[16] = {};
 		GetPrivateProfileStringW(
 			c_ConnectionSettingsSection,
 			c_NativeLinkCarrierKey,
-			L"shm",
+			defaultCarrierStr,
 			buffer,
 			static_cast<DWORD>(_countof(buffer)),
 			settingsPath.c_str());
@@ -173,7 +179,12 @@ namespace
 	{
 		SetEnvironmentVariableA("NATIVE_LINK_CARRIER", NativeLink::ToString(carrier));
 		SetEnvironmentVariableA("NATIVE_LINK_CHANNEL_ID", "native-link-default");
-		SetEnvironmentVariableA("NATIVE_LINK_HOST", "127.0.0.1");
+		// Ian: Bind to 0.0.0.0 (all interfaces) so a remote SmartDashboard on another
+		// machine can reach port 5810 across the LAN. Legacy NT uses INADDR_ANY for the
+		// same reason. 127.0.0.1 (loopback) would silently reject every cross-machine
+		// connection at the kernel level before the process even sees it, and Windows
+		// Firewall would never prompt because no external packet would reach the socket.
+		SetEnvironmentVariableA("NATIVE_LINK_HOST", "0.0.0.0");
 		SetEnvironmentVariableA("NATIVE_LINK_PORT", "5810");
 	}
 
@@ -529,19 +540,27 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 					}
 				}
 				break;
-			case c_NativeLinkCarrierComboId:
-				if (HIWORD(wParam) == CBN_SELCHANGE)
-				{
-					const NativeLink::CarrierKind carrier = GetSelectedNativeLinkCarrier();
-					PersistNativeLinkCarrier(carrier);
-					ApplyNativeLinkEnvironment(carrier);
-					if (s_pRobotTester && s_pRobotTester->GetConnectionMode() == ConnectionMode::eNativeLink)
-					{
-						ApplyConnectionMode(ConnectionMode::eDirectConnect);
-						ApplyConnectionMode(ConnectionMode::eNativeLink);
-					}
-				}
-				break;
+		case c_NativeLinkCarrierComboId:
+			if (HIWORD(wParam) == CBN_SELCHANGE)
+			{
+				const NativeLink::CarrierKind carrier = GetSelectedNativeLinkCarrier();
+				PersistNativeLinkCarrier(carrier);
+				ApplyNativeLinkEnvironment(carrier);
+				// Ian: do NOT call ApplyConnectionMode(eDirectConnect) followed by
+				// ApplyConnectionMode(eNativeLink) here.  That two-step bounce was
+				// intended to restart the NativeLink server with the new carrier env,
+				// but ApplyConnectionMode calls SetConnectionMode which does a full
+				// teardown/restart; the intermediate eDirectConnect transition is
+				// visible to the user, flips the connection mode combo away from
+				// Native Link, and (in Debug) causes the DS window to become unusable.
+				// Instead, only restart if we are already in Native Link mode, and do
+				// so by calling SetConnectionMode(eNativeLink) directly on the robot
+				// tester — this re-applies the mode with the new carrier env that was
+				// just written above, without ever surfacing a DirectConnect state.
+				if (s_pRobotTester && s_pRobotTester->GetConnectionMode() == ConnectionMode::eNativeLink)
+					s_pRobotTester->SetConnectionMode(ConnectionMode::eNativeLink);
+			}
+			break;
 			case IDM_EXIT:
 			case IDCANCEL:  //Not sure why this 2 is the same as the close button
 				printf("Shutting down\n");
