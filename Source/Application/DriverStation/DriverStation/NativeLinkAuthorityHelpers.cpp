@@ -28,6 +28,15 @@ namespace NativeLink::detail
 		if (core.IsTopicRegistered("Test/Auton_Selection/AutoChooser/selected"))
 			return;
 
+		// Ian: This list is intentionally minimal.  Only the few topics that need
+		// special writer policies (LeaseSingleWriter for operator-owned controls,
+		// StringArray for the chooser options blob) must be pre-declared here.
+		// All other robot-code keys (Velocity, Heading, wheel velocities, etc.) are
+		// auto-registered on first server-originated write in Core::PublishInternal
+		// when allowServerOnly=true.  Do NOT add every TeleAutonV2 key here — the
+		// auto-register path is the correct place for those, and duplicating them
+		// here would hide the auto-register logic and make both paths drift.
+		//
 		// Ian: Keep the first reference authority seeded with the same visible keys
 		// we already validated in Direct so carrier work changes transport behavior,
 		// not the application-level expectations students are trying to compare.

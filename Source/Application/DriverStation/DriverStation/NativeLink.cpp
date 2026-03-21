@@ -248,20 +248,47 @@ namespace NativeLink
 		return PublishInternal(topicPath, value, detail::kServerClientId, true);
 	}
 
+	// Ian: PublishInternal is the single write-path gate.  It auto-registers
+	// unknown topics for server-originated writes (allowServerOnly=true) so
+	// robot code doesn't need to manually pre-declare every telemetry key.
+	// Client-originated writes on unknown topics are still rejected, preserving
+	// the server-authoritative ownership model: only the simulator may introduce
+	// new topics; dashboard clients may only write to pre-declared writable topics.
 	WriteResult Core::PublishInternal(const std::string& topicPath, const TopicValue& value, const std::string& sourceClientId, bool allowServerOnly)
 	{
 		TopicRuntime* topic = FindTopic(topicPath);
 		if (topic == nullptr)
 		{
-			UpdateEnvelope rejectEvent;
-			rejectEvent.serverSessionId = m_serverSessionId;
-			rejectEvent.topicPath = topicPath;
-			rejectEvent.sourceClientId = sourceClientId;
-			rejectEvent.deliveryKind = DeliveryKind::LiveCommandReject;
-			rejectEvent.value = value;
-			rejectEvent.rejectionReason = WriteRejectReason::UnknownTopic;
-			EnqueueEventForClient(sourceClientId, rejectEvent);
-			return WriteResult{ false, WriteRejectReason::UnknownTopic, 0 };
+			// Ian: Auto-register unknown topics on first server-originated write so
+			// any SmartDashboard::PutNumber/PutString call from robot code flows
+			// through to clients without requiring manual registration in
+			// RegisterDefaultTopics. Client-originated writes on unknown topics
+			// are still rejected -- they should only write to pre-declared topics.
+			if (allowServerOnly)
+			{
+				TopicDescriptor autoDesc;
+				autoDesc.topicPath = topicPath;
+				autoDesc.topicKind = TopicKind::State;
+				autoDesc.valueType = value.type;
+				autoDesc.retentionMode = RetentionMode::LatestValue;
+				autoDesc.replayOnSubscribe = true;
+				autoDesc.writerPolicy = WriterPolicy::ServerOnly;
+				RegisterTopic(autoDesc);
+				topic = FindTopic(topicPath);
+			}
+
+			if (topic == nullptr)
+			{
+				UpdateEnvelope rejectEvent;
+				rejectEvent.serverSessionId = m_serverSessionId;
+				rejectEvent.topicPath = topicPath;
+				rejectEvent.sourceClientId = sourceClientId;
+				rejectEvent.deliveryKind = DeliveryKind::LiveCommandReject;
+				rejectEvent.value = value;
+				rejectEvent.rejectionReason = WriteRejectReason::UnknownTopic;
+				EnqueueEventForClient(sourceClientId, rejectEvent);
+				return WriteResult{ false, WriteRejectReason::UnknownTopic, 0 };
+			}
 		}
 
 		if (!TopicValueMatches(topic->descriptor.valueType, value))
