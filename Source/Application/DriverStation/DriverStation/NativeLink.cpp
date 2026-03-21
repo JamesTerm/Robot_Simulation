@@ -749,6 +749,14 @@ namespace NativeLink
 					continue;
 
 				const std::uint32_t writeIndex = slot.serverWriteIndex.load(std::memory_order_acquire);
+				// Ian: Guard against ring buffer overwrite. If the client is lagging and
+				// the ring is full (writeIndex has lapped clientReadIndex by kMaxMessages),
+				// skip this slot rather than overwriting unread messages. A lagging client
+				// may miss live updates, but its ring cursor stays valid and it will catch
+				// up on the next drain cycle instead of reading stale/corrupted data.
+				const std::uint32_t readIndex = slot.clientReadIndex.load(std::memory_order_acquire);
+				if (writeIndex - readIndex >= kMaxMessages)
+					continue;
 				slot.messages[writeIndex % kMaxMessages] = message;
 				slot.serverWriteIndex.store(writeIndex + 1, std::memory_order_release);
 			}
@@ -786,6 +794,14 @@ namespace NativeLink
 				if (ReadUtf8(slot.clientId, sizeof(slot.clientId)) != clientId)
 					continue;
 				const std::uint32_t writeIndex = slot.serverWriteIndex.load(std::memory_order_acquire);
+				// Ian: Same ring-full guard as PublishEnvelopeToAllClients — skip rather
+				// than overwrite if the client hasn't drained yet. Snapshot delivery is
+				// bursty at connect time but the client drains continuously, so this
+				// guard mainly prevents a pathological slow-client from corrupting its
+				// own snapshot mid-delivery.
+				const std::uint32_t readIndex = slot.clientReadIndex.load(std::memory_order_acquire);
+				if (writeIndex - readIndex >= kMaxMessages)
+					break;
 				slot.messages[writeIndex % kMaxMessages] = message;
 				slot.serverWriteIndex.store(writeIndex + 1, std::memory_order_release);
 				break;
