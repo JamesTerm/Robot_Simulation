@@ -98,18 +98,23 @@ namespace NativeLink
 	{
 		ServerConfig config;
 
+		// Ian: Use GetEnvironmentVariableA (Win32 API) consistently for ALL env reads.
+		// _dupenv_s is a CRT function that reads from the CRT's internal env cache, while
+		// SetEnvironmentVariableA (used by ApplyNativeLinkEnvironment) writes via the Win32 API
+		// to the OS env block. In the same-process case these can be out of sync at startup,
+		// causing the carrier to read as empty/default (SharedMemory) even though the Win32
+		// env block already has "NATIVE_LINK_CARRIER=tcp". Always use GetEnvironmentVariableA
+		// (Win32) to match the Win32 write — never mix CRT and Win32 env accessors.
 		char buffer[256] = {};
-		char* value = nullptr;
-		std::size_t required = 0;
-		if (_dupenv_s(&value, &required, "NATIVE_LINK_CARRIER") == 0 && value != nullptr)
+		DWORD len = GetEnvironmentVariableA("NATIVE_LINK_CARRIER", buffer, static_cast<DWORD>(sizeof(buffer)));
+		if (len > 0 && len < sizeof(buffer))
 		{
 			CarrierKind parsed = config.carrierKind;
-			if (TryParseCarrierKind(value, parsed))
+			if (TryParseCarrierKind(buffer, parsed))
 				config.carrierKind = parsed;
-			free(value);
 		}
 
-		DWORD len = GetEnvironmentVariableA("NATIVE_LINK_CHANNEL_ID", buffer, static_cast<DWORD>(sizeof(buffer)));
+		len = GetEnvironmentVariableA("NATIVE_LINK_CHANNEL_ID", buffer, static_cast<DWORD>(sizeof(buffer)));
 		if (len > 0 && len < sizeof(buffer))
 			config.channelId = buffer;
 
