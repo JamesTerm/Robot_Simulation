@@ -16,6 +16,7 @@
 //#include "../../../Base/Joystick.h"
 //#include "../../../Base/JoystickBinder.h"
 //#include "Keyboard.h"
+#include "NativeLink.h"
 #include "Robot_Tester.h"
 #pragma endregion
 
@@ -26,6 +27,8 @@ HINSTANCE hInst;                                // current instance
 WCHAR szTitle[MAX_LOADSTRING];                  // The title bar text
 WCHAR szWindowClass[MAX_LOADSTRING];            // the main window class name
 HWND g_hDlg = nullptr;
+HWND g_hNativeLinkCarrierLabel = nullptr;
+HWND g_hNativeLinkCarrierCombo = nullptr;
 
 //Since the lambda cannot capture, we must give it access to the robot here
 RobotTester *s_pRobotTester = nullptr;  
@@ -39,13 +42,30 @@ namespace
 	const wchar_t* c_ConnectionSettingsFile = L"DriverStation.ini";
 	const wchar_t* c_ConnectionSettingsSection = L"Connection";
 	const wchar_t* c_ConnectionSettingsKey = L"Mode";
+	const wchar_t* c_NativeLinkCarrierKey = L"NativeLinkCarrier";
 	const wchar_t* c_WindowSettingsSection = L"Window";
 	const wchar_t* c_WindowPosXKey = L"PosX";
 	const wchar_t* c_WindowPosYKey = L"PosY";
+	const int c_NativeLinkCarrierLabelId = 1010;
+	const int c_NativeLinkCarrierComboId = 1011;
 
 	ConnectionMode GetDefaultConnectionMode()
 	{
 		return ConnectionMode::eDirectConnect;
+	}
+
+	NativeLink::CarrierKind GetDefaultNativeLinkCarrier()
+	{
+		// Ian: TCP is the intended normal runtime carrier. SharedMemory is only
+		// used in Debug when the developer explicitly selects it via the carrier
+		// combo (which is #ifdef _DEBUG only). In Release there is no UI to change
+		// this, so always default to TCP so a clean release build just works
+		// without requiring a DriverStation.ini on the target machine.
+#ifdef _DEBUG
+		return NativeLink::CarrierKind::SharedMemory;
+#else
+		return NativeLink::CarrierKind::Tcp;
+#endif
 	}
 
 	bool TryGetConnectionSettingsPath(std::wstring& settingsPath)
@@ -114,6 +134,149 @@ namespace
 			c_ConnectionSettingsKey,
 			buffer,
 			settingsPath.c_str());
+	}
+
+	NativeLink::CarrierKind LoadPersistedNativeLinkCarrier()
+	{
+		std::wstring settingsPath;
+		if (!TryGetConnectionSettingsPath(settingsPath))
+			return GetDefaultNativeLinkCarrier();
+
+		// Ian: use GetDefaultNativeLinkCarrier() as the INI fallback so a clean
+		// machine (no DriverStation.ini) gets the same default as a fresh launch.
+		// In Release that is Tcp; in Debug it is SharedMemory.
+		const wchar_t* defaultCarrierStr =
+			GetDefaultNativeLinkCarrier() == NativeLink::CarrierKind::Tcp ? L"tcp" : L"shm";
+
+		wchar_t buffer[16] = {};
+		GetPrivateProfileStringW(
+			c_ConnectionSettingsSection,
+			c_NativeLinkCarrierKey,
+			defaultCarrierStr,
+			buffer,
+			static_cast<DWORD>(_countof(buffer)),
+			settingsPath.c_str());
+
+		std::wstring value(buffer);
+		std::transform(value.begin(), value.end(), value.begin(), towlower);
+		return value == L"tcp" ? NativeLink::CarrierKind::Tcp : NativeLink::CarrierKind::SharedMemory;
+	}
+
+	void PersistNativeLinkCarrier(NativeLink::CarrierKind carrier)
+	{
+		std::wstring settingsPath;
+		if (!TryGetConnectionSettingsPath(settingsPath))
+			return;
+
+		WritePrivateProfileStringW(
+			c_ConnectionSettingsSection,
+			c_NativeLinkCarrierKey,
+			carrier == NativeLink::CarrierKind::Tcp ? L"tcp" : L"shm",
+			settingsPath.c_str());
+	}
+
+	void ApplyNativeLinkEnvironment(NativeLink::CarrierKind carrier)
+	{
+		SetEnvironmentVariableA("NATIVE_LINK_CARRIER", NativeLink::ToString(carrier));
+		SetEnvironmentVariableA("NATIVE_LINK_CHANNEL_ID", "native-link-default");
+		// Ian: Bind to 0.0.0.0 (all interfaces) so a remote SmartDashboard on another
+		// machine can reach port 5810 across the LAN. Legacy NT uses INADDR_ANY for the
+		// same reason. 127.0.0.1 (loopback) would silently reject every cross-machine
+		// connection at the kernel level before the process even sees it, and Windows
+		// Firewall would never prompt because no external packet would reach the socket.
+		SetEnvironmentVariableA("NATIVE_LINK_HOST", "0.0.0.0");
+		SetEnvironmentVariableA("NATIVE_LINK_PORT", "5810");
+	}
+
+	NativeLink::CarrierKind GetSelectedNativeLinkCarrier()
+	{
+		if (!g_hNativeLinkCarrierCombo)
+			return LoadPersistedNativeLinkCarrier();
+
+		const LRESULT selectedIndex = SendMessageW(g_hNativeLinkCarrierCombo, CB_GETCURSEL, 0, 0);
+		if (selectedIndex == CB_ERR)
+			return LoadPersistedNativeLinkCarrier();
+
+		const LRESULT itemData = SendMessageW(g_hNativeLinkCarrierCombo, CB_GETITEMDATA, static_cast<WPARAM>(selectedIndex), 0);
+		return itemData == static_cast<LRESULT>(NativeLink::CarrierKind::Tcp)
+			? NativeLink::CarrierKind::Tcp
+			: NativeLink::CarrierKind::SharedMemory;
+	}
+
+	void SyncNativeLinkCarrierUiEnabled(HWND hWnd)
+	{
+	#ifdef _DEBUG
+		const bool enabled = s_pRobotTester && s_pRobotTester->GetConnectionMode() == ConnectionMode::eNativeLink;
+		if (g_hNativeLinkCarrierLabel)
+			EnableWindow(g_hNativeLinkCarrierLabel, enabled ? TRUE : FALSE);
+		if (g_hNativeLinkCarrierCombo)
+			EnableWindow(g_hNativeLinkCarrierCombo, enabled ? TRUE : FALSE);
+	#else
+		UNREFERENCED_PARAMETER(hWnd);
+	#endif
+	}
+
+	void CreateNativeLinkCarrierControls(HWND hWnd)
+	{
+	#ifdef _DEBUG
+		RECT windowRect = {};
+		if (GetWindowRect(hWnd, &windowRect))
+		{
+			SetWindowPos(hWnd, nullptr, 0, 0,
+				windowRect.right - windowRect.left,
+				(windowRect.bottom - windowRect.top) + 26,
+				SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+		}
+
+		const HFONT dialogFont = reinterpret_cast<HFONT>(SendMessageW(hWnd, WM_GETFONT, 0, 0));
+		g_hNativeLinkCarrierLabel = CreateWindowW(
+			L"STATIC",
+			L"Carrier",
+			WS_CHILD | WS_VISIBLE,
+			26,
+			98 + 50,
+			46,
+			12,
+			hWnd,
+			reinterpret_cast<HMENU>(static_cast<INT_PTR>(c_NativeLinkCarrierLabelId)),
+			hInst,
+			nullptr);
+		g_hNativeLinkCarrierCombo = CreateWindowW(
+			L"COMBOBOX",
+			L"",
+			WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST | WS_VSCROLL,
+			78,
+			94 + 50,
+			112,
+			100,
+			hWnd,
+			reinterpret_cast<HMENU>(static_cast<INT_PTR>(c_NativeLinkCarrierComboId)),
+			hInst,
+			nullptr);
+		if (dialogFont)
+		{
+			if (g_hNativeLinkCarrierLabel)
+				SendMessageW(g_hNativeLinkCarrierLabel, WM_SETFONT, reinterpret_cast<WPARAM>(dialogFont), TRUE);
+			if (g_hNativeLinkCarrierCombo)
+				SendMessageW(g_hNativeLinkCarrierCombo, WM_SETFONT, reinterpret_cast<WPARAM>(dialogFont), TRUE);
+		}
+
+		if (g_hNativeLinkCarrierCombo)
+		{
+			const LRESULT shmIndex = SendMessageW(g_hNativeLinkCarrierCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Shared Memory (SHM)"));
+			SendMessageW(g_hNativeLinkCarrierCombo, CB_SETITEMDATA, static_cast<WPARAM>(shmIndex), static_cast<LPARAM>(NativeLink::CarrierKind::SharedMemory));
+			const LRESULT tcpIndex = SendMessageW(g_hNativeLinkCarrierCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"TCP/IP"));
+			SendMessageW(g_hNativeLinkCarrierCombo, CB_SETITEMDATA, static_cast<WPARAM>(tcpIndex), static_cast<LPARAM>(NativeLink::CarrierKind::Tcp));
+
+			const NativeLink::CarrierKind persistedCarrier = LoadPersistedNativeLinkCarrier();
+			SendMessageW(g_hNativeLinkCarrierCombo, CB_SETCURSEL,
+				persistedCarrier == NativeLink::CarrierKind::Tcp ? static_cast<WPARAM>(tcpIndex) : static_cast<WPARAM>(shmIndex), 0);
+		}
+
+		SyncNativeLinkCarrierUiEnabled(hWnd);
+	#else
+		UNREFERENCED_PARAMETER(hWnd);
+	#endif
 	}
 
 	bool LoadPersistedWindowPosition(POINT& windowPosition)
@@ -236,10 +399,18 @@ bool TryParseConnectionModeFromCmdLine(LPWSTR cmd_line, ConnectionMode& mode)
 void ApplyConnectionMode(ConnectionMode mode)
 
 {
+	if (mode == ConnectionMode::eNativeLink)
+	{
+		ApplyNativeLinkEnvironment(GetSelectedNativeLinkCarrier());
+	}
+
 	if (s_pRobotTester)
 		s_pRobotTester->SetConnectionMode(mode);
 	if (g_hDlg)
+	{
 		PopulateConnectionModeCombo(g_hDlg, mode);
+		SyncNativeLinkCarrierUiEnabled(g_hDlg);
+	}
 	PersistConnectionMode(mode);
 
 	std::wstring message = L"Connection Mode: ";
@@ -278,6 +449,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	}
 	UNREFERENCED_PARAMETER(hPrevInstance);
 	s_InitialConnectionMode = LoadPersistedConnectionMode();
+	ApplyNativeLinkEnvironment(LoadPersistedNativeLinkCarrier());
 	ConnectionMode commandLineMode = s_InitialConnectionMode;
 	if (TryParseConnectionModeFromCmdLine(lpCmdLine, commandLineMode))
 		s_InitialConnectionMode = commandLineMode;
@@ -304,6 +476,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 			CheckDlgButton(hWnd, IDC_Tele, BM_SETCHECK);
 			CheckDlgButton(hWnd, IDC_Stop, BM_SETCHECK);
 			PopulateConnectionModeCombo(hWnd, s_InitialConnectionMode);
+			CreateNativeLinkCarrierControls(hWnd);
 			RestorePersistedWindowPosition(hWnd);
 			//Button_SetState(hWnd, IDStop, BM_CLICK, true, 0);
 			return (INT_PTR)TRUE;
@@ -367,6 +540,27 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 					}
 				}
 				break;
+		case c_NativeLinkCarrierComboId:
+			if (HIWORD(wParam) == CBN_SELCHANGE)
+			{
+				const NativeLink::CarrierKind carrier = GetSelectedNativeLinkCarrier();
+				PersistNativeLinkCarrier(carrier);
+				ApplyNativeLinkEnvironment(carrier);
+				// Ian: do NOT call ApplyConnectionMode(eDirectConnect) followed by
+				// ApplyConnectionMode(eNativeLink) here.  That two-step bounce was
+				// intended to restart the NativeLink server with the new carrier env,
+				// but ApplyConnectionMode calls SetConnectionMode which does a full
+				// teardown/restart; the intermediate eDirectConnect transition is
+				// visible to the user, flips the connection mode combo away from
+				// Native Link, and (in Debug) causes the DS window to become unusable.
+				// Instead, only restart if we are already in Native Link mode, and do
+				// so by calling SetConnectionMode(eNativeLink) directly on the robot
+				// tester — this re-applies the mode with the new carrier env that was
+				// just written above, without ever surfacing a DirectConnect state.
+				if (s_pRobotTester && s_pRobotTester->GetConnectionMode() == ConnectionMode::eNativeLink)
+					s_pRobotTester->SetConnectionMode(ConnectionMode::eNativeLink);
+			}
+			break;
 			case IDM_EXIT:
 			case IDCANCEL:  //Not sure why this 2 is the same as the close button
 				printf("Shutting down\n");

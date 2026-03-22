@@ -1,5 +1,34 @@
 # Project history
 
+## 2026-03-21 - Native Link SHM transport declared stable; live telemetry auto-register fix
+
+### Live telemetry root cause
+
+- `Core::PublishInternal` in `NativeLink.cpp` rejected writes on any topic not found in the registry with `WriteRejectReason::UnknownTopic`. `RegisterDefaultTopics` only pre-registered 7 topics. `TeleAutonV2` publishes ~26 keys per loop cycle (Velocity, Heading, Travel_Heading, all wheel velocities/voltages/encoders, swivel voltages/raws, predicted_*). All of these were silently dropped — no crash, no error surface, just missing values on the dashboard.
+
+### Fix
+
+- `Core::PublishInternal`: when `allowServerOnly=true` (server-originated write) and the topic is not found, auto-register it as `TopicKind::State`, `RetentionMode::LatestValue`, `replayOnSubscribe=true`, `WriterPolicy::ServerOnly`, value type inferred from the incoming value. Client writes on unknown topics are still rejected.
+- `RegisterDefaultTopics` kept minimal (only topics that need special writer policies pre-declared). Added `Ian:` comment explaining that robot-code telemetry keys must NOT be added there — the auto-register path is the correct home.
+
+### Verification
+
+- `tools/native_link_live_telemetry_verify.py` (SmartDashboard repo): **PASS** — Velocity (57 distinct values), Y_ft (56 distinct), Wheel_fl_Velocity (12 distinct), all 7 required keys, 410+ updates each.
+- `tools/native_link_shm_disconnect_stress.py 50 400`: **50/50 PASS, zero warnings** after 4 synchronization fixes in the stress script.
+
+### Declaration
+
+- SHM transport declared **stable**. Next session target: Native Link TCP carrier.
+
+## 2026-03-20 - Native Link manual carrier toggle and observe helper alignment
+
+- Added a debug-only Native Link carrier picker to the `DriverStation` dialog so local manual validation can switch the simulator authority between `Shared Memory (SHM)` and `TCP/IP` without editing environment variables by hand.
+- The picker persists the selected carrier in the local `DriverStation.ini` settings file and reapplies the matching `NATIVE_LINK_*` environment before Native Link backend initialization.
+- Added runtime knobs to `DriverStation_TransportSmoke` so manual/paired Native Link observe flows can:
+  - delay the initial chooser/`TestMove` seed after startup
+  - override `TestMove` (for example `10`) without rebuilding.
+- This keeps Robot_Simulation aligned with the current SmartDashboard-side manual debugging workflow, where both apps now need explicit carrier agreement to compare SHM and TCP behavior cleanly.
+
 ## 2026-03-19 - Native Link IPC carrier alignment checkpoint
 
 - Updated the simulator-owned Native Link shared-memory carrier to stay in lockstep with the SmartDashboard checkpoint work:
