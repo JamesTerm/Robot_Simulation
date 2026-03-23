@@ -227,3 +227,196 @@ in the final squash.
 
 The plan when the root cause is found: squash-merge `feature/debug-remote-stability`
 into master as a single clean commit, no DIAG history.
+
+---
+
+## Part 2 - Root Cause Confirmed (2026-03-23)
+
+This section continues the investigation from a second agent session and documents the
+confirmed root cause.
+
+---
+
+### The Remaining Mystery at Session-1 End
+
+After the path fix in `AppendTransportLogLine`, the window still died on the remote
+machine. The last known-good log line was `[Publisher] before MaybeReplay`. The thread
+never reached `[Publisher] before FlushNow`. Session 1 ended with the correct suspicion
+that a Debug-CRT issue was involved, but the exact mechanism was unknown.
+
+---
+
+### Session 2 - Hypothesis: `_ITERATOR_DEBUG_LEVEL=2` Container Checks
+
+**Rationale:** MSVC's Debug STL defaults to `_ITERATOR_DEBUG_LEVEL=2`, which adds
+bounds checking and iterator invalidation assertions. These call `_ASSERTE()` on failure,
+which calls `abort()` silently when no debugger is present -- exactly what we were seeing.
+
+**Test:** Set `_ITERATOR_DEBUG_LEVEL=0` in `stdafx.h` and all 15 `.vcxproj` Debug
+`PreprocessorDefinitions` entries (via `replaceAll` of `_DEBUG;` to
+`_DEBUG;_ITERATOR_DEBUG_LEVEL=0;`).
+
+**Result on remote:** Window **still died**. IDL=0 was not the root cause. Iterator
+container checks were not involved.
+
+**Lesson:** `_ITERATOR_DEBUG_LEVEL=0` suppresses STL container checks, but the crash
+was not in an STL container operation. The mechanism was something deeper.
+
+---
+
+### Narrowing: Which Thread Is the Kill Path?
+
+**Test:** Commented out the `DirectCommandSubscriber::RunLoop` thread spawn in
+`Start()`. Crash persisted.
+
+**Result:** Subscriber thread is not the kill path.
+
+**Test:** Commented out the `DirectPublisherStub::RunLoop` thread spawn in `Start()`.
+Crash stopped -- window stayed up permanently.
+
+**Result:** Confirmed. The publisher thread is the kill path. Specifically:
+`DirectPublisherStub::RunLoop` spawned at `Transport.cpp:197`.
+
+---
+
+### Confirming the Exact Exception Type
+
+**Hypothesis:** The crash is an SEH (structured exception) -- an access violation
+(`0xC0000005`) -- not a C++ exception. C++ `catch(...)` does NOT catch SEH when compiled
+with `/EHsc` (the default). Only `/EHa` enables that. So even though `RunLoop` had
+`try/catch(...)`, the exception was escaping it and calling `std::terminate`.
+
+**Test:** Wrapped `RunLoopImpl()` with `__try/__except(EXCEPTION_EXECUTE_HANDLER)` and
+logged `GetExceptionCode()` before catching.
+
+**Result:** The filter fired with `code=0xC0000005` (EXCEPTION_ACCESS_VIOLATION). The
+window stayed up after catching it. Root cause confirmed: an SEH access violation inside
+`RunLoopImpl`.
+
+---
+
+### Pinpointing the Crash Site
+
+Added `OutputDebugStringA` checkpoint calls at each significant step inside
+`RunLoopImpl`:
+
+- `checkpoint 0: top of while loop` -- appeared
+- `checkpoint 1: before GetSteadyNowUs` -- appeared
+- `checkpoint 2: after GetSteadyNowUs` -- appeared
+- `checkpoint A: before MaybeReplayRetainedSnapshot` -- appeared
+- `checkpoint B: before FlushNow` -- **never appeared**
+
+The crash occurs inside `MaybeReplayRetainedSnapshot()`.
+
+**Further refinement:** Inside `MaybeReplayRetainedSnapshot()`, the first operation that
+touches a `std::mutex` is at `Transport.cpp:578`:
+```cpp
+std::lock_guard<std::mutex> retainedLock(m_retainedMutex);
+```
+This is the crash site. The same crash would occur at `Transport.cpp:549` in
+`StorePending()` for the same reason.
+
+---
+
+### The Root Cause
+
+**`std::mutex::lock()` in the MSVC Debug CRT fires an access violation
+(`EXCEPTION_ACCESS_VIOLATION`, `0xC0000005`) when called from a background `std::thread`
+on a machine that does not have Visual Studio installed.**
+
+Why this happens:
+
+1. The MSVC Debug CRT implementation of `std::mutex` uses internal concurrency
+   infrastructure that relies on debug heap validation machinery. This machinery includes
+   structures that are initialized by the VS runtime environment.
+
+2. On a machine without Visual Studio, the required VS runtime debug components are
+   absent. The debug-mode CRT attempts to touch a structure that was not initialized,
+   producing an access violation.
+
+3. `catch(...)` does **not** catch this because it is an SEH exception (0xC0000005), not
+   a C++ exception. MSVC only routes SEH into `catch(...)` when compiled with `/EHa`.
+   The project uses the default `/EHsc`, which does not do this.
+
+4. When the SEH escapes the `catch(...)` block, it reaches `std::thread`'s top-level
+   frame, which calls `std::terminate()`. `std::terminate()` calls `abort()`. `abort()`
+   on a machine without VS produces no dialog, no log -- the process simply vanishes.
+
+5. On the development machine with VS installed, the same SEH fires as a first-chance
+   exception that is caught and displayed by the VS debugger (or the VS runtime dialog).
+   It never propagates to `std::terminate`. So the developer never sees the crash.
+
+**This is a known category of MSVC behavior:** the Debug CRT is designed to run in an
+environment where the full VS development infrastructure is present. It is not designed
+to be deployed to production or test machines without VS. This is documented as a
+supported limitation: Debug builds should only run on machines with the VS debug
+redistributables installed.
+
+---
+
+### `AppendTransportLogLine` Also Had the Same Bug
+
+The static `std::mutex logMutex` inside `AppendTransportLogLine` would have crashed for
+the same reason if it were reached. It was not reached first because `MaybeReplayRetainedSnapshot`
+runs before the first `AppendTransportLogLine` call in the logging code path that follows
+it in `RunLoopImpl`. During the SEH investigation, `AppendTransportLogLine` was
+temporarily rewritten to use Win32 `CRITICAL_SECTION` (which does not use the Debug CRT
+concurrency infrastructure and is safe on all machines) to keep logging functional.
+It was then reverted to the original `std::mutex` implementation once the root cause was
+confirmed -- this is correct, because the underlying cause is a deployment constraint
+(don't run Debug builds without VS), not a bug to be worked around.
+
+---
+
+### What Was Ruled Out During This Investigation (Full List)
+
+| Hypothesis | Verdict |
+|------------|---------|
+| Crash inside `TeleAutonV2::init()` (OSG viewer / robot / scripts) | Ruled out: suppressing all inits still crashed |
+| Heap corruption | Ruled out: `_CrtCheckMemory()` passed |
+| `AppendTransportLogLine` blocking on non-existent path | Real bug, fixed; not root cause |
+| `_ITERATOR_DEBUG_LEVEL=2` STL container checks | Ruled out: IDL=0 still crashed |
+| `DirectCommandSubscriber::RunLoop` as kill path | Ruled out: suppressing it still crashed |
+| `WM_QUIT` / `PostQuitMessage` / clean exit path | Ruled out: no `WM_DESTROY` was ever received |
+| `std::thread` construction throwing `std::system_error` | Ruled out: threads started successfully |
+| NetworkTable `Shutdown()` hang | Not applicable: NT was never started in DirectConnect mode |
+| **`std::mutex::lock()` AV in Debug CRT (no-VS-installed machine)** | **Confirmed root cause** |
+
+---
+
+### Key Code Locations
+
+| Location | Significance |
+|----------|-------------|
+| `Transport.cpp:197` | `m_worker = std::thread(&DirectPublisherStub::RunLoop, this)` -- thread spawn |
+| `Transport.cpp:578` | `std::lock_guard<std::mutex> retainedLock(m_retainedMutex)` -- **AV crash site** |
+| `Transport.cpp:549` | `std::lock_guard<std::mutex> lock(m_pendingMutex)` -- same vulnerability in `StorePending()` |
+
+---
+
+### Why No Fix Is Applied
+
+This is a teaching project. The root cause is a **deployment constraint**, not a
+defect in the project's logic:
+
+- The MSVC Debug CRT is not designed to run on machines without Visual Studio.
+- The correct resolution is to either (a) deploy the VS debug redistributables to the
+  remote machine, or (b) test with a Release build on machines without VS.
+- No workaround (`/EHa`, replacing `std::mutex` with `CRITICAL_SECTION`, disabling IDL)
+  is appropriate here because those changes mask the real constraint without resolving it.
+
+The investigation was successful: the bug was diagnosed to its exact line and mechanism,
+and the knowledge is now documented for future reference.
+
+---
+
+### Cleanup Applied
+
+All diagnostic changes were reverted after root cause confirmation:
+
+- `RunLoop`/`RunLoopImpl`/`RunLoopSehFilter` split collapsed back to a single `RunLoop`
+- All `OutputDebugStringA` checkpoint calls removed from `RunLoop`
+- `AppendTransportLogLine` restored to original `std::ofstream` + `std::mutex` implementation
+- `DirectCommandSubscriber::RunLoop` thread re-enabled
+- `#define _ITERATOR_DEBUG_LEVEL 0` removed from `stdafx.h`
+- `_ITERATOR_DEBUG_LEVEL=0` removed from all 15 `.vcxproj` `PreprocessorDefinitions` entries

@@ -27,8 +27,6 @@ namespace
 		static std::mutex logMutex;
 		static std::ofstream log = []()
 		{
-			// Use the system TEMP directory so this works on any machine,
-			// including remote machines that do not have D:\code\.
 			char tempDir[MAX_PATH] = {};
 			GetTempPathA(static_cast<DWORD>(_countof(tempDir)), tempDir);
 			std::string logPath = tempDir;
