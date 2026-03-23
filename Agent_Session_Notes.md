@@ -19,12 +19,11 @@
 - Debug builds now expose a manual Native Link carrier picker in the DriverStation dialog for SHM vs TCP manual comparisons.
 - `DriverStation_TransportSmoke` supports `--startup-delay-ms` and `--test-move` for longer manual observe runs without rebuilding.
 
-## SHM transport status — STABLE
+## Transport status — COMPLETE
 
 - SHM transport declared stable as of 2026-03-21.
-- Live telemetry fix landed in `NativeLink.cpp` `Core::PublishInternal`: unknown topics on server-originated writes are now auto-registered instead of silently rejected.
-- `RegisterDefaultTopics` stays minimal — only special-policy topics are pre-declared there. See `Ian:` comment in `NativeLinkAuthorityHelpers.cpp`.
-- `DriverStation_TransportSmoke` was rebuilt and verified with `native_link_live_telemetry_verify.py` (SmartDashboard repo tools).
+- TCP authority work completed and merged 2026-03-21. Three blockers fixed: bind 0.0.0.0, INI default from `GetDefaultNativeLinkCarrier()`, carrier combo bounce.
+- Both carriers sit under the same Native Link semantic contract. Near-term roadmap items 1-5 from `native_link_rollout_strategy.md` are done.
 
 ## Key invariants (do not break)
 
@@ -35,12 +34,15 @@
 ## Strategy reminders
 
 - Keep simulator-side cleanup aligned with the one-contract / many-carriers / many-adapters roadmap.
-- Preserve SHM as the diagnostic/reference carrier while TCP authority work is added.
 - Product stance: TCP is the intended normal runtime carrier. SHM remains the internal diagnostic/reference carrier and should stay reachable through developer overrides, not as a normal team-facing mode toggle.
 - Favor extraction that keeps this repo a clean teaching example of server-authoritative session/snapshot/lease behavior.
 
+## Cross-repo sync rule
+
+- This repo and `D:\code\SmartDashboard` share the Native Link contract, carrier implementations, and plugin boundary.
+- When either repo's session notes or strategy docs change, check the other side for consistency — especially around invariants, carrier defaults, and plugin support iterations.
+- The canonical long-term rollout strategy lives in `D:\code\SmartDashboard\docs\native_link_rollout_strategy.md`.
+
 ## Immediate next-session focus
 
-1. Begin Native Link TCP authority work — SHM is stable and serves as the reference comparison backend.
-2. For any TCP fix, verify with `native_link_live_telemetry_verify.py` (switch `NATIVE_LINK_CARRIER` to `tcp`) and the SmartDashboard TCP runtime probe.
-3. Rebuild `DriverStation_TransportSmoke` after any authority-side changes and rerun the SmartDashboard stress scripts to confirm no regression.
+All near-term roadmap items from the simulation side are complete. Awaiting direction for next iteration.
