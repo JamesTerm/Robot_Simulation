@@ -35,6 +35,10 @@ RobotTester *s_pRobotTester = nullptr;
 //void BindRobot(RobotTester &_robot_tester);  //forward declare
 void SetupPreferences();
 ConnectionMode s_InitialConnectionMode = ConnectionMode::eDirectConnect;
+// Guard flag: set true while PopulateConnectionModeCombo is repopulating the
+// combo box so that the CBN_SELCHANGE notification it fires is ignored and
+// does not re-enter ApplyConnectionMode.
+bool s_populatingCombo = false;
 
 namespace
 {
@@ -334,6 +338,7 @@ namespace
 		if (!combo)
 			return;
 
+		s_populatingCombo = true;
 		SendMessageW(combo, CB_RESETCONTENT, 0, 0);
 		const ConnectionMode modes[] =
 		{
@@ -354,6 +359,7 @@ namespace
 		}
 
 		SendMessageW(combo, CB_SETCURSEL, static_cast<WPARAM>(selectedIndex), 0);
+		s_populatingCombo = false;
 	}
 
 	void SyncConnectionModeCombo(HWND hWnd)
@@ -397,7 +403,6 @@ bool TryParseConnectionModeFromCmdLine(LPWSTR cmd_line, ConnectionMode& mode)
 }
 
 void ApplyConnectionMode(ConnectionMode mode)
-
 {
 	if (mode == ConnectionMode::eNativeLink)
 	{
@@ -478,7 +483,6 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 			PopulateConnectionModeCombo(hWnd, s_InitialConnectionMode);
 			CreateNativeLinkCarrierControls(hWnd);
 			RestorePersistedWindowPosition(hWnd);
-			//Button_SetState(hWnd, IDStop, BM_CLICK, true, 0);
 			return (INT_PTR)TRUE;
 		case WM_COMMAND:
 		{
@@ -528,18 +532,18 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 				s_pRobotTester->SetGameMode(game_mode);
 				break;
 			}
-			case IDC_ConnectionMode:
-				if (HIWORD(wParam) == CBN_SELCHANGE)
+		case IDC_ConnectionMode:
+			if (HIWORD(wParam) == CBN_SELCHANGE && !s_populatingCombo)
+			{
+				const HWND combo = GetDlgItem(hWnd, IDC_ConnectionMode);
+				const LRESULT selectedIndex = SendMessageW(combo, CB_GETCURSEL, 0, 0);
+				if (selectedIndex != CB_ERR)
 				{
-					const HWND combo = GetDlgItem(hWnd, IDC_ConnectionMode);
-					const LRESULT selectedIndex = SendMessageW(combo, CB_GETCURSEL, 0, 0);
-					if (selectedIndex != CB_ERR)
-					{
-						const LRESULT itemData = SendMessageW(combo, CB_GETITEMDATA, static_cast<WPARAM>(selectedIndex), 0);
-						ApplyConnectionMode(static_cast<ConnectionMode>(itemData));
-					}
+					const LRESULT itemData = SendMessageW(combo, CB_GETITEMDATA, static_cast<WPARAM>(selectedIndex), 0);
+					ApplyConnectionMode(static_cast<ConnectionMode>(itemData));
 				}
-				break;
+			}
+			break;
 		case c_NativeLinkCarrierComboId:
 			if (HIWORD(wParam) == CBN_SELCHANGE)
 			{
@@ -617,6 +621,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	}
 	g_hDlg = m_hDlg;
 
+	try
+	{
 	//We made it this far... start up the robot
 	RobotTester _robot_tester;
 	s_pRobotTester = &_robot_tester;
@@ -681,7 +687,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 			#endif
 		}
 		else if (bRet == -1)
-		{	// Finished
+		{	// GetMessage returned -1: invalid HWND or critical message-queue error.
+			OutputDebugStringW(L"[DS] GetMessage returned -1 — message queue error, exiting message loop\n");
 			assert(false);
 			break;
 		}
@@ -691,11 +698,26 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 			::DispatchMessage(&msg);
 		}
 	}
-
+	OutputDebugStringA("[DS] message loop exited (GetMessage returned 0 -- WM_QUIT received)\n");
 
 	_robot_tester.Shutdown();
 
 	return (int)msg.wParam;
+	}
+	catch (const std::exception& e)
+	{
+		char buf[512];
+		sprintf_s(buf, "[wWinMain] Unhandled exception: %s\n", e.what());
+		OutputDebugStringA(buf);
+		MessageBoxA(nullptr, buf, "DriverStation Fatal Error", MB_OK | MB_ICONERROR);
+		return -1;
+	}
+	catch (...)
+	{
+		OutputDebugStringA("[wWinMain] Unhandled unknown exception\n");
+		MessageBoxA(nullptr, "An unknown fatal error occurred.", "DriverStation Fatal Error", MB_OK | MB_ICONERROR);
+		return -1;
+	}
 }
 
 #if 0

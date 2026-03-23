@@ -39,6 +39,28 @@
 - Product stance: TCP is the intended normal runtime carrier. SHM remains the internal diagnostic/reference carrier and should stay reachable through developer overrides, not as a normal team-facing mode toggle.
 - Favor extraction that keeps this repo a clean teaching example of server-authoritative session/snapshot/lease behavior.
 
+## Remote Debug crash investigation (2026-03-22) — root cause NOT found
+
+A remote Debug-build crash was investigated across this session. The crash was never
+reproduced locally and the root cause was not identified. No fix was confirmed as the
+definitive solution.
+
+What was cleaned up and kept (legitimate hardening, not crash fixes):
+- `Transport.cpp` — placement-new for atomics, message-size validation, GetTempPath log
+  path, try/catch in Publisher/Subscriber RunLoops, removed per-iteration spam logs.
+- `DriverStation.cpp` — `s_populatingCombo` re-entrancy guard, log+assert on GetMessage -1,
+  removed DIAG suppression and false-claim comments.
+- `Task.cpp` — log+assert on NTTask double-start, removed false-claim comments.
+- `dx_Joystick.cpp` — error log before assert, `(void)` nodiscard fix, indentation.
+- `OSG_Viewer.cpp` — ASSERT macro confirmed as original design (`#ifdef NDEBUG` → throw,
+  `#else` → assert); reverted an earlier incorrect inversion from this investigation.
+- Socket files / vcxproj — removed `DISABLE_WINSOCK_TEST` scaffold, kept WSAStartup failure
+  logs.
+- `Robot_Tester.cpp` — removed DIAG `return;` suppression in `init()`.
+
+See `docs/journal/2026-03-22-remote-debug-crash-investigation.md` for the full investigation
+log. The remote crash remains open.
+
 ## Immediate next-session focus
 
 1. Begin Native Link TCP authority work — SHM is stable and serves as the reference comparison backend.

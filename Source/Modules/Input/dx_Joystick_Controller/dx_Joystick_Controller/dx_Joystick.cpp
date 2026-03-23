@@ -49,12 +49,18 @@ public:
 			{
 				HRESULT hr;
 				hr = IDirectInput_EnumDevices(m_lpDInput, DI8DEVCLASS_GAMECTRL, Input::DIEnumDevicesCallback, (void *)this, DIEDFL_ATTACHEDONLY);
+				if (hr != S_OK)
+				{
+					char buf[128];
+					sprintf_s(buf, "[dx_Joystick] DirectInput EnumDevices failed: 0x%08X\n", (unsigned)hr);
+					OutputDebugStringA(buf);
+				}
 				assert(hr == S_OK);
 			}
 		}
 
 		//nr_joysticks = found;
-		_CP_("%d joystick(s) found.\n", m_JoyInfo.size());
+		_CP_("%d joystick(s) found.\n", (void)m_JoyInfo.size());
 	}
 	~DirectInput_Joystick(void)
 		{

@@ -31,6 +31,12 @@ static void load_tcpip(void)
 	WORD wVersionRequested_ = MAKEWORD( 2, 2 );
 
 	int result=WSAStartup( wVersionRequested_, &wsaData_ );
+	if (result != 0)
+	{
+		char buf[128];
+		sprintf_s(buf, "[SocketServerStreamProvider] WSAStartup failed: %d\n", result);
+		OutputDebugStringA(buf);
+	}
 	assert(result==0);
 }
 

@@ -90,7 +90,8 @@ bool NTTask::StartInternal()
 {
 	if (m_Handle)
 	{
-		assert(false);  // This may be lifted... just want to see if it happens
+		OutputDebugStringA("[NTTask] StartInternal called while already running — stopping old thread first\n");
+		assert(false);
 		Stop();
 	}
 

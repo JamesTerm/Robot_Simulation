@@ -14,6 +14,7 @@
 #include <fstream>
 #include <memory>
 #include <mutex>
+#include <new>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -24,8 +25,21 @@ namespace
 	void AppendTransportLogLine(const std::string& line)
 	{
 		static std::mutex logMutex;
-		static std::ofstream log("D:/code/Robot_Simulation/.debug/direct_transport_debug_log.txt", std::ios::out | std::ios::trunc);
+		static std::ofstream log = []()
+		{
+			// Use the system TEMP directory so this works on any machine,
+			// including remote machines that do not have D:\code\.
+			char tempDir[MAX_PATH] = {};
+			GetTempPathA(static_cast<DWORD>(_countof(tempDir)), tempDir);
+			std::string logPath = tempDir;
+			if (!logPath.empty() && logPath.back() != '\\')
+				logPath += '\\';
+			logPath += "direct_transport_debug_log.txt";
+			return std::ofstream(logPath, std::ios::out | std::ios::trunc);
+		}();
 		std::lock_guard<std::mutex> lock(logMutex);
+		if (!log.is_open())
+			return;
 		log << line << '\n';
 		log.flush();
 	}
@@ -113,16 +127,26 @@ namespace
 
 			auto* header = static_cast<RingHeader*>(m_view);
 			const std::uint32_t payloadCapacity = static_cast<std::uint32_t>(mappingBytes - sizeof(RingHeader));
+			// Read magic/version/capacity from raw bytes before any atomic access.
+			// These four fields are plain uint32_t (non-atomic) at the start of RingHeader,
+			// so a memcpy read is safe even before placement-new.
+			std::uint32_t rawMagic = 0, rawVersion = 0, rawCapacity = 0;
+			std::memcpy(&rawMagic,    static_cast<const std::uint8_t*>(m_view) + offsetof(RingHeader, magic),         sizeof(rawMagic));
+			std::memcpy(&rawVersion,  static_cast<const std::uint8_t*>(m_view) + offsetof(RingHeader, version),       sizeof(rawVersion));
+			std::memcpy(&rawCapacity, static_cast<const std::uint8_t*>(m_view) + offsetof(RingHeader, capacityBytes), sizeof(rawCapacity));
 			const bool needsInit =
-				(header->magic != kMagic) ||
-				(header->version != kVersion) ||
-				(header->capacityBytes != payloadCapacity);
+				(rawMagic    != kMagic) ||
+				(rawVersion  != kVersion) ||
+				(rawCapacity != payloadCapacity);
 			if (needsInit)
 			{
-				std::memset(m_view, 0, mappingBytes);
-				header->magic = kMagic;
-				header->version = kVersion;
-				header->reserved0 = 0;
+				// Zero the payload region only (leave header bytes — placement-new will overwrite them).
+				std::memset(static_cast<std::uint8_t*>(m_view) + sizeof(RingHeader), 0, kDefaultCapacityBytes);
+				// Placement-new constructs all std::atomic members in this process's address space.
+				header = new (m_view) RingHeader{};
+				header->magic         = kMagic;
+				header->version       = kVersion;
+				header->reserved0     = 0;
 				header->capacityBytes = payloadCapacity;
 				header->writeIndex.store(0, std::memory_order_release);
 				header->readIndex.store(0, std::memory_order_release);
@@ -133,6 +157,37 @@ namespace
 				header->lastConsumerHeartbeatUs.store(nowUs, std::memory_order_release);
 				header->consumerInstanceId.store(0, std::memory_order_release);
 				header->consumerReadIndex.store(0, std::memory_order_release);
+			}
+			else
+			{
+				// SHM already initialized by a prior process. Placement-new to construct
+				// the std::atomic members in *this* process — required in MSVC Debug.
+				// Save the live scalar values first via memcpy (safe — no atomic access yet).
+				std::uint32_t savedWriteIndex = 0, savedReadIndex = 0,
+				              savedPublishedSeq = 0, savedDroppedCount = 0,
+				              savedConsumerInstanceId = 0, savedConsumerReadIndex = 0;
+				std::uint64_t savedLastProducerUs = 0, savedLastConsumerUs = 0;
+				std::memcpy(&savedWriteIndex,          static_cast<const std::uint8_t*>(m_view) + offsetof(RingHeader, writeIndex),           sizeof(savedWriteIndex));
+				std::memcpy(&savedReadIndex,           static_cast<const std::uint8_t*>(m_view) + offsetof(RingHeader, readIndex),            sizeof(savedReadIndex));
+				std::memcpy(&savedPublishedSeq,        static_cast<const std::uint8_t*>(m_view) + offsetof(RingHeader, publishedSeq),         sizeof(savedPublishedSeq));
+				std::memcpy(&savedDroppedCount,        static_cast<const std::uint8_t*>(m_view) + offsetof(RingHeader, droppedCount),         sizeof(savedDroppedCount));
+				std::memcpy(&savedLastProducerUs,      static_cast<const std::uint8_t*>(m_view) + offsetof(RingHeader, lastProducerHeartbeatUs), sizeof(savedLastProducerUs));
+				std::memcpy(&savedLastConsumerUs,      static_cast<const std::uint8_t*>(m_view) + offsetof(RingHeader, lastConsumerHeartbeatUs), sizeof(savedLastConsumerUs));
+				std::memcpy(&savedConsumerInstanceId,  static_cast<const std::uint8_t*>(m_view) + offsetof(RingHeader, consumerInstanceId),   sizeof(savedConsumerInstanceId));
+				std::memcpy(&savedConsumerReadIndex,   static_cast<const std::uint8_t*>(m_view) + offsetof(RingHeader, consumerReadIndex),    sizeof(savedConsumerReadIndex));
+				// Placement-new constructs atomics, then restore saved values.
+				header = new (m_view) RingHeader{};
+				header->magic         = rawMagic;
+				header->version       = rawVersion;
+				header->capacityBytes = rawCapacity;
+				header->writeIndex.store(savedWriteIndex,         std::memory_order_relaxed);
+				header->readIndex.store(savedReadIndex,           std::memory_order_relaxed);
+				header->publishedSeq.store(savedPublishedSeq,     std::memory_order_relaxed);
+				header->droppedCount.store(savedDroppedCount,     std::memory_order_relaxed);
+				header->lastProducerHeartbeatUs.store(savedLastProducerUs,     std::memory_order_relaxed);
+				header->lastConsumerHeartbeatUs.store(savedLastConsumerUs,     std::memory_order_relaxed);
+				header->consumerInstanceId.store(savedConsumerInstanceId,     std::memory_order_relaxed);
+				header->consumerReadIndex.store(savedConsumerReadIndex,       std::memory_order_relaxed);
 			}
 
 			m_header = header;
@@ -373,50 +428,59 @@ namespace
 			std::uint64_t previousLoopUs = 0;
 			while (m_running.load())
 			{
-				const std::uint64_t nowUs = GetSteadyNowUs();
-				if (previousLoopUs != 0)
+				try
 				{
-					const std::uint64_t loopDeltaUs = nowUs - previousLoopUs;
-					if (loopDeltaUs > 250000ULL)
+					const std::uint64_t nowUs = GetSteadyNowUs();
+					if (previousLoopUs != 0)
 					{
-						char dbgGap[256] = {};
-						sprintf_s(
-							dbgGap,
-							"[Transport] Telemetry run loop gap_us=%llu",
-							static_cast<unsigned long long>(loopDeltaUs));
-						AppendTransportLogLine(dbgGap);
+						const std::uint64_t loopDeltaUs = nowUs - previousLoopUs;
+						if (loopDeltaUs > 250000ULL)
+						{
+							char dbgGap[256] = {};
+							sprintf_s(
+								dbgGap,
+								"[Transport] Telemetry run loop gap_us=%llu",
+								static_cast<unsigned long long>(loopDeltaUs));
+							AppendTransportLogLine(dbgGap);
+						}
+					}
+					previousLoopUs = nowUs;
+
+					MaybeReplayRetainedSnapshot();
+					FlushNow();
+					if (m_header != nullptr)
+					{
+						const std::uint64_t lastConsumerHeartbeatUs = m_header->lastConsumerHeartbeatUs.load(std::memory_order_acquire);
+						const bool consumerActive =
+							(lastConsumerHeartbeatUs != 0) &&
+							(nowUs >= lastConsumerHeartbeatUs) &&
+							((nowUs - lastConsumerHeartbeatUs) <= 500000ULL);
+						if (consumerActive != m_loggedConsumerActive)
+						{
+							char dbgA[256] = {};
+							sprintf_s(
+								dbgA,
+								"[Transport] Telemetry consumer active=%d heartbeat_delta_us=%llu",
+								consumerActive ? 1 : 0,
+								static_cast<unsigned long long>(consumerActive ? (nowUs - lastConsumerHeartbeatUs) : 0ULL));
+							OutputDebugStringA(dbgA);
+							OutputDebugStringA("\n");
+							AppendTransportLogLine(dbgA);
+							m_loggedConsumerActive = consumerActive;
+						}
 					}
 				}
-				previousLoopUs = nowUs;
-
-				MaybeReplayRetainedSnapshot();
-				FlushNow();
-				if (m_header != nullptr)
+				catch (const std::exception& ex)
 				{
-					const std::uint64_t lastConsumerHeartbeatUs = m_header->lastConsumerHeartbeatUs.load(std::memory_order_acquire);
-					const bool consumerActive =
-						(lastConsumerHeartbeatUs != 0) &&
-						(nowUs >= lastConsumerHeartbeatUs) &&
-						((nowUs - lastConsumerHeartbeatUs) <= 500000ULL);
-					if (consumerActive != m_loggedConsumerActive)
-					{
-						wchar_t dbg[256] = {};
-						_swprintf_p(
-							dbg,
-							_countof(dbg),
-							L"[Transport] Telemetry consumer active=%d heartbeat_delta_us=%llu\n",
-							consumerActive ? 1 : 0,
-							static_cast<unsigned long long>(consumerActive ? (nowUs - lastConsumerHeartbeatUs) : 0ULL));
-						OutputDebugStringW(dbg);
-						char dbgA[256] = {};
-						sprintf_s(
-							dbgA,
-							"[Transport] Telemetry consumer active=%d heartbeat_delta_us=%llu",
-							consumerActive ? 1 : 0,
-							static_cast<unsigned long long>(consumerActive ? (nowUs - lastConsumerHeartbeatUs) : 0ULL));
-						AppendTransportLogLine(dbgA);
-						m_loggedConsumerActive = consumerActive;
-					}
+					char dbg[512] = {};
+					sprintf_s(dbg, "[Publisher] RunLoop caught std::exception: %s\n", ex.what());
+					OutputDebugStringA(dbg);
+					AppendTransportLogLine(std::string("[Publisher] RunLoop caught std::exception: ") + ex.what());
+				}
+				catch (...)
+				{
+					OutputDebugStringA("[Publisher] RunLoop caught unknown exception\n");
+					AppendTransportLogLine("[Publisher] RunLoop caught unknown exception");
 				}
 				std::this_thread::sleep_for(std::chrono::milliseconds(16));
 			}
@@ -706,16 +770,23 @@ namespace
 
 			auto* header = static_cast<RingHeader*>(m_view);
 			const std::uint32_t payloadCapacity = static_cast<std::uint32_t>(mappingBytes - sizeof(RingHeader));
+			// Read magic/version/capacity from raw bytes before any atomic access.
+			std::uint32_t rawMagic = 0, rawVersion = 0, rawCapacity = 0;
+			std::memcpy(&rawMagic,    static_cast<const std::uint8_t*>(m_view) + offsetof(RingHeader, magic),         sizeof(rawMagic));
+			std::memcpy(&rawVersion,  static_cast<const std::uint8_t*>(m_view) + offsetof(RingHeader, version),       sizeof(rawVersion));
+			std::memcpy(&rawCapacity, static_cast<const std::uint8_t*>(m_view) + offsetof(RingHeader, capacityBytes), sizeof(rawCapacity));
 			const bool needsInit =
-				(header->magic != kMagic) ||
-				(header->version != kVersion) ||
-				(header->capacityBytes != payloadCapacity);
+				(rawMagic    != kMagic) ||
+				(rawVersion  != kVersion) ||
+				(rawCapacity != payloadCapacity);
 			if (needsInit)
 			{
-				std::memset(m_view, 0, mappingBytes);
-				header->magic = kMagic;
-				header->version = kVersion;
-				header->reserved0 = 0;
+				// Zero the payload region only, then placement-new the header.
+				std::memset(static_cast<std::uint8_t*>(m_view) + sizeof(RingHeader), 0, kDefaultCapacityBytes);
+				header = new (m_view) RingHeader{};
+				header->magic         = kMagic;
+				header->version       = kVersion;
+				header->reserved0     = 0;
 				header->capacityBytes = payloadCapacity;
 				header->writeIndex.store(0, std::memory_order_release);
 				header->readIndex.store(0, std::memory_order_release);
@@ -726,6 +797,34 @@ namespace
 				header->lastConsumerHeartbeatUs.store(nowUs, std::memory_order_release);
 				header->consumerInstanceId.store(0, std::memory_order_release);
 				header->consumerReadIndex.store(0, std::memory_order_release);
+			}
+			else
+			{
+				// SHM already initialized. Placement-new to construct atomics in this process.
+				std::uint32_t savedWriteIndex = 0, savedReadIndex = 0,
+				              savedPublishedSeq = 0, savedDroppedCount = 0,
+				              savedConsumerInstanceId = 0, savedConsumerReadIndex = 0;
+				std::uint64_t savedLastProducerUs = 0, savedLastConsumerUs = 0;
+				std::memcpy(&savedWriteIndex,         static_cast<const std::uint8_t*>(m_view) + offsetof(RingHeader, writeIndex),              sizeof(savedWriteIndex));
+				std::memcpy(&savedReadIndex,          static_cast<const std::uint8_t*>(m_view) + offsetof(RingHeader, readIndex),               sizeof(savedReadIndex));
+				std::memcpy(&savedPublishedSeq,       static_cast<const std::uint8_t*>(m_view) + offsetof(RingHeader, publishedSeq),            sizeof(savedPublishedSeq));
+				std::memcpy(&savedDroppedCount,       static_cast<const std::uint8_t*>(m_view) + offsetof(RingHeader, droppedCount),            sizeof(savedDroppedCount));
+				std::memcpy(&savedLastProducerUs,     static_cast<const std::uint8_t*>(m_view) + offsetof(RingHeader, lastProducerHeartbeatUs), sizeof(savedLastProducerUs));
+				std::memcpy(&savedLastConsumerUs,     static_cast<const std::uint8_t*>(m_view) + offsetof(RingHeader, lastConsumerHeartbeatUs), sizeof(savedLastConsumerUs));
+				std::memcpy(&savedConsumerInstanceId, static_cast<const std::uint8_t*>(m_view) + offsetof(RingHeader, consumerInstanceId),      sizeof(savedConsumerInstanceId));
+				std::memcpy(&savedConsumerReadIndex,  static_cast<const std::uint8_t*>(m_view) + offsetof(RingHeader, consumerReadIndex),       sizeof(savedConsumerReadIndex));
+				header = new (m_view) RingHeader{};
+				header->magic         = rawMagic;
+				header->version       = rawVersion;
+				header->capacityBytes = rawCapacity;
+				header->writeIndex.store(savedWriteIndex,         std::memory_order_relaxed);
+				header->readIndex.store(savedReadIndex,           std::memory_order_relaxed);
+				header->publishedSeq.store(savedPublishedSeq,     std::memory_order_relaxed);
+				header->droppedCount.store(savedDroppedCount,     std::memory_order_relaxed);
+				header->lastProducerHeartbeatUs.store(savedLastProducerUs,     std::memory_order_relaxed);
+				header->lastConsumerHeartbeatUs.store(savedLastConsumerUs,     std::memory_order_relaxed);
+				header->consumerInstanceId.store(savedConsumerInstanceId,     std::memory_order_relaxed);
+				header->consumerReadIndex.store(savedConsumerReadIndex,       std::memory_order_relaxed);
 			}
 
 			m_header = header;
@@ -951,6 +1050,11 @@ namespace
 		static constexpr std::uint32_t kMagic = 0x53444442;
 		static constexpr std::uint16_t kVersion = 1;
 		static constexpr std::uint32_t kDefaultCapacityBytes = 1U << 20;
+		// Must mirror the writer-side caps (DirectPublisherStub::kKeyMax / kStringMax).
+		// These are the maximum byte lengths the producer is allowed to write;
+		// anything larger from the ring is a protocol mismatch or corruption.
+		static constexpr std::uint16_t kKeyMax = 128;
+		static constexpr std::uint16_t kValueMax = 65535; // uint16_t ceiling; individual types capped further by protocol
 
 		static std::uint64_t GetSteadyNowUs()
 		{
@@ -974,36 +1078,66 @@ namespace
 				const DWORD waitResult = WaitForSingleObject(m_dataEvent, 50);
 				if (waitResult == WAIT_OBJECT_0 || waitResult == WAIT_TIMEOUT)
 				{
-					DrainPendingValues();
-				}
-				if (m_header != nullptr)
-				{
-					const std::uint64_t nowUs = GetSteadyNowUs();
-					m_header->consumerInstanceId.store(m_instanceId, std::memory_order_release);
-					m_header->lastConsumerHeartbeatUs.store(nowUs, std::memory_order_release);
-					const std::uint64_t producerHeartbeatUs = m_header->lastProducerHeartbeatUs.load(std::memory_order_acquire);
-					const bool producerActive =
-						(producerHeartbeatUs != 0) &&
-						(nowUs >= producerHeartbeatUs) &&
-						((nowUs - producerHeartbeatUs) <= 500000ULL);
-					if (producerActive != m_loggedProducerActive)
+					try
 					{
-						char dbg[256] = {};
-						sprintf_s(
-							dbg,
-							"[DirectCommandSubscriber] producer active=%d heartbeat_delta_us=%llu\n",
-							producerActive ? 1 : 0,
-							static_cast<unsigned long long>(producerActive ? (nowUs - producerHeartbeatUs) : 0ULL));
-						OutputDebugStringA(dbg);
-						char dbgFile[256] = {};
-						sprintf_s(
-							dbgFile,
-							"[DirectCommandSubscriber] producer active=%d heartbeat_delta_us=%llu",
-							producerActive ? 1 : 0,
-							static_cast<unsigned long long>(producerActive ? (nowUs - producerHeartbeatUs) : 0ULL));
-						AppendTransportLogLine(dbgFile);
-						m_loggedProducerActive = producerActive;
+						DrainPendingValues();
 					}
+					catch (const std::exception& ex)
+					{
+						char dbg[512] = {};
+						sprintf_s(dbg, "[DirectCommandSubscriber] DrainPendingValues threw: %s -- skipping drain\n", ex.what());
+						OutputDebugStringA(dbg);
+						AppendTransportLogLine(std::string("[DirectCommandSubscriber] DrainPendingValues threw: ") + ex.what() + " -- skipping drain");
+					}
+					catch (...)
+					{
+						OutputDebugStringA("[DirectCommandSubscriber] DrainPendingValues threw unknown exception -- skipping drain\n");
+						AppendTransportLogLine("[DirectCommandSubscriber] DrainPendingValues threw unknown exception -- skipping drain");
+					}
+				}
+				try
+				{
+					if (m_header != nullptr)
+					{
+						const std::uint64_t nowUs = GetSteadyNowUs();
+						m_header->consumerInstanceId.store(m_instanceId, std::memory_order_release);
+						m_header->lastConsumerHeartbeatUs.store(nowUs, std::memory_order_release);
+						const std::uint64_t producerHeartbeatUs = m_header->lastProducerHeartbeatUs.load(std::memory_order_acquire);
+						const bool producerActive =
+							(producerHeartbeatUs != 0) &&
+							(nowUs >= producerHeartbeatUs) &&
+							((nowUs - producerHeartbeatUs) <= 500000ULL);
+						if (producerActive != m_loggedProducerActive)
+						{
+							char dbg[256] = {};
+							sprintf_s(
+								dbg,
+								"[DirectCommandSubscriber] producer active=%d heartbeat_delta_us=%llu\n",
+								producerActive ? 1 : 0,
+								static_cast<unsigned long long>(producerActive ? (nowUs - producerHeartbeatUs) : 0ULL));
+							OutputDebugStringA(dbg);
+							char dbgFile[256] = {};
+							sprintf_s(
+								dbgFile,
+								"[DirectCommandSubscriber] producer active=%d heartbeat_delta_us=%llu",
+								producerActive ? 1 : 0,
+								static_cast<unsigned long long>(producerActive ? (nowUs - producerHeartbeatUs) : 0ULL));
+							AppendTransportLogLine(dbgFile);
+							m_loggedProducerActive = producerActive;
+						}
+					}
+				}
+				catch (const std::exception& ex)
+				{
+					char dbg[512] = {};
+					sprintf_s(dbg, "[Subscriber] heartbeat block threw: %s\n", ex.what());
+					OutputDebugStringA(dbg);
+					AppendTransportLogLine(std::string("[Subscriber] heartbeat block threw: ") + ex.what());
+				}
+				catch (...)
+				{
+					OutputDebugStringA("[Subscriber] heartbeat block threw unknown exception\n");
+					AppendTransportLogLine("[Subscriber] heartbeat block threw unknown exception");
 				}
 			}
 		}
@@ -1063,8 +1197,52 @@ namespace
 			CopyFromRing(readIndex, reinterpret_cast<std::uint8_t*>(&msg), static_cast<std::uint32_t>(sizeof(msg)));
 			if (msg.messageBytes < sizeof(MessageHeader))
 			{
+				char dbg[256] = {};
+				sprintf_s(dbg, "[DirectCommandSubscriber] corrupt ring: messageBytes=%u < header size=%u -- resetting cursor\n",
+					static_cast<unsigned>(msg.messageBytes), static_cast<unsigned>(sizeof(MessageHeader)));
+				OutputDebugStringA(dbg);
+				AppendTransportLogLine(std::string(dbg));
 				m_readCursor = writeIndex;
 				m_header->consumerReadIndex.store(writeIndex, std::memory_order_release);
+				return false;
+			}
+
+			// Validate message size and field lengths before any allocation.
+			// All values come from an untrusted remote process via shared memory.
+			// A protocol mismatch or stale/garbage ring data can produce arbitrary
+			// keyLen / valueLen values that would cause std::bad_alloc (or worse)
+			// and kill the process via std::terminate on this background thread.
+			const std::uint32_t expectedBytes =
+				static_cast<std::uint32_t>(sizeof(MessageHeader)) +
+				static_cast<std::uint32_t>(msg.keyLen) +
+				static_cast<std::uint32_t>(msg.valueLen);
+			if (msg.messageBytes > m_capacity ||
+				msg.keyLen > kKeyMax ||
+				static_cast<std::uint32_t>(msg.messageBytes) != expectedBytes)
+			{
+				char dbg[512] = {};
+				sprintf_s(dbg,
+					"[DirectCommandSubscriber] corrupt ring: messageBytes=%u expectedBytes=%u keyLen=%u valueLen=%u capacity=%u -- skipping message\n",
+					static_cast<unsigned>(msg.messageBytes),
+					static_cast<unsigned>(expectedBytes),
+					static_cast<unsigned>(msg.keyLen),
+					static_cast<unsigned>(msg.valueLen),
+					static_cast<unsigned>(m_capacity));
+				OutputDebugStringA(dbg);
+				AppendTransportLogLine(std::string(dbg));
+				// Advance past this malformed message using messageBytes (best effort);
+				// if messageBytes itself is suspect fall back to resetting to writeIndex.
+				if (msg.messageBytes > 0 && msg.messageBytes <= m_capacity)
+				{
+					const std::uint32_t next = (readIndex + msg.messageBytes) % m_capacity;
+					m_readCursor = next;
+					m_header->consumerReadIndex.store(next, std::memory_order_release);
+				}
+				else
+				{
+					m_readCursor = writeIndex;
+					m_header->consumerReadIndex.store(writeIndex, std::memory_order_release);
+				}
 				return false;
 			}
 
@@ -1195,7 +1373,20 @@ public:
 		{
 			SmartDashboard::SetConnectionMode(SmartDashboardConnectionMode::eLegacySmartDashboard);
 			if (!SmartDashboard::is_initialized())
-				SmartDashboard::init();
+			{
+				try
+				{
+					SmartDashboard::init();
+				}
+				catch (const std::exception& e)
+				{
+					char buf[256];
+					sprintf_s(buf, "[Transport] Legacy SmartDashboard init failed (NT socket error): %s\n", e.what());
+					OutputDebugStringA(buf);
+					// Backend failed to bind/listen; app continues without NT transport.
+					return;
+				}
+			}
 			OutputDebugStringW(L"[Transport] Legacy SmartDashboard backend initialized\n");
 		}
 		void Shutdown() override

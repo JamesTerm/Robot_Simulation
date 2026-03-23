@@ -468,6 +468,9 @@ inline double RAND_GEN(double minR = 0.0, double maxR = 1.0)
 #pragma endregion
 //#include "ASSERT.h"
 #pragma region _ASSERT_
+// Release builds use throw so release-only reproducible failures produce a
+// catchable signal rather than silently killing the process.
+// Debug builds use assert() for a hard stop at the failure site.
 #ifdef NDEBUG
 #include <stdexcept>
 #define ASSERT(cond) if (!(cond)) throw std::exception((#cond));

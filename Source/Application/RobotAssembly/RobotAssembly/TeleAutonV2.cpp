@@ -449,7 +449,7 @@ private:
 				//printf("key=%d press=%d\n", key, press);
 				m_Keyboard.UpdateKeys(m_dTime_s, key, press);
 				if (key == ' ' && press == false)
-					Reset();
+		Reset();  //for entity variables
 			});
 			#pragma endregion
 			#pragma region _Robot Entity Linking_
@@ -620,7 +620,7 @@ public:
 		m_RobotUI.Initialize();
 		m_FieldCentricDrive = m_properties.get_bool(properties::registry_v1::csz_Drive_UseFieldCentric, false);
 
-		Reset();  //for entity variables
+		Reset();
 	}
 
 	void Start()

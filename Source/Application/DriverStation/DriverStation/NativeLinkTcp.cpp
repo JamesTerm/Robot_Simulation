@@ -34,6 +34,8 @@ namespace NativeLink::detail
 			{
 				WSADATA data {};
 				m_started = WSAStartup(MAKEWORD(2, 2), &data) == 0;
+				if (!m_started)
+					OutputDebugStringA("[NativeLinkTcp] WSAStartup failed\n");
 			}
 
 			~WinsockRuntime()
