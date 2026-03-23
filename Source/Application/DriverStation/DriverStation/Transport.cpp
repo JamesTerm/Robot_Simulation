@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "Transport.h"
 #include "NativeLink.h"
+#include "NT4Server.h"
 
 #include "../../../Libraries/SmartDashboard/SmartDashboard_Import.h"
 
@@ -1520,23 +1521,75 @@ public:
 		bool m_running = false;
 	};
 
+	// Ian: ShuffleboardBackend is the real NT4 WebSocket server backend.
+	// It implements SmartDashboardDirectPublishSink so that all SmartDashboard::Put*()
+	// calls route through the NT4 server instead of through the legacy NT2 path.
+	// This is the same pattern used by DirectConnectBackend (SHM ring buffer).
+	//
+	// Key mapping: SmartDashboard keys like "Velocity" get prefixed with
+	// "/SmartDashboard/" to match Shuffleboard's expected NT4 topic naming convention.
 	class ShuffleboardBackend final : public IConnectionBackend
+		, public SmartDashboardDirectPublishSink
 	{
 	public:
 		void Initialize() override
 		{
 			SmartDashboard::SetConnectionMode(SmartDashboardConnectionMode::eShuffleboard);
-			if (!SmartDashboard::is_initialized())
-				SmartDashboard::init();
-			OutputDebugStringW(L"[Transport] Shuffleboard backend requested; using legacy transport path for now\n");
+			SmartDashboard::SetDirectPublishSink(this);
+			m_running = m_nt4Server.Start(5810);
+			if (m_running)
+				OutputDebugStringW(L"[Transport] Shuffleboard NT4 backend initialized on port 5810\n");
+			else
+				OutputDebugStringW(L"[Transport] Shuffleboard NT4 backend FAILED to start on port 5810\n");
 		}
 		void Shutdown() override
 		{
-			OutputDebugStringW(L"[Transport] Shuffleboard backend shutdown requested\n");
+			SmartDashboard::ClearDirectPublishSink();
+			m_nt4Server.Stop();
+			m_running = false;
+			OutputDebugStringW(L"[Transport] Shuffleboard NT4 backend shutdown\n");
 		}
 		const wchar_t* GetBackendName() const override
 		{
-			return L"Shuffleboard (legacy path)";
+			return m_running ? L"Shuffleboard (NT4)" : L"Shuffleboard (NT4 inactive)";
+		}
+
+		// --- SmartDashboardDirectPublishSink ---
+		// Ian: These convert flat SmartDashboard keys to NT4 topic paths.
+		// Shuffleboard expects topics under /SmartDashboard/<key>.
+		void PublishBoolean(const std::string& keyName, bool value) override
+		{
+			if (m_running)
+				m_nt4Server.PublishBoolean(ToNT4Path(keyName), value);
+		}
+		void PublishNumber(const std::string& keyName, double value) override
+		{
+			if (m_running)
+				m_nt4Server.PublishDouble(ToNT4Path(keyName), value);
+		}
+		void PublishString(const std::string& keyName, const std::string& value) override
+		{
+			if (m_running)
+				m_nt4Server.PublishString(ToNT4Path(keyName), value);
+		}
+		void PublishStringArray(const std::string& keyName, const std::vector<std::string>& values) override
+		{
+			if (m_running)
+				m_nt4Server.PublishStringArray(ToNT4Path(keyName), values);
+		}
+
+	private:
+		NT4Server m_nt4Server;
+		bool m_running = false;
+
+		// Ian: Convert a flat SmartDashboard key to an NT4 topic path.
+		// If the key already starts with '/', use it as-is.
+		// Otherwise prefix with "/SmartDashboard/".
+		static std::string ToNT4Path(const std::string& key)
+		{
+			if (!key.empty() && key[0] == '/')
+				return key;
+			return "/SmartDashboard/" + key;
 		}
 	};
 }
@@ -1613,9 +1666,11 @@ void DashboardTransportRouter::SetMode(ConnectionMode mode)
 
 bool DashboardTransportRouter::UsesLegacyTransportPath(ConnectionMode mode)
 {
+	// Ian: Shuffleboard is no longer a legacy transport — it has its own NT4 WebSocket
+	// server backend.  Only Legacy SmartDashboard and Direct Connect share the legacy
+	// NetworkTables path and can reuse each other's backend without teardown.
 	return (mode == ConnectionMode::eLegacySmartDashboard) ||
-		(mode == ConnectionMode::eDirectConnect) ||
-		(mode == ConnectionMode::eShuffleboard);
+		(mode == ConnectionMode::eDirectConnect);
 }
 
 ConnectionMode DashboardTransportRouter::GetMode() const
