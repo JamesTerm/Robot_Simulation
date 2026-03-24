@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <functional>
 
+
 #include <timeapi.h>
 #include <shlwapi.h>
 //#include "../Robot_Tester.h"
@@ -410,7 +411,9 @@ void ApplyConnectionMode(ConnectionMode mode)
 	}
 
 	if (s_pRobotTester)
+	{
 		s_pRobotTester->SetConnectionMode(mode);
+	}
 	if (g_hDlg)
 	{
 		PopulateConnectionModeCombo(g_hDlg, mode);
@@ -457,7 +460,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	ApplyNativeLinkEnvironment(LoadPersistedNativeLinkCarrier());
 	ConnectionMode commandLineMode = s_InitialConnectionMode;
 	if (TryParseConnectionModeFromCmdLine(lpCmdLine, commandLineMode))
+	{
 		s_InitialConnectionMode = commandLineMode;
+	}
 
 	// TODO: Place code here.
 
@@ -631,7 +636,6 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	//Bind robot for Keyboard binding
 	//BindRobot(_robot_tester);
 	_robot_tester.RobotTester_init();
-	ShowWindow(m_hDlg, nCmdShow);
 	UpdateWindow(m_hDlg);
 
 	//Note dealing with accelerator tables :P

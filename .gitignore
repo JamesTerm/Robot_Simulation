@@ -178,7 +178,6 @@ bin/
 
 # CMake
 /build-*/
-/build_nt4/
 CMakeCache.txt
 CMakeFiles/
 cmake_install.cmake

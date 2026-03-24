@@ -12,6 +12,15 @@
 //   - NT4 subprotocol negotiation is handled in the Open callback by checking the
 //     Sec-WebSocket-Protocol header from the client request.
 //
+// Ian: LESSON LEARNED — NT4 is subscription-driven!  The server must NOT send announce
+// or value messages until the client sends a subscribe message.  Our first attempt
+// sent announces on connect, which ntcore silently ignored.  The correct flow is:
+//   1. Client connects (Open)
+//   2. Client sends subscribe with topic patterns
+//   3. Server sends announce for matching topics
+//   4. Server sends cached values for matching topics
+//   5. Future publishes only go to clients with matching subscriptions
+//
 // Usage:
 //   NT4Server server;
 //   server.Start();                  // begins listening on port 5810
@@ -24,6 +33,7 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -44,10 +54,10 @@ public:
 	void Stop();
 	bool IsRunning() const;
 
-	// --- Publishing API (server → all connected clients) ---
-	// These queue values and broadcast as NT4 binary frames.
+	// --- Publishing API (server → subscribed clients) ---
+	// These queue values and broadcast as NT4 binary frames to clients
+	// whose subscriptions match the topic name.
 	// Topic names should use NT4 convention: "/SmartDashboard/<key>"
-	// The server auto-announces topics to new clients on connect.
 	void PublishDouble(const std::string& topicName, double value);
 	void PublishBoolean(const std::string& topicName, bool value);
 	void PublishString(const std::string& topicName, const std::string& value);
@@ -79,11 +89,12 @@ private:
 		int32_t id = -1;           // server-assigned topic ID
 		std::string name;          // e.g. "/SmartDashboard/Velocity"
 		NT4Type type = NT4Type::Double;
-		bool announced = false;    // true once first announce sent to any client
+		// Ian: Per-client announce tracking is done via ClientState::announcedTopics.
+		// This 'announced' flag is no longer used for gating — kept for future cleanup.
 	};
 
 	// Ian: Retained value cache — we keep the latest value for each topic so that
-	// newly connecting clients get a full snapshot (Shuffleboard expects this).
+	// newly subscribing clients get a full snapshot (Shuffleboard expects this).
 	struct RetainedValue
 	{
 		NT4Type type = NT4Type::Double;
@@ -92,6 +103,23 @@ private:
 		int64_t intVal = 0;
 		std::string stringVal;
 		std::vector<std::string> stringArrayVal;
+	};
+
+	// Ian: Per-client subscription tracking.
+	// LESSON LEARNED: NT4 is subscription-driven.  The server must track what each
+	// client has subscribed to and only send announces/values for matching topics.
+	// Without this, ntcore silently ignores all our data.
+	struct ClientSubscription
+	{
+		int32_t subuid = -1;                  // client-generated subscription UID
+		std::vector<std::string> topics;      // topic names or prefixes
+		bool prefix = false;                  // if true, topics[] are prefixes
+	};
+
+	struct ClientState
+	{
+		std::vector<ClientSubscription> subscriptions;
+		std::set<int32_t> announcedTopics;    // topic IDs already announced to this client
 	};
 
 	// Core server
@@ -106,11 +134,20 @@ private:
 	// Retained values (protected by m_topicsMutex — same lock)
 	std::unordered_map<std::string, RetainedValue> m_retained;
 
+	// Ian: Per-client state, keyed by WebSocket pointer address.
+	// Protected by m_topicsMutex (same lock — simpler than a second mutex).
+	std::unordered_map<uintptr_t, ClientState> m_clientState;
+
 	// --- Internal helpers ---
 	TopicInfo& GetOrCreateTopic(const std::string& name, NT4Type type);
-	void AnnounceAllTopicsTo(void* ws);  // ws is ix::WebSocket*
-	void SendValueToAllClients(const TopicInfo& topic, const RetainedValue& value);
 	std::string BuildAnnounceJson(const TopicInfo& topic) const;
+
+	// Ian: Check if a topic name matches any subscription for a given client.
+	bool TopicMatchesClientSubscriptions(const std::string& topicName, const ClientState& cs) const;
+
+	// Ian: Send announce + cached value for all matching topics to a client that
+	// just subscribed.  Only sends topics not yet announced to this client.
+	void SendMatchingTopicsToClient(ix::WebSocket& ws, ClientState& cs);
 
 	// --- Minimal MessagePack encoder ---
 	// Ian: These produce raw bytes per the MessagePack spec. We only implement
@@ -130,4 +167,7 @@ private:
 
 	// Handle incoming JSON control messages from clients
 	void HandleClientTextMessage(ix::WebSocket& ws, const std::string& text);
+
+	// Handle incoming binary messages from clients (timestamp sync, value updates)
+	void HandleClientBinaryMessage(ix::WebSocket& ws, const std::string& data);
 };

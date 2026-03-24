@@ -12,7 +12,17 @@
 //     announce, unannounce, properties from server.  Each text frame is a JSON array.
 //   - Value updates (MessagePack binary frames): each message is [topicID, timestamp_us, typeCode, value]
 //   - Server assigns topic IDs via announce messages
-//   - On new client connect, server sends announce + retained value for all known topics
+//
+// Ian: LESSON LEARNED — NT4 is subscription-driven!  The flow is:
+//   1. Client connects
+//   2. Client sends subscribe (e.g. [""] with prefix=true for "all topics")
+//   3. ONLY THEN does server send announce messages for matching topics
+//   4. Server sends cached values for those topics
+//   5. Future value updates only go to clients whose subscriptions match
+//
+// Our first implementation sent announces immediately on connect, BEFORE the client
+// subscribed.  ntcore silently ignored all of them, which is why Shuffleboard showed
+// nothing despite receiving all the data.
 
 #include "stdafx.h"
 #include "NT4Server.h"
@@ -29,7 +39,6 @@
 
 #include <algorithm>
 #include <chrono>
-#include <cstdio>
 #include <cstring>
 
 using json = nlohmann::json;
@@ -303,10 +312,10 @@ std::string NT4Server::BuildValueFrame(const TopicInfo& topic, const RetainedVal
 }
 
 // ============================================================================
-// Build JSON announce message for a topic
+// Build JSON announce message for a topic (single, not wrapped in array)
 // ============================================================================
-// Ian: The announce message tells the client about a topic's existence.
-// Format: {"method":"announce","params":{"name":"...","id":N,"type":"...","properties":{}}}
+// Ian: Returns the JSON object for one announce message.
+// The caller is responsible for wrapping in a JSON array.
 
 std::string NT4Server::BuildAnnounceJson(const TopicInfo& topic) const
 {
@@ -315,7 +324,10 @@ std::string NT4Server::BuildAnnounceJson(const TopicInfo& topic) const
 	msg["params"]["name"] = topic.name;
 	msg["params"]["id"] = topic.id;
 	msg["params"]["type"] = NT4TypeString(topic.type);
-	msg["params"]["pubuid"] = 0;  // server-originated, no client publisher
+	// Ian: pubuid is optional in the spec for server-initiated announces.
+	// Omitting it is fine per spec: "If this message was sent in response to a
+	// publish message, the Publisher UID. Otherwise absent."
+	// However, some ntcore implementations may expect it. We omit for now.
 	msg["params"]["properties"] = json::object();
 	// Ian: Wrap in array — NT4 spec says each text frame is a JSON array of messages.
 	json arr = json::array();
@@ -338,95 +350,98 @@ NT4Server::TopicInfo& NT4Server::GetOrCreateTopic(const std::string& name, NT4Ty
 	info.id = m_nextTopicId++;
 	info.name = name;
 	info.type = type;
-	info.announced = false;
 	m_topics[name] = info;
 	return m_topics[name];
 }
 
 // ============================================================================
-// Send announce + retained values for all topics to a specific client
+// Subscription matching
 // ============================================================================
+// Ian: Check if a topic name matches any of a client's subscriptions.
+// Per NT4 spec, if prefix=true, a topic matches if it starts with the subscription
+// string.  If prefix=false, it must be an exact match.  An empty string with
+// prefix=true matches ALL non-meta topics (topics not starting with '$').
 
-void NT4Server::AnnounceAllTopicsTo(void* wsPtr)
+bool NT4Server::TopicMatchesClientSubscriptions(const std::string& topicName,
+                                                 const ClientState& cs) const
 {
-	auto* ws = static_cast<ix::WebSocket*>(wsPtr);
-	if (!ws)
-		return;
-
-	// Build one big JSON array with all announce messages, then send retained values
-	json announcements = json::array();
-
-	std::vector<std::pair<TopicInfo, RetainedValue>> snapshot;
-
+	for (const auto& sub : cs.subscriptions)
 	{
-		std::lock_guard<std::mutex> lock(m_topicsMutex);
-		for (auto& kv : m_topics)
+		for (const auto& pattern : sub.topics)
 		{
-			TopicInfo& topic = kv.second;
-			topic.announced = true;
-
-			json msg;
-			msg["method"] = "announce";
-			msg["params"]["name"] = topic.name;
-			msg["params"]["id"] = topic.id;
-			msg["params"]["type"] = NT4TypeString(topic.type);
-			msg["params"]["pubuid"] = 0;
-			msg["params"]["properties"] = json::object();
-			announcements.push_back(msg);
-
-			auto retIt = m_retained.find(topic.name);
-			if (retIt != m_retained.end())
-				snapshot.push_back({topic, retIt->second});
+			if (sub.prefix)
+			{
+				// Prefix match: topic name starts with pattern
+				if (topicName.compare(0, pattern.size(), pattern) == 0)
+					return true;
+			}
+			else
+			{
+				// Exact match
+				if (topicName == pattern)
+					return true;
+			}
 		}
+	}
+	return false;
+}
+
+// ============================================================================
+// Send matching topics to a client after subscribe
+// ============================================================================
+// Ian: When a client sends subscribe, we need to send announce + cached value
+// for every existing topic that matches the subscription AND hasn't been
+// announced to this client yet.
+
+void NT4Server::SendMatchingTopicsToClient(ix::WebSocket& ws, ClientState& cs)
+{
+	// Caller must hold m_topicsMutex
+
+	// Build a batch of announces
+	json announcements = json::array();
+	std::vector<std::pair<TopicInfo, RetainedValue>> valuesToSend;
+
+	for (const auto& kv : m_topics)
+	{
+		const TopicInfo& topic = kv.second;
+
+		// Skip if already announced to this client
+		if (cs.announcedTopics.count(topic.id))
+			continue;
+
+		// Check if any subscription matches
+		if (!TopicMatchesClientSubscriptions(topic.name, cs))
+			continue;
+
+		// Build announce
+		json msg;
+		msg["method"] = "announce";
+		msg["params"]["name"] = topic.name;
+		msg["params"]["id"] = topic.id;
+		msg["params"]["type"] = NT4TypeString(topic.type);
+		msg["params"]["properties"] = json::object();
+		announcements.push_back(msg);
+
+		cs.announcedTopics.insert(topic.id);
+
+		// Queue cached value if available
+		auto retIt = m_retained.find(topic.name);
+		if (retIt != m_retained.end())
+			valuesToSend.push_back({topic, retIt->second});
 	}
 
 	// Send all announces in one text frame
 	if (!announcements.empty())
 	{
 		const std::string jsonText = announcements.dump();
-		ws->sendText(jsonText);
-
-		char dbg[256] = {};
-		sprintf_s(dbg, "[NT4Server] Sent %zu announce(s) to new client\n",
-			announcements.size());
-		OutputDebugStringA(dbg);
+		ws.sendText(jsonText);
 	}
 
-	// Send retained values as binary frames
-	for (const auto& entry : snapshot)
+	// Send cached values as binary frames
+	for (const auto& entry : valuesToSend)
 	{
 		const std::string frame = BuildValueFrame(entry.first, entry.second);
-		ws->sendBinary(frame);
-	}
-}
-
-// ============================================================================
-// Broadcast a value update to all connected clients
-// ============================================================================
-
-void NT4Server::SendValueToAllClients(const TopicInfo& topic, const RetainedValue& value)
-{
-	if (!m_server)
-		return;
-
-	// Ian: If this topic hasn't been announced yet, announce it first to all clients.
-	// This handles the case where a new topic is published after clients are already connected.
-	if (!topic.announced)
-	{
-		const std::string announceJson = BuildAnnounceJson(topic);
-		for (auto& client : m_server->getClients())
-		{
-			if (client)
-				client->sendText(announceJson);
-		}
-		// Mark as announced (caller should update under lock, but we do it here too for safety)
-	}
-
-	const std::string frame = BuildValueFrame(topic, value);
-	for (auto& client : m_server->getClients())
-	{
-		if (client)
-			client->sendBinary(frame);
+		ws.sendBinary(frame);
 	}
 }
 
@@ -494,8 +509,15 @@ bool NT4Server::Start(int port)
 				OutputDebugStringA(dbg);
 				printf("%s", dbg);
 
-				// Ian: Send all known topics + retained values to the new client.
-				AnnounceAllTopicsTo(&ws);
+				// Ian: LESSON LEARNED — Do NOT send announces here!
+				// The NT4 protocol is subscription-driven. We must wait for the client
+				// to send a subscribe message before we announce anything. Sending
+				// announces before subscribe causes ntcore to silently ignore them.
+				{
+					std::lock_guard<std::mutex> lock(m_topicsMutex);
+					uintptr_t key = reinterpret_cast<uintptr_t>(&ws);
+					m_clientState[key] = ClientState{};
+				}
 				break;
 			}
 
@@ -506,6 +528,13 @@ bool NT4Server::Start(int port)
 					connectionState->getRemoteIp().c_str(),
 					msg->closeInfo.code);
 				OutputDebugStringA(dbg);
+
+				// Clean up client state
+				{
+					std::lock_guard<std::mutex> lock(m_topicsMutex);
+					uintptr_t key = reinterpret_cast<uintptr_t>(&ws);
+					m_clientState.erase(key);
+				}
 				break;
 			}
 
@@ -513,16 +542,13 @@ bool NT4Server::Start(int port)
 			{
 				if (msg->binary)
 				{
-					// Ian: Binary frames from client would be value updates (e.g. for
-					// bidirectional topics). In iteration 1 we're server-publish-only,
-					// so we just log and ignore.
-					OutputDebugStringA("[NT4Server] Received binary frame from client (ignored in iteration 1)\n");
+					// Ian: Binary frames from client are value updates or timestamp
+					// sync (topic ID -1). Handle timestamp sync for v4.1 compliance.
+					HandleClientBinaryMessage(ws, msg->str);
 				}
 				else
 				{
 					// Ian: Text frames are JSON control messages.
-					// We need to handle: subscribe, publish, setproperties, unsubscribe, unpublish
-					// For iteration 1, we mostly just acknowledge these gracefully.
 					HandleClientTextMessage(ws, msg->str);
 				}
 				break;
@@ -588,6 +614,10 @@ void NT4Server::Stop()
 	m_server->stop();
 	m_server.reset();
 	m_running = false;
+
+	std::lock_guard<std::mutex> lock(m_topicsMutex);
+	m_clientState.clear();
+
 	OutputDebugStringA("[NT4Server] Stopped\n");
 }
 
@@ -599,6 +629,11 @@ bool NT4Server::IsRunning() const
 // ============================================================================
 // Publishing API
 // ============================================================================
+// Ian: Each Publish* method:
+//   1. Creates the topic if it doesn't exist
+//   2. Updates the retained value cache
+//   3. Announces to any subscribed client that hasn't seen this topic yet
+//   4. Sends the value update to all subscribed clients
 
 void NT4Server::PublishDouble(const std::string& topicName, double value)
 {
@@ -609,32 +644,37 @@ void NT4Server::PublishDouble(const std::string& topicName, double value)
 	rv.type = NT4Type::Double;
 	rv.doubleVal = value;
 
-	if (m_running)
+	if (!m_running || !m_server)
+		return;
+
+	// Send to each subscribed client
+	for (auto& client : m_server->getClients())
 	{
-		// If topic was just created, mark it announced and send announce first
-		if (!topic.announced)
+		if (!client)
+			continue;
+
+		uintptr_t key = reinterpret_cast<uintptr_t>(client.get());
+		auto csIt = m_clientState.find(key);
+		if (csIt == m_clientState.end())
+			continue;
+
+		ClientState& cs = csIt->second;
+
+		// Check subscription match
+		if (!TopicMatchesClientSubscriptions(topicName, cs))
+			continue;
+
+		// Announce if not yet announced to this client
+		if (!cs.announcedTopics.count(topic.id))
 		{
-			topic.announced = true;
+			cs.announcedTopics.insert(topic.id);
 			const std::string announceJson = BuildAnnounceJson(topic);
-			if (m_server)
-			{
-				for (auto& client : m_server->getClients())
-				{
-					if (client)
-						client->sendText(announceJson);
-				}
-			}
+			client->sendText(announceJson);
 		}
 
+		// Send value
 		const std::string frame = BuildValueFrame(topic, rv);
-		if (m_server)
-		{
-			for (auto& client : m_server->getClients())
-			{
-				if (client)
-					client->sendBinary(frame);
-			}
-		}
+		client->sendBinary(frame);
 	}
 }
 
@@ -647,31 +687,24 @@ void NT4Server::PublishBoolean(const std::string& topicName, bool value)
 	rv.type = NT4Type::Boolean;
 	rv.boolVal = value;
 
-	if (m_running)
-	{
-		if (!topic.announced)
-		{
-			topic.announced = true;
-			const std::string announceJson = BuildAnnounceJson(topic);
-			if (m_server)
-			{
-				for (auto& client : m_server->getClients())
-				{
-					if (client)
-						client->sendText(announceJson);
-				}
-			}
-		}
+	if (!m_running || !m_server)
+		return;
 
-		const std::string frame = BuildValueFrame(topic, rv);
-		if (m_server)
+	for (auto& client : m_server->getClients())
+	{
+		if (!client) continue;
+		uintptr_t key = reinterpret_cast<uintptr_t>(client.get());
+		auto csIt = m_clientState.find(key);
+		if (csIt == m_clientState.end()) continue;
+		ClientState& cs = csIt->second;
+		if (!TopicMatchesClientSubscriptions(topicName, cs)) continue;
+
+		if (!cs.announcedTopics.count(topic.id))
 		{
-			for (auto& client : m_server->getClients())
-			{
-				if (client)
-					client->sendBinary(frame);
-			}
+			cs.announcedTopics.insert(topic.id);
+			client->sendText(BuildAnnounceJson(topic));
 		}
+		client->sendBinary(BuildValueFrame(topic, rv));
 	}
 }
 
@@ -684,31 +717,24 @@ void NT4Server::PublishString(const std::string& topicName, const std::string& v
 	rv.type = NT4Type::String;
 	rv.stringVal = value;
 
-	if (m_running)
-	{
-		if (!topic.announced)
-		{
-			topic.announced = true;
-			const std::string announceJson = BuildAnnounceJson(topic);
-			if (m_server)
-			{
-				for (auto& client : m_server->getClients())
-				{
-					if (client)
-						client->sendText(announceJson);
-				}
-			}
-		}
+	if (!m_running || !m_server)
+		return;
 
-		const std::string frame = BuildValueFrame(topic, rv);
-		if (m_server)
+	for (auto& client : m_server->getClients())
+	{
+		if (!client) continue;
+		uintptr_t key = reinterpret_cast<uintptr_t>(client.get());
+		auto csIt = m_clientState.find(key);
+		if (csIt == m_clientState.end()) continue;
+		ClientState& cs = csIt->second;
+		if (!TopicMatchesClientSubscriptions(topicName, cs)) continue;
+
+		if (!cs.announcedTopics.count(topic.id))
 		{
-			for (auto& client : m_server->getClients())
-			{
-				if (client)
-					client->sendBinary(frame);
-			}
+			cs.announcedTopics.insert(topic.id);
+			client->sendText(BuildAnnounceJson(topic));
 		}
+		client->sendBinary(BuildValueFrame(topic, rv));
 	}
 }
 
@@ -721,31 +747,24 @@ void NT4Server::PublishStringArray(const std::string& topicName, const std::vect
 	rv.type = NT4Type::StringArr;
 	rv.stringArrayVal = values;
 
-	if (m_running)
-	{
-		if (!topic.announced)
-		{
-			topic.announced = true;
-			const std::string announceJson = BuildAnnounceJson(topic);
-			if (m_server)
-			{
-				for (auto& client : m_server->getClients())
-				{
-					if (client)
-						client->sendText(announceJson);
-				}
-			}
-		}
+	if (!m_running || !m_server)
+		return;
 
-		const std::string frame = BuildValueFrame(topic, rv);
-		if (m_server)
+	for (auto& client : m_server->getClients())
+	{
+		if (!client) continue;
+		uintptr_t key = reinterpret_cast<uintptr_t>(client.get());
+		auto csIt = m_clientState.find(key);
+		if (csIt == m_clientState.end()) continue;
+		ClientState& cs = csIt->second;
+		if (!TopicMatchesClientSubscriptions(topicName, cs)) continue;
+
+		if (!cs.announcedTopics.count(topic.id))
 		{
-			for (auto& client : m_server->getClients())
-			{
-				if (client)
-					client->sendBinary(frame);
-			}
+			cs.announcedTopics.insert(topic.id);
+			client->sendText(BuildAnnounceJson(topic));
 		}
+		client->sendBinary(BuildValueFrame(topic, rv));
 	}
 }
 
@@ -758,43 +777,129 @@ void NT4Server::PublishInt(const std::string& topicName, int64_t value)
 	rv.type = NT4Type::Int;
 	rv.intVal = value;
 
-	if (m_running)
-	{
-		if (!topic.announced)
-		{
-			topic.announced = true;
-			const std::string announceJson = BuildAnnounceJson(topic);
-			if (m_server)
-			{
-				for (auto& client : m_server->getClients())
-				{
-					if (client)
-						client->sendText(announceJson);
-				}
-			}
-		}
+	if (!m_running || !m_server)
+		return;
 
-		const std::string frame = BuildValueFrame(topic, rv);
-		if (m_server)
+	for (auto& client : m_server->getClients())
+	{
+		if (!client) continue;
+		uintptr_t key = reinterpret_cast<uintptr_t>(client.get());
+		auto csIt = m_clientState.find(key);
+		if (csIt == m_clientState.end()) continue;
+		ClientState& cs = csIt->second;
+		if (!TopicMatchesClientSubscriptions(topicName, cs)) continue;
+
+		if (!cs.announcedTopics.count(topic.id))
 		{
-			for (auto& client : m_server->getClients())
-			{
-				if (client)
-					client->sendBinary(frame);
-			}
+			cs.announcedTopics.insert(topic.id);
+			client->sendText(BuildAnnounceJson(topic));
 		}
+		client->sendBinary(BuildValueFrame(topic, rv));
+	}
+}
+
+// ============================================================================
+// Handle binary messages from clients
+// ============================================================================
+// Ian: In NT4 v4.1, clients send binary frames for:
+//   - Timestamp sync (topic ID = -1): client sends its local time, server
+//     responds with server time + echoed client time
+//   - Value updates for topics the client published (not used in iteration 1)
+
+void NT4Server::HandleClientBinaryMessage(ix::WebSocket& ws, const std::string& data)
+{
+	// Ian: Minimal MessagePack decoder — just enough to read the topic ID
+	// from a 4-element array to detect timestamp sync requests.
+	if (data.size() < 3)
+		return;
+
+	size_t pos = 0;
+
+	// Read array header
+	uint8_t first = static_cast<uint8_t>(data[pos++]);
+	uint32_t arrayLen = 0;
+	if ((first & 0xF0) == 0x90)
+		arrayLen = first & 0x0F;
+	else if (first == 0xDC && pos + 2 <= data.size())
+	{
+		arrayLen = (static_cast<uint8_t>(data[pos]) << 8) | static_cast<uint8_t>(data[pos + 1]);
+		pos += 2;
+	}
+	else
+		return;
+
+	if (arrayLen != 4)
+		return;
+
+	// Read topic ID (first element) — could be negative fixint for -1
+	uint8_t idByte = static_cast<uint8_t>(data[pos]);
+	int32_t topicId = 0;
+
+	if (idByte <= 127)
+	{
+		// positive fixint
+		topicId = idByte;
+		pos++;
+	}
+	else if (idByte >= 0xE0)
+	{
+		// negative fixint: -1 to -32
+		topicId = static_cast<int8_t>(idByte);
+		pos++;
+	}
+	else if (idByte == 0xD0 && pos + 2 <= data.size())
+	{
+		// int 8
+		topicId = static_cast<int8_t>(data[pos + 1]);
+		pos += 2;
+	}
+	else
+	{
+		// Other int formats — for timestamp sync we only care about -1
+		return;
+	}
+
+	// Ian: Topic ID -1 = timestamp sync request.
+	// Per NT4 spec: client sends [−1, 0, type, clientTime].
+	// Server must respond with [−1, serverTime, type, clientTime].
+	// We need to read the type code and client time value, then echo back.
+	if (topicId == -1)
+	{
+		// Read timestamp (element [1]) — skip it (should be 0)
+		// Read type code (element [2]) — need this
+		// Read client time (element [3]) — need this to echo back
+		// For simplicity, just echo the entire data payload with our timestamp inserted.
+		// The safest approach: rebuild the response from scratch.
+
+		// We need to parse out the client's time value.  For a robust implementation
+		// we'd need a full msgpack decoder.  For now, use a simplified approach:
+		// Respond with [−1, serverTimestamp, 1 (int type code), 0] which at least
+		// tells the client we're alive.  This is imperfect but enough for iteration 1.
+		// TODO: Properly echo client time for accurate RTT measurement.
+
+		std::string response;
+		response.reserve(32);
+		MsgPackWriteArrayHeader(response, 4);
+		MsgPackWriteInt(response, -1);              // topic ID
+		MsgPackWriteUInt(response, GetTimestampUs()); // server timestamp
+		MsgPackWriteInt(response, 1);               // type code (double)
+		// Ian: We should echo the client's time value, but we'd need to decode it.
+		// For now send 0 — this means the client's RTT estimate will be wrong,
+		// but it won't break functionality.  Proper implementation in iteration 2.
+		MsgPackWriteInt(response, 0);
+
+		ws.sendBinary(response);
 	}
 }
 
 // ============================================================================
 // Handle JSON control messages from clients
 // ============================================================================
-// Ian: In iteration 1 we're server-publish-only. We handle client messages
-// gracefully but don't act on most of them:
-//   - subscribe: acknowledge (we broadcast to all anyway)
-//   - publish: client wants to publish to us — not supported in iteration 1
-//   - setproperties: acknowledge
-//   - unsubscribe / unpublish: acknowledge
+// Ian: NT4 text frames are JSON arrays of message objects.
+// Critical methods we handle:
+//   - subscribe: Client wants to receive topic data — THIS is what triggers announces
+//   - publish: Client wants to publish a topic to us
+//   - unsubscribe / unpublish / setproperties: Acknowledged
 
 void NT4Server::HandleClientTextMessage(ix::WebSocket& ws, const std::string& text)
 {
@@ -802,10 +907,7 @@ void NT4Server::HandleClientTextMessage(ix::WebSocket& ws, const std::string& te
 	{
 		auto messages = json::parse(text);
 		if (!messages.is_array())
-		{
-			OutputDebugStringA("[NT4Server] Received non-array JSON text frame (ignoring)\n");
 			return;
-		}
 
 		for (const auto& msg : messages)
 		{
@@ -816,41 +918,126 @@ void NT4Server::HandleClientTextMessage(ix::WebSocket& ws, const std::string& te
 
 			if (method == "subscribe")
 			{
-				// Ian: Client wants to subscribe to topics. Since we broadcast all values
-				// to all clients anyway (simplification for iteration 1), we just log it.
-				// A proper implementation would track per-client subscriptions and only
-				// send matching topics.
-				if (msg["params"].contains("topics"))
+				// Ian: THIS is the critical message. When Shuffleboard subscribes,
+				// we record the subscription and THEN send matching announces + values.
+				const auto& params = msg["params"];
+
+				ClientSubscription sub;
+				if (params.contains("subuid"))
+					sub.subuid = params["subuid"].get<int32_t>();
+				if (params.contains("topics") && params["topics"].is_array())
 				{
-					char dbg[512] = {};
-					sprintf_s(dbg, "[NT4Server] Client subscribe request for %zu topic pattern(s)\n",
-						msg["params"]["topics"].size());
-					OutputDebugStringA(dbg);
+					for (const auto& t : params["topics"])
+						sub.topics.push_back(t.get<std::string>());
+				}
+				if (params.contains("options") && params["options"].is_object())
+				{
+					const auto& opts = params["options"];
+					if (opts.contains("prefix"))
+						sub.prefix = opts["prefix"].get<bool>();
+				}
+
+				// Store subscription and send matching topics
+				{
+					std::lock_guard<std::mutex> lock(m_topicsMutex);
+					uintptr_t key = reinterpret_cast<uintptr_t>(&ws);
+					auto csIt = m_clientState.find(key);
+					if (csIt != m_clientState.end())
+					{
+						// Check if this subuid already exists (update)
+						bool found = false;
+						for (auto& existing : csIt->second.subscriptions)
+						{
+							if (existing.subuid == sub.subuid)
+							{
+								existing = sub; // Replace
+								found = true;
+								break;
+							}
+						}
+						if (!found)
+							csIt->second.subscriptions.push_back(sub);
+
+						// Now send announces + cached values for all matching topics
+						SendMatchingTopicsToClient(ws, csIt->second);
+					}
 				}
 			}
 			else if (method == "publish")
 			{
 				// Ian: Client wants to publish a topic to the server.
-				// Not supported in iteration 1 (we're server-publish-only).
-				OutputDebugStringA("[NT4Server] Client publish request (not supported in iteration 1)\n");
+				// In NT4, the server must respond with an announce message.
+				// Not fully supported in iteration 1, but we should at least
+				// respond with an announce to keep the client happy.
+
+				if (msg["params"].contains("name") && msg["params"].contains("type"))
+				{
+					const std::string name = msg["params"]["name"].get<std::string>();
+					const std::string typeStr = msg["params"]["type"].get<std::string>();
+					int32_t pubuid = 0;
+					if (msg["params"].contains("pubuid"))
+						pubuid = msg["params"]["pubuid"].get<int32_t>();
+
+					// Determine NT4Type from string
+					NT4Type type = NT4Type::Raw;
+					if (typeStr == "boolean") type = NT4Type::Boolean;
+					else if (typeStr == "double") type = NT4Type::Double;
+					else if (typeStr == "int") type = NT4Type::Int;
+					else if (typeStr == "float") type = NT4Type::Float;
+					else if (typeStr == "string") type = NT4Type::String;
+					else if (typeStr == "boolean[]") type = NT4Type::BooleanArr;
+					else if (typeStr == "double[]") type = NT4Type::DoubleArr;
+					else if (typeStr == "int[]") type = NT4Type::IntArr;
+					else if (typeStr == "float[]") type = NT4Type::FloatArr;
+					else if (typeStr == "string[]") type = NT4Type::StringArr;
+
+					std::lock_guard<std::mutex> lock(m_topicsMutex);
+					TopicInfo& topic = GetOrCreateTopic(name, type);
+
+					// Respond with announce (include pubuid since this is in response to publish)
+					json announceMsg;
+					announceMsg["method"] = "announce";
+					announceMsg["params"]["name"] = topic.name;
+					announceMsg["params"]["id"] = topic.id;
+					announceMsg["params"]["type"] = NT4TypeString(topic.type);
+					announceMsg["params"]["pubuid"] = pubuid;
+					announceMsg["params"]["properties"] = json::object();
+
+					json arr = json::array();
+					arr.push_back(announceMsg);
+					ws.sendText(arr.dump());
+				}
 			}
 			else if (method == "setproperties")
 			{
-				OutputDebugStringA("[NT4Server] Client setproperties request (acknowledged, no-op)\n");
+				// Acknowledged — no action needed in iteration 1
 			}
 			else if (method == "unsubscribe")
 			{
-				OutputDebugStringA("[NT4Server] Client unsubscribe request (acknowledged)\n");
+				// Remove the subscription
+				if (msg["params"].contains("subuid"))
+				{
+					int32_t subuid = msg["params"]["subuid"].get<int32_t>();
+					std::lock_guard<std::mutex> lock(m_topicsMutex);
+					uintptr_t key = reinterpret_cast<uintptr_t>(&ws);
+					auto csIt = m_clientState.find(key);
+					if (csIt != m_clientState.end())
+					{
+						auto& subs = csIt->second.subscriptions;
+						subs.erase(
+							std::remove_if(subs.begin(), subs.end(),
+								[subuid](const ClientSubscription& s) { return s.subuid == subuid; }),
+							subs.end());
+					}
+				}
 			}
 			else if (method == "unpublish")
 			{
-				OutputDebugStringA("[NT4Server] Client unpublish request (acknowledged)\n");
+				// Acknowledged — no action needed in iteration 1
 			}
 			else
 			{
-				char dbg[256] = {};
-				sprintf_s(dbg, "[NT4Server] Unknown method '%s' (ignoring)\n", method.c_str());
-				OutputDebugStringA(dbg);
+				// Unknown method — ignore
 			}
 		}
 	}

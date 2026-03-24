@@ -89,16 +89,20 @@ Make the simulator talk to the official Shuffleboard app (`D:\code\Shuffleboard`
 ### Build commands
 
 ```bash
-# Configure (fresh build_nt4 directory)
-cmake -G "Visual Studio 17 2022" -B build_nt4 -DCMAKE_TOOLCHAIN_FILE="D:/code/vcpkg/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows -DVCPKG_OVERLAY_PORTS="D:/code/Robot_Simulation/overlay-ports"
+# Configure (uses existing build-vcpkg directory)
+cmake -G "Visual Studio 17 2022" -B build-vcpkg -DCMAKE_TOOLCHAIN_FILE="D:/code/vcpkg/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows
 
 # Build
-cmake --build build_nt4 --target DriverStation --config Release
-cmake --build build_nt4 --target DriverStation_TransportSmoke --config Release
+cmake --build build-vcpkg --target DriverStation --config Release
+cmake --build build-vcpkg --target DriverStation_TransportSmoke --config Release
 
 # Run smoke test
-build_nt4\bin\Release\DriverStation_TransportSmoke.exe --mode shuffle
+build-vcpkg\bin\Release\DriverStation_TransportSmoke.exe --mode shuffle
 ```
+
+Note: The ixwebsocket overlay port only matters at `vcpkg install` time, not at CMake configure time. The patched library is already in vcpkg's `installed/` directory.
+
+**Windows Firewall:** The first time DriverStation.exe listens on port 5810, Windows will prompt to allow it through the firewall. This is a one-time approval.
 
 ### What to publish (iteration 1 — current widget types only)
 

@@ -1538,9 +1538,13 @@ public:
 			SmartDashboard::SetDirectPublishSink(this);
 			m_running = m_nt4Server.Start(5810);
 			if (m_running)
+			{
 				OutputDebugStringW(L"[Transport] Shuffleboard NT4 backend initialized on port 5810\n");
+			}
 			else
+			{
 				OutputDebugStringW(L"[Transport] Shuffleboard NT4 backend FAILED to start on port 5810\n");
+			}
 		}
 		void Shutdown() override
 		{
@@ -1624,7 +1628,13 @@ void DashboardTransportRouter::Initialize(ConnectionMode initial_mode)
 	m_mode = initial_mode;
 	EnsureBackend();
 	if (m_backend)
+	{
 		m_backend->Initialize();
+	}
+	else
+	{
+		OutputDebugStringW(L"[Transport] WARNING: m_backend is null after EnsureBackend\n");
+	}
 	m_is_initialized = true;
 }
 
@@ -1637,7 +1647,9 @@ void DashboardTransportRouter::SetMode(ConnectionMode mode)
 	}
 
 	if (m_mode == mode && m_backend)
+	{
 		return;
+	}
 
 	if (UsesLegacyTransportPath(m_mode) && UsesLegacyTransportPath(mode))
 	{
