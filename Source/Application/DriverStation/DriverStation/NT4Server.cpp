@@ -351,6 +351,7 @@ NT4Server::TopicInfo& NT4Server::GetOrCreateTopic(const std::string& name, NT4Ty
 	info.name = name;
 	info.type = type;
 	m_topics[name] = info;
+	m_topicIdToName[info.id] = name;
 	return m_topics[name];
 }
 
@@ -799,97 +800,378 @@ void NT4Server::PublishInt(const std::string& topicName, int64_t value)
 }
 
 // ============================================================================
+// Minimal MessagePack reader (for decoding incoming client value frames)
+// ============================================================================
+// Ian: This is the read-side counterpart to the MsgPackWrite* encoder above.
+// We need it to decode binary value frames from clients writing back chooser
+// selections and other control values. Only implements the types we need:
+// ints, doubles, bools, strings, and enough to skip unknown elements.
+
+static uint16_t ReadBE16(const uint8_t* p)
+{
+	return static_cast<uint16_t>((p[0] << 8) | p[1]);
+}
+
+static uint32_t ReadBE32(const uint8_t* p)
+{
+	return (static_cast<uint32_t>(p[0]) << 24)
+	     | (static_cast<uint32_t>(p[1]) << 16)
+	     | (static_cast<uint32_t>(p[2]) <<  8)
+	     |  static_cast<uint32_t>(p[3]);
+}
+
+static uint64_t ReadBE64(const uint8_t* p)
+{
+	return (static_cast<uint64_t>(p[0]) << 56)
+	     | (static_cast<uint64_t>(p[1]) << 48)
+	     | (static_cast<uint64_t>(p[2]) << 40)
+	     | (static_cast<uint64_t>(p[3]) << 32)
+	     | (static_cast<uint64_t>(p[4]) << 24)
+	     | (static_cast<uint64_t>(p[5]) << 16)
+	     | (static_cast<uint64_t>(p[6]) <<  8)
+	     |  static_cast<uint64_t>(p[7]);
+}
+
+bool NT4Server::MsgPackCursor::ReadArrayHeader(uint32_t& count)
+{
+	if (!HasRemaining(1)) return false;
+	uint8_t b = data[pos++];
+	if ((b & 0xF0) == 0x90) { count = b & 0x0F; return true; }
+	if (b == 0xDC && HasRemaining(2)) { count = ReadBE16(data + pos); pos += 2; return true; }
+	if (b == 0xDD && HasRemaining(4)) { count = ReadBE32(data + pos); pos += 4; return true; }
+	return false;
+}
+
+bool NT4Server::MsgPackCursor::ReadInt(int64_t& out)
+{
+	if (!HasRemaining(1)) return false;
+	uint8_t b = data[pos++];
+	if (b <= 0x7F) { out = static_cast<int64_t>(b); return true; }
+	if (b >= 0xE0) { out = static_cast<int64_t>(static_cast<int8_t>(b)); return true; }
+	switch (b)
+	{
+		case 0xCC: if (!HasRemaining(1)) return false; out = data[pos++]; return true;
+		case 0xCD: if (!HasRemaining(2)) return false; out = ReadBE16(data + pos); pos += 2; return true;
+		case 0xCE: if (!HasRemaining(4)) return false; out = ReadBE32(data + pos); pos += 4; return true;
+		case 0xCF: if (!HasRemaining(8)) return false; out = static_cast<int64_t>(ReadBE64(data + pos)); pos += 8; return true;
+		case 0xD0: if (!HasRemaining(1)) return false; out = static_cast<int8_t>(data[pos++]); return true;
+		case 0xD1: if (!HasRemaining(2)) return false; out = static_cast<int16_t>(ReadBE16(data + pos)); pos += 2; return true;
+		case 0xD2: if (!HasRemaining(4)) return false; out = static_cast<int32_t>(ReadBE32(data + pos)); pos += 4; return true;
+		case 0xD3: if (!HasRemaining(8)) return false; out = static_cast<int64_t>(ReadBE64(data + pos)); pos += 8; return true;
+		default: return false;
+	}
+}
+
+bool NT4Server::MsgPackCursor::ReadUInt(uint64_t& out)
+{
+	int64_t sv; if (!ReadInt(sv)) return false;
+	out = static_cast<uint64_t>(sv); return true;
+}
+
+bool NT4Server::MsgPackCursor::ReadDouble(double& out)
+{
+	if (!HasRemaining(1)) return false;
+	uint8_t b = data[pos];
+	if (b == 0xCB)
+	{
+		pos++;
+		if (!HasRemaining(8)) return false;
+		uint64_t bits = ReadBE64(data + pos); pos += 8;
+		std::memcpy(&out, &bits, sizeof(double));
+		return true;
+	}
+	if (b == 0xCA)
+	{
+		pos++;
+		if (!HasRemaining(4)) return false;
+		uint32_t bits = ReadBE32(data + pos); pos += 4;
+		float f; std::memcpy(&f, &bits, sizeof(float));
+		out = static_cast<double>(f);
+		return true;
+	}
+	int64_t iv; if (ReadInt(iv)) { out = static_cast<double>(iv); return true; }
+	return false;
+}
+
+bool NT4Server::MsgPackCursor::ReadBool(bool& out)
+{
+	if (!HasRemaining(1)) return false;
+	uint8_t b = data[pos++];
+	if (b == 0xC3) { out = true; return true; }
+	if (b == 0xC2) { out = false; return true; }
+	return false;
+}
+
+bool NT4Server::MsgPackCursor::ReadString(std::string& out)
+{
+	if (!HasRemaining(1)) return false;
+	uint8_t b = data[pos++];
+	size_t len = 0;
+	if ((b & 0xE0) == 0xA0) { len = b & 0x1F; }
+	else if (b == 0xD9 && HasRemaining(1)) { len = data[pos++]; }
+	else if (b == 0xDA && HasRemaining(2)) { len = ReadBE16(data + pos); pos += 2; }
+	else if (b == 0xDB && HasRemaining(4)) { len = ReadBE32(data + pos); pos += 4; }
+	else return false;
+	if (!HasRemaining(len)) return false;
+	out.assign(reinterpret_cast<const char*>(data + pos), len);
+	pos += len;
+	return true;
+}
+
+bool NT4Server::MsgPackCursor::SkipElement()
+{
+	if (!HasRemaining(1)) return false;
+	uint8_t b = data[pos++];
+	if (b <= 0x7F || b >= 0xE0) return true;
+	if (b == 0xC0 || b == 0xC2 || b == 0xC3) return true;
+	if ((b & 0xE0) == 0xA0) { size_t n = b & 0x1F; if (!HasRemaining(n)) return false; pos += n; return true; }
+	if ((b & 0xF0) == 0x90) { uint32_t n = b & 0x0F; for (uint32_t i = 0; i < n; ++i) if (!SkipElement()) return false; return true; }
+	if ((b & 0xF0) == 0x80) { uint32_t n = b & 0x0F; for (uint32_t i = 0; i < n * 2; ++i) if (!SkipElement()) return false; return true; }
+	switch (b)
+	{
+		case 0xCC: case 0xD0: if (!HasRemaining(1)) return false; pos += 1; return true;
+		case 0xCD: case 0xD1: if (!HasRemaining(2)) return false; pos += 2; return true;
+		case 0xCE: case 0xD2: case 0xCA: if (!HasRemaining(4)) return false; pos += 4; return true;
+		case 0xCF: case 0xD3: case 0xCB: if (!HasRemaining(8)) return false; pos += 8; return true;
+		case 0xD9: { if (!HasRemaining(1)) return false; size_t n = data[pos++]; if (!HasRemaining(n)) return false; pos += n; return true; }
+		case 0xDA: { if (!HasRemaining(2)) return false; size_t n = ReadBE16(data + pos); pos += 2; if (!HasRemaining(n)) return false; pos += n; return true; }
+		case 0xDB: { if (!HasRemaining(4)) return false; size_t n = ReadBE32(data + pos); pos += 4; if (!HasRemaining(n)) return false; pos += n; return true; }
+		case 0xDC: { if (!HasRemaining(2)) return false; uint32_t n = ReadBE16(data + pos); pos += 2; for (uint32_t i = 0; i < n; ++i) if (!SkipElement()) return false; return true; }
+		case 0xDD: { if (!HasRemaining(4)) return false; uint32_t n = ReadBE32(data + pos); pos += 4; for (uint32_t i = 0; i < n; ++i) if (!SkipElement()) return false; return true; }
+		default: return false;
+	}
+}
+
+// ============================================================================
 // Handle binary messages from clients
 // ============================================================================
-// Ian: In NT4 v4.1, clients send binary frames for:
+// Ian: In NT4, clients send binary frames for:
 //   - Timestamp sync (topic ID = -1): client sends its local time, server
 //     responds with server time + echoed client time
-//   - Value updates for topics the client published (not used in iteration 1)
+//   - Value updates for topics the client published: the first array element
+//     is the client's pubuid (NOT the server topic ID). We resolve it via
+//     the per-client pubuidToTopicId map stored during the "publish" handshake.
 
 void NT4Server::HandleClientBinaryMessage(ix::WebSocket& ws, const std::string& data)
 {
-	// Ian: Minimal MessagePack decoder — just enough to read the topic ID
-	// from a 4-element array to detect timestamp sync requests.
 	if (data.size() < 3)
 		return;
 
-	size_t pos = 0;
+	const auto* rawData = reinterpret_cast<const uint8_t*>(data.data());
+	MsgPackCursor cursor(rawData, data.size());
 
-	// Read array header
-	uint8_t first = static_cast<uint8_t>(data[pos++]);
-	uint32_t arrayLen = 0;
-	if ((first & 0xF0) == 0x90)
-		arrayLen = first & 0x0F;
-	else if (first == 0xDC && pos + 2 <= data.size())
+	// Ian: A single binary frame may contain multiple concatenated MsgPack arrays.
+	while (cursor.pos < cursor.size)
 	{
-		arrayLen = (static_cast<uint8_t>(data[pos]) << 8) | static_cast<uint8_t>(data[pos + 1]);
-		pos += 2;
+		uint32_t arrayLen = 0;
+		if (!cursor.ReadArrayHeader(arrayLen) || arrayLen < 4)
+			break;
+
+		int64_t topicIdOrPubuid = 0;
+		if (!cursor.ReadInt(topicIdOrPubuid))
+			break;
+
+		uint64_t timestamp = 0;
+		if (!cursor.ReadUInt(timestamp))
+			break;
+
+		int64_t typeCodeRaw = 0;
+		if (!cursor.ReadInt(typeCodeRaw))
+			break;
+
+		// Topic ID -1 = timestamp sync
+		if (topicIdOrPubuid == -1)
+		{
+			// Ian: Respond with [−1, serverTime, typeCode, clientTime].
+			// For now we echo 0 for clientTime — proper RTT requires decoding
+			// the client's time value from the 4th element.
+			cursor.SkipElement();
+			for (uint32_t i = 4; i < arrayLen; ++i) cursor.SkipElement();
+
+			std::string response;
+			response.reserve(32);
+			MsgPackWriteArrayHeader(response, 4);
+			MsgPackWriteInt(response, -1);
+			MsgPackWriteUInt(response, GetTimestampUs());
+			MsgPackWriteInt(response, 1);
+			MsgPackWriteInt(response, 0);
+			ws.sendBinary(response);
+			continue;
+		}
+
+		// Ian: For real value frames, the client sends its pubuid (the ID it chose
+		// in the "publish" JSON message) as the first element. We resolve this to
+		// the server-assigned topic ID via the per-client mapping.
+		int32_t serverTopicId = -1;
+		{
+			std::lock_guard<std::mutex> lock(m_topicsMutex);
+			uintptr_t clientKey = reinterpret_cast<uintptr_t>(&ws);
+			auto csIt = m_clientState.find(clientKey);
+			if (csIt != m_clientState.end())
+			{
+				int32_t pubuid = static_cast<int32_t>(topicIdOrPubuid);
+				auto pubIt = csIt->second.pubuidToTopicId.find(pubuid);
+				if (pubIt != csIt->second.pubuidToTopicId.end())
+					serverTopicId = pubIt->second;
+			}
+		}
+
+		if (serverTopicId < 0)
+		{
+			// Unknown pubuid — skip remaining elements
+			cursor.SkipElement();
+			for (uint32_t i = 4; i < arrayLen; ++i) cursor.SkipElement();
+			continue;
+		}
+
+		// Decode the value based on type code
+		NT4Type ntType = static_cast<NT4Type>(static_cast<uint8_t>(typeCodeRaw));
+		RetainedValue rv;
+		rv.type = ntType;
+		bool decoded = false;
+
+		switch (ntType)
+		{
+			case NT4Type::Boolean:
+			{
+				bool bv = false;
+				if (cursor.ReadBool(bv)) { rv.boolVal = bv; decoded = true; }
+				break;
+			}
+			case NT4Type::Double:
+			case NT4Type::Float:
+			{
+				double dv = 0.0;
+				if (cursor.ReadDouble(dv)) { rv.type = NT4Type::Double; rv.doubleVal = dv; decoded = true; }
+				break;
+			}
+			case NT4Type::Int:
+			{
+				int64_t iv = 0;
+				if (cursor.ReadInt(iv)) { rv.intVal = iv; rv.doubleVal = static_cast<double>(iv); decoded = true; }
+				break;
+			}
+			case NT4Type::String:
+			{
+				std::string sv;
+				if (cursor.ReadString(sv)) { rv.stringVal = std::move(sv); decoded = true; }
+				break;
+			}
+			default:
+				cursor.SkipElement();
+				break;
+		}
+
+		for (uint32_t i = 4; i < arrayLen; ++i) cursor.SkipElement();
+
+		if (decoded)
+		{
+			HandleClientValueUpdate(ws, serverTopicId, rv);
+		}
 	}
-	else
+}
+
+// ============================================================================
+// Handle a decoded client value update
+// ============================================================================
+// Ian: Update the retained cache and re-broadcast to other subscribed clients.
+// This is how dashboard write-back (e.g. chooser selection) reaches the simulator:
+//   1. Client sends binary value frame → decoded above
+//   2. We update the retained cache (m_retained) with the new value
+//   3. Other subscribed clients see the update (re-broadcast)
+//   4. The simulator reads the value via TryGet* queries on the retained cache
+
+void NT4Server::HandleClientValueUpdate(ix::WebSocket& sender, int32_t topicId, const RetainedValue& value)
+{
+	std::lock_guard<std::mutex> lock(m_topicsMutex);
+
+	// Find the topic name from the ID
+	auto nameIt = m_topicIdToName.find(topicId);
+	if (nameIt == m_topicIdToName.end())
 		return;
 
-	if (arrayLen != 4)
+	const std::string& topicName = nameIt->second;
+	auto topicIt = m_topics.find(topicName);
+	if (topicIt == m_topics.end())
 		return;
 
-	// Read topic ID (first element) — could be negative fixint for -1
-	uint8_t idByte = static_cast<uint8_t>(data[pos]);
-	int32_t topicId = 0;
+	const TopicInfo& topic = topicIt->second;
 
-	if (idByte <= 127)
-	{
-		// positive fixint
-		topicId = idByte;
-		pos++;
-	}
-	else if (idByte >= 0xE0)
-	{
-		// negative fixint: -1 to -32
-		topicId = static_cast<int8_t>(idByte);
-		pos++;
-	}
-	else if (idByte == 0xD0 && pos + 2 <= data.size())
-	{
-		// int 8
-		topicId = static_cast<int8_t>(data[pos + 1]);
-		pos += 2;
-	}
-	else
-	{
-		// Other int formats — for timestamp sync we only care about -1
+	// Update the retained cache
+	m_retained[topicName] = value;
+
+	// Re-broadcast to all other subscribed clients
+	if (!m_running || !m_server)
 		return;
-	}
 
-	// Ian: Topic ID -1 = timestamp sync request.
-	// Per NT4 spec: client sends [−1, 0, type, clientTime].
-	// Server must respond with [−1, serverTime, type, clientTime].
-	// We need to read the type code and client time value, then echo back.
-	if (topicId == -1)
+	uintptr_t senderKey = reinterpret_cast<uintptr_t>(&sender);
+
+	for (auto& client : m_server->getClients())
 	{
-		// Read timestamp (element [1]) — skip it (should be 0)
-		// Read type code (element [2]) — need this
-		// Read client time (element [3]) — need this to echo back
-		// For simplicity, just echo the entire data payload with our timestamp inserted.
-		// The safest approach: rebuild the response from scratch.
+		if (!client) continue;
+		uintptr_t clientKey = reinterpret_cast<uintptr_t>(client.get());
+		if (clientKey == senderKey) continue; // Don't echo back to sender
 
-		// We need to parse out the client's time value.  For a robust implementation
-		// we'd need a full msgpack decoder.  For now, use a simplified approach:
-		// Respond with [−1, serverTimestamp, 1 (int type code), 0] which at least
-		// tells the client we're alive.  This is imperfect but enough for iteration 1.
-		// TODO: Properly echo client time for accurate RTT measurement.
+		auto csIt = m_clientState.find(clientKey);
+		if (csIt == m_clientState.end()) continue;
+		ClientState& cs = csIt->second;
 
-		std::string response;
-		response.reserve(32);
-		MsgPackWriteArrayHeader(response, 4);
-		MsgPackWriteInt(response, -1);              // topic ID
-		MsgPackWriteUInt(response, GetTimestampUs()); // server timestamp
-		MsgPackWriteInt(response, 1);               // type code (double)
-		// Ian: We should echo the client's time value, but we'd need to decode it.
-		// For now send 0 — this means the client's RTT estimate will be wrong,
-		// but it won't break functionality.  Proper implementation in iteration 2.
-		MsgPackWriteInt(response, 0);
+		if (!TopicMatchesClientSubscriptions(topicName, cs)) continue;
 
-		ws.sendBinary(response);
+		// Announce if not yet announced to this client
+		if (!cs.announcedTopics.count(topic.id))
+		{
+			cs.announcedTopics.insert(topic.id);
+			client->sendText(BuildAnnounceJson(topic));
+		}
+
+		client->sendBinary(BuildValueFrame(topic, value));
 	}
+}
+
+// ============================================================================
+// Query API — let ShuffleboardBackend read retained values
+// ============================================================================
+// Ian: These are called by the simulator via SmartDashboardDirectQuerySource.
+// They read from the retained value cache, which includes both server-published
+// values AND client-written values (after HandleClientValueUpdate).
+
+bool NT4Server::TryGetBoolean(const std::string& topicName, bool& value) const
+{
+	std::lock_guard<std::mutex> lock(m_topicsMutex);
+	auto it = m_retained.find(topicName);
+	if (it == m_retained.end()) return false;
+	if (it->second.type != NT4Type::Boolean) return false;
+	value = it->second.boolVal;
+	return true;
+}
+
+bool NT4Server::TryGetNumber(const std::string& topicName, double& value) const
+{
+	std::lock_guard<std::mutex> lock(m_topicsMutex);
+	auto it = m_retained.find(topicName);
+	if (it == m_retained.end()) return false;
+	if (it->second.type == NT4Type::Double || it->second.type == NT4Type::Float)
+	{
+		value = it->second.doubleVal;
+		return true;
+	}
+	if (it->second.type == NT4Type::Int)
+	{
+		value = static_cast<double>(it->second.intVal);
+		return true;
+	}
+	return false;
+}
+
+bool NT4Server::TryGetString(const std::string& topicName, std::string& value) const
+{
+	std::lock_guard<std::mutex> lock(m_topicsMutex);
+	auto it = m_retained.find(topicName);
+	if (it == m_retained.end()) return false;
+	if (it->second.type != NT4Type::String) return false;
+	value = it->second.stringVal;
+	return true;
 }
 
 // ============================================================================
@@ -966,9 +1248,9 @@ void NT4Server::HandleClientTextMessage(ix::WebSocket& ws, const std::string& te
 			else if (method == "publish")
 			{
 				// Ian: Client wants to publish a topic to the server.
-				// In NT4, the server must respond with an announce message.
-				// Not fully supported in iteration 1, but we should at least
-				// respond with an announce to keep the client happy.
+				// We create/find the topic, respond with an announce (echoing pubuid),
+				// and store the pubuid → topic ID mapping so we can route incoming
+				// binary value frames from this client to the correct topic.
 
 				if (msg["params"].contains("name") && msg["params"].contains("type"))
 				{
@@ -993,6 +1275,17 @@ void NT4Server::HandleClientTextMessage(ix::WebSocket& ws, const std::string& te
 
 					std::lock_guard<std::mutex> lock(m_topicsMutex);
 					TopicInfo& topic = GetOrCreateTopic(name, type);
+
+					// Ian: Store the pubuid → topic ID mapping for this client.
+					// When binary value frames arrive, the client sends the pubuid
+					// (NOT the server topic ID) as the first array element. We need
+					// this map to resolve it back to the topic.
+					uintptr_t clientKey = reinterpret_cast<uintptr_t>(&ws);
+					auto csIt = m_clientState.find(clientKey);
+					if (csIt != m_clientState.end())
+					{
+						csIt->second.pubuidToTopicId[pubuid] = topic.id;
+					}
 
 					// Respond with announce (include pubuid since this is in response to publish)
 					json announceMsg;

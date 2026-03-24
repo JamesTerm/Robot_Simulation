@@ -54,6 +54,13 @@ public:
 	void Stop();
 	bool IsRunning() const;
 
+	// --- Query API (for SmartDashboardDirectQuerySource) ---
+	// Ian: These let the ShuffleboardBackend read back values that clients wrote.
+	// They check the retained value cache under m_topicsMutex.
+	bool TryGetBoolean(const std::string& topicName, bool& value) const;
+	bool TryGetNumber(const std::string& topicName, double& value) const;
+	bool TryGetString(const std::string& topicName, std::string& value) const;
+
 	// --- Publishing API (server → subscribed clients) ---
 	// These queue values and broadcast as NT4 binary frames to clients
 	// whose subscriptions match the topic name.
@@ -120,6 +127,11 @@ private:
 	{
 		std::vector<ClientSubscription> subscriptions;
 		std::set<int32_t> announcedTopics;    // topic IDs already announced to this client
+		// Ian: Per-client publish tracking. When a client sends a "publish" JSON message,
+		// we map their chosen pubuid → server-assigned topic ID. Binary value frames from
+		// the client use the pubuid, NOT the server topic ID, so we need this reverse map
+		// to route incoming values to the correct topic and retained cache entry.
+		std::unordered_map<int32_t, int32_t> pubuidToTopicId;  // client pubuid → server topic ID
 	};
 
 	// Core server
@@ -129,6 +141,7 @@ private:
 	// Topic management (protected by m_topicsMutex)
 	mutable std::mutex m_topicsMutex;
 	std::unordered_map<std::string, TopicInfo> m_topics;          // name → info
+	std::unordered_map<int32_t, std::string> m_topicIdToName;    // id → name (reverse lookup)
 	int32_t m_nextTopicId = 0;
 
 	// Retained values (protected by m_topicsMutex — same lock)
@@ -170,4 +183,26 @@ private:
 
 	// Handle incoming binary messages from clients (timestamp sync, value updates)
 	void HandleClientBinaryMessage(ix::WebSocket& ws, const std::string& data);
+
+	// Ian: Minimal MessagePack reader — just enough to decode incoming NT4 value frames
+	// from clients. Mirrors the writer side: reads ints, doubles, bools, strings.
+	struct MsgPackCursor
+	{
+		const uint8_t* data;
+		size_t size;
+		size_t pos;
+		MsgPackCursor(const uint8_t* d, size_t s) : data(d), size(s), pos(0) {}
+		bool HasRemaining(size_t n) const { return pos + n <= size; }
+		bool ReadArrayHeader(uint32_t& count);
+		bool ReadInt(int64_t& out);
+		bool ReadUInt(uint64_t& out);
+		bool ReadDouble(double& out);
+		bool ReadBool(bool& out);
+		bool ReadString(std::string& out);
+		bool SkipElement();
+	};
+
+	// Ian: Process a decoded client value update: update retained cache and re-broadcast
+	// to other subscribed clients (excluding the sender).
+	void HandleClientValueUpdate(ix::WebSocket& sender, int32_t topicId, const RetainedValue& value);
 };

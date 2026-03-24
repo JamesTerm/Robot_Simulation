@@ -1524,18 +1524,21 @@ public:
 	// Ian: ShuffleboardBackend is the real NT4 WebSocket server backend.
 	// It implements SmartDashboardDirectPublishSink so that all SmartDashboard::Put*()
 	// calls route through the NT4 server instead of through the legacy NT2 path.
-	// This is the same pattern used by DirectConnectBackend (SHM ring buffer).
-	//
-	// Key mapping: SmartDashboard keys like "Velocity" get prefixed with
-	// "/SmartDashboard/" to match Shuffleboard's expected NT4 topic naming convention.
+	// It also implements SmartDashboardDirectQuerySource so that the simulator can
+	// read back values written by dashboard clients (chooser selections, TestMove, etc.).
+	// The query path delegates to NT4Server::TryGet*, which reads from the retained
+	// value cache — same cache that HandleClientValueUpdate populates when a dashboard
+	// client writes a value back.
 	class ShuffleboardBackend final : public IConnectionBackend
 		, public SmartDashboardDirectPublishSink
+		, public SmartDashboardDirectQuerySource
 	{
 	public:
 		void Initialize() override
 		{
 			SmartDashboard::SetConnectionMode(SmartDashboardConnectionMode::eShuffleboard);
 			SmartDashboard::SetDirectPublishSink(this);
+			SmartDashboard::SetDirectQuerySource(this);
 			m_running = m_nt4Server.Start(5810);
 			if (m_running)
 			{
@@ -1549,6 +1552,7 @@ public:
 		void Shutdown() override
 		{
 			SmartDashboard::ClearDirectPublishSink();
+			SmartDashboard::ClearDirectQuerySource();
 			m_nt4Server.Stop();
 			m_running = false;
 			OutputDebugStringW(L"[Transport] Shuffleboard NT4 backend shutdown\n");
@@ -1580,6 +1584,31 @@ public:
 		{
 			if (m_running)
 				m_nt4Server.PublishStringArray(ToNT4Path(keyName), values);
+		}
+
+		// --- SmartDashboardDirectQuerySource ---
+		// Ian: The simulator reads values with flat keys like "TestMove" or
+		// "Test/Auton_Selection/AutoChooser/selected". The NT4 retained cache
+		// stores them under "/SmartDashboard/TestMove" etc. We try the key as-is
+		// first (in case something stored it without the prefix), then with the
+		// NT4 prefix. This matches the same key normalization the publish path does.
+		bool TryGetBoolean(const std::string& keyName, bool& value) override
+		{
+			if (!m_running) return false;
+			if (m_nt4Server.TryGetBoolean(keyName, value)) return true;
+			return m_nt4Server.TryGetBoolean(ToNT4Path(keyName), value);
+		}
+		bool TryGetNumber(const std::string& keyName, double& value) override
+		{
+			if (!m_running) return false;
+			if (m_nt4Server.TryGetNumber(keyName, value)) return true;
+			return m_nt4Server.TryGetNumber(ToNT4Path(keyName), value);
+		}
+		bool TryGetString(const std::string& keyName, std::string& value) override
+		{
+			if (!m_running) return false;
+			if (m_nt4Server.TryGetString(keyName, value)) return true;
+			return m_nt4Server.TryGetString(ToNT4Path(keyName), value);
 		}
 
 	private:

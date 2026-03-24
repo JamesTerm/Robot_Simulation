@@ -56,11 +56,11 @@ Make the simulator talk to the official Shuffleboard app (`D:\code\Shuffleboard`
 - **Keep it simple:** only implement what we currently support in our widget set. Skip advanced widgets (Compass, Camera, Multi-plot, Field2d, Mechanism2d, command/subsystem panels) — add those incrementally later.
 - **Drop what doesn't align:** if a Shuffleboard convention conflicts with our vision, we can choose not to support it.
 
-### Implementation status — NT4 server working, SmartDashboard plugin ready for integration
+### Implementation status — NT4 server with full bidirectional support
 
 **Completed:**
-- `NT4Server.h/.cpp` (~1050 lines) — full NT4 WebSocket server on port 5810 with subscription-driven architecture, custom MessagePack encoder, JSON announce messages, retained-value cache, per-client subscription tracking, client message handling.
-- `ShuffleboardBackend` in `Transport.cpp` — real NT4 backend implementing `SmartDashboardDirectPublishSink` (PublishBoolean, PublishNumber, PublishString, PublishStringArray). Shuffleboard removed from `UsesLegacyTransportPath()`.
+- `NT4Server.h/.cpp` (~1200 lines) — full NT4 WebSocket server on port 5810 with subscription-driven architecture, custom MessagePack encoder/decoder, JSON announce messages, retained-value cache, per-client subscription tracking, client message handling, **client value write-back with pubuid→topicId resolution and re-broadcast**.
+- `ShuffleboardBackend` in `Transport.cpp` — real NT4 backend implementing both `SmartDashboardDirectPublishSink` (server→client: PublishBoolean, PublishNumber, PublishString, PublishStringArray) **and `SmartDashboardDirectQuerySource`** (client→server: TryGetBoolean, TryGetNumber, TryGetString with NT4 path normalization). Shuffleboard removed from `UsesLegacyTransportPath()`.
 - `TransportSmoke.cpp` rewritten for headless shuffleboard mode: flexible `--mode` arg, skip OSG viewer/TeleAuton, SEH crash handler, continuous 10Hz publish loop.
 - IXWebSocket overlay port at `overlay-ports/ixwebsocket/` fixes `Sec-WebSocket-Protocol` negotiation (see critical bug below).
 - Topics appear in Shuffleboard's Sources panel, values update live.
@@ -73,6 +73,16 @@ Make the simulator talk to the official Shuffleboard app (`D:\code\Shuffleboard`
 - Our first implementation sent announces immediately on connect. ntcore silently ignores unsolicited announces, which is why Shuffleboard showed nothing despite receiving all the data.
 - The correct flow is: (1) client connects, (2) client sends subscribe with topic patterns, (3) server sends announce for matching topics, (4) server sends cached values, (5) future publishes only go to clients with matching subscriptions.
 - Per-client tracking: `ClientSubscription` (subuid, topic patterns, prefix flag) and `ClientState` (subscriptions list, announced topic IDs) stored in `m_clientState` map keyed by WebSocket pointer.
+
+**NT4 client write-back: pubuid vs topicId (FIXED in NT4Server.cpp):**
+- When a **client** sends a binary value frame, it uses the **pubuid** (its own chosen publish UID from the JSON `publish` message), NOT the server-assigned topic ID.
+- The server must maintain a per-client `pubuid → topicId` map to resolve incoming values.
+- Prior to this fix, `HandleClientBinaryMessage` only handled `topicId == -1` (timestamp sync). All other binary frames (actual value updates from clients) were silently dropped.
+- Fix added: MsgPackCursor decoder, pubuid resolution, retained cache update, re-broadcast to other subscribers.
+
+**Query source for simulator read-back (FIXED in Transport.cpp):**
+- `ShuffleboardBackend` only implemented `SmartDashboardDirectPublishSink` (server→client). It did NOT implement `SmartDashboardDirectQuerySource`, so `SmartDashboard::GetNumber("TestMove")` had no way to read values written by dashboard clients back through the NT4 retained cache.
+- Fix: `ShuffleboardBackend` now also inherits `SmartDashboardDirectQuerySource`, registers itself via `SmartDashboard_SetDirectQuerySource()`, and implements `TryGet*` methods that read from the NT4 server's retained cache with `/SmartDashboard/` prefix normalization.
 
 **IXWebSocket subprotocol bug (FIXED via overlay port):**
 - IXWebSocket v11.4.6 server-side does NOT handle `Sec-WebSocket-Protocol` at all. The `serverHandshake()` doesn't read or echo the header.
@@ -132,18 +142,21 @@ Note: The ixwebsocket overlay port only matters at `vcpkg install` time, not at 
 - Tank drive keys (test-only)
 - Advanced Shuffleboard widget types: Compass, Camera, Multi-plot, Field2d, Mechanism2d, command/subsystem panels
 
+### Auto-connect refactoring (SmartDashboard only)
+
+Auto-connect/reconnect logic was lifted out of all three transport plugins (Native Link TCP, Shuffleboard NT4, Legacy NT) into a single `QTimer` in `MainWindow` on the SmartDashboard side. No changes needed in Robot_Simulation — the simulator is the server, not the client. See SmartDashboard's `Agent_Session_Notes.md` for details.
+
 ### Next steps
 
-1. **End-to-end integration test** — Run SmartDashboard (with the Shuffleboard plugin on `feature/shuffleboard-transport`) against `DriverStation_TransportSmoke.exe --mode shuffle` to verify live telemetry flows through the full pipeline: NT4Server → WebSocket → NT4Client plugin → SmartDashboard display.
-2. **Bidirectional support** — Handle Shuffleboard writing back chooser selections (incoming `publish` + value updates from clients). This requires implementing `SmartDashboardDirectQuerySource` on the Robot_Simulation side.
-3. **Expand published keys** — Smoke test currently publishes 6 keys + chooser. Full TeleAutonV2 publishes ~49 keys.
+1. **End-to-end feedback verification** — Run SmartDashboard (with the Shuffleboard plugin on `feature/shuffleboard-transport`) against `DriverStation_TransportSmoke.exe --mode shuffle` to verify both directions: telemetry display AND write-back (TestMove, auton chooser selection reaching the simulator). Monitor `Y_ft` to validate the full feedback loop.
+2. **Expand published keys** — Smoke test currently publishes 6 keys + chooser. Full TeleAutonV2 publishes ~49 keys.
 
 ### SmartDashboard plugin status
 
-The SmartDashboard NT4 client plugin is code-complete (phase 1, receive-only) on `D:\code\SmartDashboard` branch `feature/shuffleboard-transport`:
-- `plugins/ShuffleboardTransport/` — NT4 client (`nt4_client.h/.cpp`), plugin ABI bridge (`shuffleboard_transport_plugin.cpp`), 17 tests passing.
+The SmartDashboard NT4 client plugin is code-complete (phase 2, full bidirectional) on `D:\code\SmartDashboard` branch `feature/shuffleboard-transport`:
+- `plugins/ShuffleboardTransport/` — NT4 client (`nt4_client.h/.cpp`), plugin ABI bridge (`shuffleboard_transport_plugin.cpp`), 17 tests passing (91/91 total).
 - Uses stock vcpkg ixwebsocket (no overlay port needed on client side).
-- `supports_chooser` returns false until publish flow is validated end-to-end.
+- `supports_chooser` returns true. Publish path fully wired. `EnsurePublished` uses correct `/SmartDashboard/` prefix.
 
 ### NT4 protocol reference (for SmartDashboard plugin authors)
 
