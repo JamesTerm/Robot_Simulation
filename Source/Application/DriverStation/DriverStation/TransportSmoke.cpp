@@ -186,35 +186,52 @@ int smoke_main(int argc, char** argv)
 		tester.StartStreaming();
 	}
 
-	// Ian: Publish loop — continuously update a handful of values so
-	// Shuffleboard can see live-updating data.  We update at ~10 Hz which
-	// is more than enough for a visual smoke test.
-	printf("[TransportSmoke] running for %lu ms (server on port 5810)...\n", static_cast<unsigned long>(runMs));
+	// Ian: Two different loop strategies depending on mode:
+	// - Shuffleboard mode: synthetic publish loop (no TeleAuton running).
+	// - All other modes: TeleAuton publishes real sim telemetry on the viewer
+	//   thread at ~60fps, so we just monitor Y_ft to observe the robot moving.
+	printf("[TransportSmoke] running for %lu ms ...\n", static_cast<unsigned long>(runMs));
 	fflush(stdout);
 	const DWORD loopIntervalMs = 100;  // 10 Hz
 	DWORD elapsed = 0;
 	int loopCount = 0;
 	while (elapsed < runMs)
 	{
-		const double t = elapsed / 1000.0;
-		SmartDashboard::PutNumber("Velocity", 2.0 * sin(t));
-		SmartDashboard::PutNumber("Rotation Velocity", 0.5 * cos(t));
-		SmartDashboard::PutNumber("Heading", fmod(t * 30.0, 360.0));
-		SmartDashboard::PutNumber("Timer", t);
-		SmartDashboard::PutNumber("X_ft", 3.0 + sin(t * 0.3));
-		SmartDashboard::PutNumber("Y_ft", 2.0 + cos(t * 0.3));
+		if (connectionMode == ConnectionMode::eShuffleboard)
+		{
+			// Ian: No TeleAuton in shuffleboard mode — publish synthetic data
+			// so connected clients see live-updating values.
+			const double t = elapsed / 1000.0;
+			SmartDashboard::PutNumber("Velocity", 2.0 * sin(t));
+			SmartDashboard::PutNumber("Rotation Velocity", 0.5 * cos(t));
+			SmartDashboard::PutNumber("Heading", fmod(t * 30.0, 360.0));
+			SmartDashboard::PutNumber("Timer", t);
+			SmartDashboard::PutNumber("X_ft", 3.0 + sin(t * 0.3));
+			SmartDashboard::PutNumber("Y_ft", 2.0 + cos(t * 0.3));
+		}
 
 		Sleep(loopIntervalMs);
 		elapsed += loopIntervalMs;
 		loopCount++;
-		if (loopCount % 50 == 0)
+
+		// Ian: Print telemetry readback every second so we can observe the
+		// simulation state from the console.  In direct/nativelink modes this
+		// shows TeleAuton's real sim values; in shuffleboard mode it echoes
+		// back our own synthetic data.
+		if (loopCount % 10 == 0)
 		{
-			printf("[TransportSmoke] %lu ms elapsed, %d updates sent\n",
-				static_cast<unsigned long>(elapsed), loopCount);
+			double y_ft = 0.0;
+			double testMoveRead = 0.0;
+			SmartDashboard::TryGetNumber("Y_ft", y_ft);
+			SmartDashboard::TryGetNumber("TestMove", testMoveRead);
+			const std::string selected = SmartDashboard::GetString(
+				"Test/Auton_Selection/AutoChooser/selected", "(none)");
+			printf("[TransportSmoke] t=%.1fs  Y_ft=%.3f  TestMove=%.1f  selected='%s'\n",
+				elapsed / 1000.0, y_ft, testMoveRead, selected.c_str());
 			fflush(stdout);
 		}
 	}
-	printf("[TransportSmoke] loop finished (%d updates sent)\n", loopCount);
+	printf("[TransportSmoke] loop finished (%d iterations)\n", loopCount);
 	fflush(stdout);
 
 	if (connectionMode != ConnectionMode::eShuffleboard)
