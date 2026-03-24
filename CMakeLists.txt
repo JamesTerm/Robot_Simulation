@@ -22,6 +22,8 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 
 find_package(OpenGL REQUIRED)
 find_package(unofficial-osg CONFIG REQUIRED COMPONENTS plugins)
+find_package(ixwebsocket CONFIG REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
 
 set(SMARTDASHBOARD_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/Source/Libraries/SmartDashboard")
 file(GLOB_RECURSE SMARTDASHBOARD_SOURCES CONFIGURE_DEPENDS
@@ -218,6 +220,7 @@ add_executable(DriverStation_TransportSmoke
     Source/Application/DriverStation/DriverStation/TransportSmoke.cpp
     Source/Application/DriverStation/DriverStation/Robot_Tester.cpp
     Source/Application/DriverStation/DriverStation/Transport.cpp
+    Source/Application/DriverStation/DriverStation/NT4Server.cpp
     Source/Application/DriverStation/DriverStation/NativeLinkAuthorityHelpers.cpp
     Source/Application/DriverStation/DriverStation/NativeLink.cpp
     Source/Application/DriverStation/DriverStation/NativeLinkSharedMemory.cpp
@@ -231,7 +234,10 @@ target_link_libraries(DriverStation_TransportSmoke
     PRIVATE
         RobotAssembly_static
         SmartDashboard
+        ixwebsocket::ixwebsocket
+        nlohmann_json::nlohmann_json
         ws2_32
+        bcrypt
 )
 
 if(BUILD_UNIT_TESTS)
@@ -276,6 +282,7 @@ if(BUILD_DRIVER_STATION)
         Source/Application/DriverStation/DriverStation/Keyboard.cpp
         Source/Application/DriverStation/DriverStation/Robot_Tester.cpp
         Source/Application/DriverStation/DriverStation/Transport.cpp
+        Source/Application/DriverStation/DriverStation/NT4Server.cpp
         Source/Application/DriverStation/DriverStation/NativeLinkAuthorityHelpers.cpp
         Source/Application/DriverStation/DriverStation/NativeLink.cpp
         Source/Application/DriverStation/DriverStation/NativeLinkSharedMemory.cpp
@@ -291,9 +298,12 @@ if(BUILD_DRIVER_STATION)
         PRIVATE
             SmartDashboard
             RobotAssembly_static
+            ixwebsocket::ixwebsocket
+            nlohmann_json::nlohmann_json
             shlwapi
             winmm
             ws2_32
+            bcrypt
     )
 
     add_custom_command(TARGET DriverStation POST_BUILD

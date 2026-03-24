@@ -188,3 +188,9 @@ direct_control_debug_log.txt
 direct_tile_debug_log.txt
 direct_ui_debug_log.txt
 nul
+
+# Temporary test outputs
+smoke_stdout*.txt
+smoke_stderr*.txt
+smoke_output*.txt
+smoke_error*.txt
