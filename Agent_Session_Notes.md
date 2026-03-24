@@ -56,7 +56,7 @@ Make the simulator talk to the official Shuffleboard app (`D:\code\Shuffleboard`
 - **Keep it simple:** only implement what we currently support in our widget set. Skip advanced widgets (Compass, Camera, Multi-plot, Field2d, Mechanism2d, command/subsystem panels) — add those incrementally later.
 - **Drop what doesn't align:** if a Shuffleboard convention conflicts with our vision, we can choose not to support it.
 
-### Implementation status — NT4 server working, Shuffleboard shows topics
+### Implementation status — NT4 server working, SmartDashboard plugin ready for integration
 
 **Completed:**
 - `NT4Server.h/.cpp` (~1050 lines) — full NT4 WebSocket server on port 5810 with subscription-driven architecture, custom MessagePack encoder, JSON announce messages, retained-value cache, per-client subscription tracking, client message handling.
@@ -134,9 +134,16 @@ Note: The ixwebsocket overlay port only matters at `vcpkg install` time, not at 
 
 ### Next steps
 
-1. **SmartDashboard plugin** — Start the `feature/shuffleboard-transport` branch in `D:\code\SmartDashboard`. The plugin will be an NT4 WebSocket *client* connecting to port 5810, subscribing to topics, and feeding values into SmartDashboard's display pipeline. Follow the existing plugin ABI pattern (`sd_transport_plugin_descriptor_v1`). Phase 1 is receive-only (display telemetry); phase 2 adds write-back for chooser selections.
+1. **End-to-end integration test** — Run SmartDashboard (with the Shuffleboard plugin on `feature/shuffleboard-transport`) against `DriverStation_TransportSmoke.exe --mode shuffle` to verify live telemetry flows through the full pipeline: NT4Server → WebSocket → NT4Client plugin → SmartDashboard display.
 2. **Bidirectional support** — Handle Shuffleboard writing back chooser selections (incoming `publish` + value updates from clients). This requires implementing `SmartDashboardDirectQuerySource` on the Robot_Simulation side.
 3. **Expand published keys** — Smoke test currently publishes 6 keys + chooser. Full TeleAutonV2 publishes ~49 keys.
+
+### SmartDashboard plugin status
+
+The SmartDashboard NT4 client plugin is code-complete (phase 1, receive-only) on `D:\code\SmartDashboard` branch `feature/shuffleboard-transport`:
+- `plugins/ShuffleboardTransport/` — NT4 client (`nt4_client.h/.cpp`), plugin ABI bridge (`shuffleboard_transport_plugin.cpp`), 17 tests passing.
+- Uses stock vcpkg ixwebsocket (no overlay port needed on client side).
+- `supports_chooser` returns false until publish flow is validated end-to-end.
 
 ### NT4 protocol reference (for SmartDashboard plugin authors)
 
