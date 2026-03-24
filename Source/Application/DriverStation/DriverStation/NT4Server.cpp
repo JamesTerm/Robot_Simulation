@@ -29,6 +29,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdio>
 #include <cstring>
 
 using json = nlohmann::json;
@@ -491,6 +492,7 @@ bool NT4Server::Start(int port)
 					msg->openInfo.protocol.c_str(),
 					msg->openInfo.uri.c_str());
 				OutputDebugStringA(dbg);
+				printf("%s", dbg);
 
 				// Ian: Send all known topics + retained values to the new client.
 				AnnounceAllTopicsTo(&ws);
@@ -561,6 +563,7 @@ bool NT4Server::Start(int port)
 		sprintf_s(dbg, "[NT4Server] Failed to listen on port %d: %s\n",
 			port, listenResult.second.c_str());
 		OutputDebugStringA(dbg);
+		printf("%s", dbg);
 		m_server.reset();
 		return false;
 	}
@@ -571,6 +574,7 @@ bool NT4Server::Start(int port)
 	char dbg[128] = {};
 	sprintf_s(dbg, "[NT4Server] Listening on port %d\n", port);
 	OutputDebugStringA(dbg);
+	printf("%s", dbg);
 
 	return true;
 }

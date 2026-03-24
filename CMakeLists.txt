@@ -220,6 +220,7 @@ add_executable(DriverStation_TransportSmoke
     Source/Application/DriverStation/DriverStation/TransportSmoke.cpp
     Source/Application/DriverStation/DriverStation/Robot_Tester.cpp
     Source/Application/DriverStation/DriverStation/Transport.cpp
+    Source/Application/DriverStation/DriverStation/NT4Server.cpp
     Source/Application/DriverStation/DriverStation/NativeLinkAuthorityHelpers.cpp
     Source/Application/DriverStation/DriverStation/NativeLink.cpp
     Source/Application/DriverStation/DriverStation/NativeLinkSharedMemory.cpp
@@ -233,7 +234,10 @@ target_link_libraries(DriverStation_TransportSmoke
     PRIVATE
         RobotAssembly_static
         SmartDashboard
+        ixwebsocket::ixwebsocket
+        nlohmann_json::nlohmann_json
         ws2_32
+        bcrypt
 )
 
 if(BUILD_UNIT_TESTS)

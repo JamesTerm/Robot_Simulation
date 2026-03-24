@@ -1,0 +1,50 @@
+--- a/ixwebsocket/IXWebSocket.cpp
++++ b/ixwebsocket/IXWebSocket.cpp
+@@ -276,7 +276,7 @@
+                                               emptyMsg,
+                                               0,
+                                               WebSocketErrorInfo(),
+-                                              WebSocketOpenInfo(status.uri, status.headers),
++                                              WebSocketOpenInfo(status.uri, status.headers, status.protocol),
+                                               WebSocketCloseInfo()));
+ 
+         if (_pingIntervalSecs > 0)
+--- a/ixwebsocket/IXWebSocketHandshake.cpp
++++ b/ixwebsocket/IXWebSocketHandshake.cpp
+@@ -365,6 +365,36 @@
+         ss << "Connection: Upgrade\r\n";
+         ss << "Server: " << userAgent() << "\r\n";
+ 
++        // Select one sub-protocol from the client's Sec-WebSocket-Protocol header
++        // (RFC 6455 section 4.2.2: server MUST echo back exactly one chosen protocol).
++        // Ian: NT4 clients send "v4.1.networktables.first.wpi.edu, networktables.first.wpi.edu"
++        // and expect exactly one to be echoed back, or they drop the connection.
++        // We pick the first protocol in the comma-separated list.
++        {
++            auto protocolIt = headers.find("sec-websocket-protocol");
++            if (protocolIt != headers.end() && !protocolIt->second.empty())
++            {
++                const std::string& raw = protocolIt->second;
++                std::string chosen;
++                auto commaPos = raw.find(',');
++                if (commaPos != std::string::npos)
++                    chosen = raw.substr(0, commaPos);
++                else
++                    chosen = raw;
++                // Trim leading/trailing whitespace
++                auto start = chosen.find_first_not_of(" \t");
++                auto end = chosen.find_last_not_of(" \t");
++                if (start != std::string::npos && end != std::string::npos)
++                    chosen = chosen.substr(start, end - start + 1);
++                if (!chosen.empty())
++                {
++                    ss << "Sec-WebSocket-Protocol: " << chosen << "\r\n";
++                    // Update headers map so WebSocketInitResult.protocol gets the chosen value
++                    headers["sec-websocket-protocol"] = chosen;
++                }
++            }
++        }
++
+         // Parse the client headers. Does it support deflate ?
+         std::string header = headers["sec-websocket-extensions"];
+         WebSocketPerMessageDeflateOptions webSocketPerMessageDeflateOptions(header);
