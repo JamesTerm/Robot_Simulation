@@ -4,106 +4,15 @@
 - Move durable milestone history to `docs/project_history.md`.
 - Use `D:\code\SmartDashboard\docs\native_link_rollout_strategy.md` as the canonical long-term Native Link rollout note.
 
-## Workflow note
+## Workflow
 
 - `apply_patch` expects workspace-relative paths with forward slashes.
-- Use CRLF line endings for C++ source files in this repo.
-- Read nearby `Ian:` comments before editing and add new ones where session, ownership, carrier, or runtime-mode lessons would be easy to lose.
+- **Use CRLF line endings** for all source files (`.cpp`, `.h`, `.cmake`, `.ps1`, `.py`, `.md`, `.rc`, `.gitignore`, `.json`). Both repos standardized CRLF as of the Shuffleboard merge.
+- Read nearby `Ian:` comments before editing and add new ones where session, ownership, carrier, protocol, or runtime-mode lessons would be easy to lose.
+- Process detection: use `Get-Process -Name <name> -ErrorAction SilentlyContinue` (NOT `tasklist | findstr` which breaks in Git Bash due to flag mangling).
+- Killing processes: use PowerShell `Stop-Process` (NOT `taskkill` through Git Bash).
 
-## Active Native Link context
-
-- `Source/Application/DriverStation/DriverStation/NativeLink.h` exposes the active carrier/config boundary for the simulator-owned authority and test client.
-- Current working backends: SHM + named events for diagnostics; localhost TCP for the reference/runtime path.
-- `Robot_Simulation` is the first reference authority/example for Native Link semantics but should not become the permanent home of all reusable authority-side logic.
-- Important runtime lesson: `eNativeLink` must stay out of `DashboardTransportRouter::UsesLegacyTransportPath()` or the UI can claim Native Link while the old backend is still running underneath.
-- Debug builds now expose a manual Native Link carrier picker in the DriverStation dialog for SHM vs TCP manual comparisons.
-- `DriverStation_TransportSmoke` supports `--startup-delay-ms` and `--test-move` for longer manual observe runs without rebuilding.
-
-## Transport status — COMPLETE
-
-- SHM transport declared stable as of 2026-03-21.
-- TCP authority work completed and merged 2026-03-21. Three blockers fixed: bind 0.0.0.0, INI default from `GetDefaultNativeLinkCarrier()`, carrier combo bounce.
-- Both carriers sit under the same Native Link semantic contract. Near-term roadmap items 1-5 from `native_link_rollout_strategy.md` are done.
-
-## Key invariants (do not break)
-
-- `Core::PublishInternal` auto-register only applies when `allowServerOnly=true`. Client writes on unknown topics must still be rejected.
-- `RegisterDefaultTopics` must not grow to list every TeleAutonV2 key — the auto-register path handles those.
-- `TeleAutonV2` publishes ~26 keys per loop. `Heading` (line 324) and `Travel_Heading` (line 307) are unconditional — both are now delivered to the dashboard.
-
-## Strategy reminders
-
-- Keep simulator-side cleanup aligned with the one-contract / many-carriers / many-adapters roadmap.
-- Product stance: TCP is the intended normal runtime carrier. SHM remains the internal diagnostic/reference carrier and should stay reachable through developer overrides, not as a normal team-facing mode toggle.
-- Favor extraction that keeps this repo a clean teaching example of server-authoritative session/snapshot/lease behavior.
-
-## Cross-repo sync rule
-
-- This repo and `D:\code\SmartDashboard` share the Native Link contract, carrier implementations, and plugin boundary.
-- When either repo's session notes or strategy docs change, check the other side for consistency — especially around invariants, carrier defaults, and plugin support iterations.
-- The canonical long-term rollout strategy lives in `D:\code\SmartDashboard\docs\native_link_rollout_strategy.md`.
-
-## Active feature: Shuffleboard transport (`feature/shuffleboard-transport`)
-
-### Goal
-
-Make the simulator talk to the official Shuffleboard app (`D:\code\Shuffleboard`) over NT4 (WebSocket). The simulator takes the lead — once it can publish to Shuffleboard, SmartDashboard gets a plugin on its own `feature/shuffleboard-transport` branch later.
-
-### Principles
-
-- **Simulation-first:** prove the protocol here before involving SmartDashboard code.
-- **Support, not imitate:** give teams enough Shuffleboard compatibility to try SmartDashboard, then encourage Native Link for full support.
-- **Keep it simple:** only implement what we currently support in our widget set. Skip advanced widgets (Compass, Camera, Multi-plot, Field2d, Mechanism2d, command/subsystem panels) — add those incrementally later.
-- **Drop what doesn't align:** if a Shuffleboard convention conflicts with our vision, we can choose not to support it.
-
-### Implementation status — NT4 server with full bidirectional support
-
-**Completed:**
-- `NT4Server.h/.cpp` (~1200 lines) — full NT4 WebSocket server on port 5810 with subscription-driven architecture, custom MessagePack encoder/decoder, JSON announce messages, retained-value cache, per-client subscription tracking, client message handling, **client value write-back with pubuid→topicId resolution and re-broadcast**.
-- `ShuffleboardBackend` in `Transport.cpp` — real NT4 backend implementing both `SmartDashboardDirectPublishSink` (server→client: PublishBoolean, PublishNumber, PublishString, PublishStringArray) **and `SmartDashboardDirectQuerySource`** (client→server: TryGetBoolean, TryGetNumber, TryGetString with NT4 path normalization). Shuffleboard removed from `UsesLegacyTransportPath()`.
-- `TransportSmoke.cpp` rewritten for headless shuffleboard mode: flexible `--mode` arg, skip OSG viewer/TeleAuton, SEH crash handler, continuous 10Hz publish loop.
-- IXWebSocket overlay port at `overlay-ports/ixwebsocket/` fixes `Sec-WebSocket-Protocol` negotiation (see critical bug below).
-- Topics appear in Shuffleboard's Sources panel, values update live.
-- All diagnostic trace logging removed (TraceLog, RobotTrace, TransportTrace).
-
-### Critical discoveries
-
-**NT4 is subscription-driven (FIXED in NT4Server.cpp):**
-- The server must NOT send `announce` messages until the client sends a `subscribe` message with matching topic patterns.
-- Our first implementation sent announces immediately on connect. ntcore silently ignores unsolicited announces, which is why Shuffleboard showed nothing despite receiving all the data.
-- The correct flow is: (1) client connects, (2) client sends subscribe with topic patterns, (3) server sends announce for matching topics, (4) server sends cached values, (5) future publishes only go to clients with matching subscriptions.
-- Per-client tracking: `ClientSubscription` (subuid, topic patterns, prefix flag) and `ClientState` (subscriptions list, announced topic IDs) stored in `m_clientState` map keyed by WebSocket pointer.
-
-**NT4 client write-back: pubuid vs topicId (FIXED in NT4Server.cpp):**
-- When a **client** sends a binary value frame, it uses the **pubuid** (its own chosen publish UID from the JSON `publish` message), NOT the server-assigned topic ID.
-- The server must maintain a per-client `pubuid → topicId` map to resolve incoming values.
-- Prior to this fix, `HandleClientBinaryMessage` only handled `topicId == -1` (timestamp sync). All other binary frames (actual value updates from clients) were silently dropped.
-- Fix added: MsgPackCursor decoder, pubuid resolution, retained cache update, re-broadcast to other subscribers.
-
-**Query source for simulator read-back (FIXED in Transport.cpp):**
-- `ShuffleboardBackend` only implemented `SmartDashboardDirectPublishSink` (server→client). It did NOT implement `SmartDashboardDirectQuerySource`, so `SmartDashboard::GetNumber("TestMove")` had no way to read values written by dashboard clients back through the NT4 retained cache.
-- Fix: `ShuffleboardBackend` now also inherits `SmartDashboardDirectQuerySource`, registers itself via `SmartDashboard_SetDirectQuerySource()`, and implements `TryGet*` methods that read from the NT4 server's retained cache with `/SmartDashboard/` prefix normalization.
-
-**IXWebSocket subprotocol bug (FIXED via overlay port):**
-- IXWebSocket v11.4.6 server-side does NOT handle `Sec-WebSocket-Protocol` at all. The `serverHandshake()` doesn't read or echo the header.
-- Initial fix echoed back the entire comma-separated header, which caused Shuffleboard to connect then immediately disconnect in a loop (RFC 6455 requires exactly ONE selected protocol).
-- Final fix: parse comma-separated header, pick first protocol, echo only that one. Applied as vcpkg overlay port.
-- Install with: `"D:/code/vcpkg/vcpkg.exe" install ixwebsocket:x64-windows --overlay-ports="D:/code/Robot_Simulation/overlay-ports"`
-- Patch file MUST use LF line endings and git-style `a/` `b/` path prefixes.
-
-**Shuffleboard server address (NOT command-line args):**
-- `localhost` passed to `java -jar Shuffleboard.jar localhost` is completely ignored — Shuffleboard has no argument parsing.
-- Server address stored via Java Preferences API → Windows Registry: `HKCU\Software\JavaSoft\Prefs\edu\wpi\first\shuffleboard\plugin\networktables` (key: `server`).
-- Default in code is `"localhost"` so it works without registry changes, but can be set explicitly:
-  ```powershell
-  Set-ItemProperty -Path 'HKCU:\Software\JavaSoft\Prefs\edu\wpi\first\shuffleboard\plugin\networktables' -Name 'server' -Value 'localhost' -Type String
-  ```
-
-**Headless crash workaround:**
-- `RobotTester_init()` → `TeleAuton_V2::init()` creates an OSG 3D viewer, which crashes (0xC0000005) in headless/RDP sessions.
-- Smoke test in shuffleboard mode skips `RobotTester_init()` entirely; transport is already initialized by `SetConnectionMode()`.
-
-### Build commands
+## Build
 
 ```bash
 # Configure (uses existing build-vcpkg directory)
@@ -113,15 +22,128 @@ cmake -G "Visual Studio 17 2022" -B build-vcpkg -DCMAKE_TOOLCHAIN_FILE="D:/code/
 cmake --build build-vcpkg --target DriverStation --config Release
 cmake --build build-vcpkg --target DriverStation_TransportSmoke --config Release
 
+# Run DriverStation in Shuffleboard mode
+Start-Process -FilePath 'D:\code\Robot_Simulation\build-vcpkg\bin\Release\DriverStation.exe' -ArgumentList 'shuffle' -WorkingDirectory 'D:\code\Robot_Simulation\build-vcpkg\bin\Release'
+
 # Run smoke test
 build-vcpkg\bin\Release\DriverStation_TransportSmoke.exe --mode shuffle
 ```
 
 Note: The ixwebsocket overlay port only matters at `vcpkg install` time, not at CMake configure time. The patched library is already in vcpkg's `installed/` directory.
 
-**Windows Firewall:** The first time DriverStation.exe listens on port 5810, Windows will prompt to allow it through the firewall. This is a one-time approval.
+**Windows Firewall:** The first time DriverStation.exe listens on a new port, Windows will prompt to allow it. This is a one-time approval per port.
 
-### What to publish (iteration 1 — current widget types only)
+## Key invariants (do not break)
+
+- `Core::PublishInternal` auto-register only applies when `allowServerOnly=true`. Client writes on unknown topics must still be rejected.
+- `RegisterDefaultTopics` must not grow to list every TeleAutonV2 key — the auto-register path handles those.
+- `TeleAutonV2` publishes ~26 keys per loop. `Heading` (line 324) and `Travel_Heading` (line 307) are unconditional.
+- Important runtime lesson: `eNativeLink` must stay out of `DashboardTransportRouter::UsesLegacyTransportPath()` or the UI can claim Native Link while the old backend is still running underneath.
+
+## Strategy
+
+- Keep simulator-side cleanup aligned with the one-contract / many-carriers / many-adapters roadmap.
+- TCP is the intended normal runtime carrier. SHM remains the internal diagnostic/reference carrier.
+- Favor extraction that keeps this repo a clean teaching example of server-authoritative session/snapshot/lease behavior.
+- **Support, not imitate** — give teams enough compatibility to try SmartDashboard with each dashboard tool, then encourage Native Link for full support.
+
+## Transport architecture
+
+See `Transport.h` for the `Ian:` comment listing all files that must be updated when adding a new transport mode.
+
+Current modes:
+| Mode | Enum | Backend | Port | Status |
+|---|---|---|---|---|
+| Legacy SmartDashboard | `eLegacySmartDashboard` | NT v2 TCP | 1735 | Stable |
+| Direct | `eDirectConnect` | Shared memory | N/A | Stable |
+| Shuffleboard | `eShuffleboard` | NT4 WebSocket | 5810 | Stable, merged |
+| Native Link | `eNativeLink` | Custom TCP/SHM | 5810 | Stable |
+
+### NT4 server
+
+`NT4Server.h/.cpp` (~1200 lines) — full NT4 WebSocket server: subscription-driven architecture, custom MsgPack encoder/decoder, JSON announce, retained-value cache, per-client subscription tracking, client value write-back with pubuid→topicId resolution and re-broadcast to all subscribers (including sender).
+
+### DriverStation automation
+
+- `dsctl.ps1` — sends `WM_COMMAND` to DriverStation dialog. Commands: `start`, `stop`, `auton`, `tele`, `test`, `auton-enable`.
+- Hotkeys: F5=Legacy, F6=Direct, F7=Shuffleboard, F8=NativeLink.
+- Control IDs: `IDC_Start`=1006, `IDC_Stop`=1005, `IDC_Auton`=1003, `IDC_Tele`=1002, `IDC_Test`=1004.
+
+## Cross-repo sync
+
+- This repo and `D:\code\SmartDashboard` share the Native Link contract, carrier implementations, and plugin boundary.
+- When either repo's session notes change, check the other side for consistency.
+
+## Completed milestones
+
+| Feature | Branch | Status |
+|---|---|---|
+| Native Link TCP carrier | `feature/native-link-tcpip-carrier` | Merged to master |
+| Shuffleboard NT4 transport | `feature/shuffleboard-transport` | Merged to master |
+
+## Preparing for Glass transport
+
+Glass is the next dashboard integration target. It uses the same NT4 protocol as Shuffleboard. The process:
+
+1. **Pull Glass source** into `D:\code\Glass`
+2. **Make Robot_Simulation work with Glass** (may need NT4 server adjustments)
+3. **Create SmartDashboard Glass plugin** under `plugins/GlassTransport/`
+
+### Checklist: adding a new transport mode (e.g. Glass)
+
+See the `Ian:` comment on `Transport.h` for the full file list. Summary:
+
+1. Add `ConnectionMode` enum value in `Transport.h`
+2. Create `IConnectionBackend` subclass in `Transport.cpp` (like `ShuffleboardBackend`)
+3. Add factory case in `EnsureBackend()` in `Transport.cpp`
+4. Update `UsesLegacyTransportPath()` — return false for NT4-style transports
+5. Update `IsChooserEnabledForCurrentConnection()` in `AI_Input_Example.cpp`
+6. Add hotkey and menu entry in `DriverStation.cpp`
+7. If the NT4 server port differs, make it configurable or support multi-port
+
+### Lessons from Shuffleboard to apply to Glass
+
+**NT4 protocol gotchas (all fixed, but will bite again if forgotten):**
+- NT4 is subscription-driven. The server must NOT send `announce` until the client sends `subscribe`. Silent failure otherwise.
+- Client binary frames use **pubuid** (client-chosen), not server-assigned topicId. Server needs per-client `pubuid → topicId` map.
+- Echo values back to sender — the server is the single source of truth.
+- MsgPack frames may contain multiple concatenated messages per WebSocket frame.
+- IXWebSocket's `Sec-WebSocket-Protocol` handling needed a patch (overlay port) to echo exactly ONE selected protocol per RFC 6455. Glass may use a different subprotocol string.
+
+**Simulator-side gotchas:**
+- `ShuffleboardBackend` implements both `SmartDashboardDirectPublishSink` (server→client) AND `SmartDashboardDirectQuerySource` (client→server read-back). Both are needed for the simulator to read values written by dashboard clients.
+- The query source normalizes flat keys (e.g. `TestMove`) to NT4 paths (`/SmartDashboard/TestMove`).
+- `IsChooserEnabledForCurrentConnection()` must include the new mode or the auton AI falls back to the numeric `AutonTest` key and ignores the chooser.
+- Headless crash: `TeleAuton_V2::init()` creates an OSG 3D viewer which crashes in headless sessions. Smoke test skips this for shuffleboard mode.
+- WSAStartup: `ix::initNetSystem()` must be called before any IXWebSocket server operations.
+
+**Chooser protocol:**
+Base key `Test/Auton_Selection/AutoChooser`, all prefixed with `/SmartDashboard/`:
+- Server publishes: `.type`="String Chooser", `options`=[array], `default`, `active`
+- Client writes back: `selected` = user's choice
+- Read-back priority: `selected` → `active` → `default`, with 20-retry × 10ms loop
+- See `AutonChooser.h` for the `Ian:` comment with full protocol description.
+
+**Port differences:**
+- Shuffleboard default: port 5810
+- Glass default: port 1735 (same as legacy NT — potential conflict!)
+- Legacy SmartDashboard: port 1735
+
+**No value persistence by design:**
+TestMove and chooser selection start at 0/"Do Nothing" each launch. Values must be published by a client after the NT4 server is running.
+
+### NT4 protocol quick reference
+
+- **Transport:** WebSocket, resource path `/nt/<clientname>`
+- **Subprotocols:** `v4.1.networktables.first.wpi.edu` (preferred), `networktables.first.wpi.edu` (v4.0)
+- **Control messages:** JSON text frames — array of `{method, params}` objects
+- **Server→client:** `announce`, `unannounce`, `properties`
+- **Client→server:** `subscribe`, `unsubscribe`, `publish`, `unpublish`, `setproperties`
+- **Value updates:** MsgPack binary — `[topicID, timestamp_us, dataType, value]`
+- **Data types:** boolean=0, double=1, int=2, float=3, string=4, raw=5, boolean[]=16, double[]=17, int[]=18, float[]=19, string[]=20
+- **Full spec:** https://github.com/wpilibsuite/allwpilib/blob/main/ntcore/doc/networktables4.adoc
+
+## What to publish (current widget types)
 
 | Category | Keys | Type |
 |---|---|---|
@@ -135,67 +157,7 @@ Note: The ixwebsocket overlay port only matters at `vcpkg install` time, not at 
 | Bool controls | `SafetyLock_Drive`, `TestVariables_set` | bool |
 | Chooser | `Test/Auton_Selection/AutoChooser/{.type,options,default,active,selected}` | string / string[] |
 
-### Skipped for now (future iterations)
+## Deferred work (not blocking Glass)
 
-- Predicted odometry (`predicted_*`)
-- PID monitor keys
-- Tank drive keys (test-only)
-- Advanced Shuffleboard widget types: Compass, Camera, Multi-plot, Field2d, Mechanism2d, command/subsystem panels
-
-### Auto-connect refactoring (SmartDashboard only)
-
-Auto-connect/reconnect logic was lifted out of all three transport plugins (Native Link TCP, Shuffleboard NT4, Legacy NT) into a single `QTimer` in `MainWindow` on the SmartDashboard side. No changes needed in Robot_Simulation — the simulator is the server, not the client. See SmartDashboard's `Agent_Session_Notes.md` for details.
-
-### Next steps
-
-1. **User running additional manual tests** before merging `feature/shuffleboard-transport` to main on both repos.
-2. **Expand published keys** — Smoke test currently publishes 6 keys + chooser. Full TeleAutonV2 publishes ~49 keys.
-
-### Bug fixes this session
-
-**BUG 5 — NT4 server didn't echo values back to sender** (`NT4Server.cpp` `HandleClientValueUpdate`):
-- The re-broadcast loop skipped the originating client (`if (clientKey == senderKey) continue`).
-- Design principle: one robot, many clients — every client should see every update including its own. The server is the single source of truth, and echoing back confirms acceptance.
-- Fix: Removed the sender-skip. All subscribed clients now receive all value updates.
-
-**Chooser gate bug** (`AI_Input_Example.cpp` `IsChooserEnabledForCurrentConnection()`):
-- Only returned true for `eDirectConnect` and `eNativeLink`, excluding `eShuffleboard`.
-- The auton AI skipped the chooser path and fell back to the numeric `AutonTest` key.
-- Fix: Added `eShuffleboard` to the check.
-
-**Smoke test unification** (`TransportSmoke.cpp`):
-- Previously skipped `RobotTester_init()`, `SetGameMode(0)`, and `StartStreaming()` in shuffleboard mode.
-- Since user has RDP (display available), all mode-specific guards removed. TeleAuton now runs in all modes.
-
-### End-to-end verification: PASSED
-
-Full bidirectional flow verified with real DriverStation + SmartDashboard (not just smoke test):
-1. SmartDashboard connects to DriverStation NT4 server (port 5810)
-2. Telemetry streams continuously (Velocity, X_ft, Y_ft, Timer, wheel velocities)
-3. SmartDashboard publishes `TestMove=3.5` and chooser `selected="Just Move Forward"` via debug pipe → NT4 write-back
-4. NT4 server retains values, echoes back to all clients (including sender)
-5. `dsctl.ps1 auton-enable` starts simulation — robot drives forward, Y_ft reaches 3.029 ft
-
-### DriverStation automation
-
-`dsctl.ps1` — PowerShell script that sends `WM_COMMAND` messages to the DriverStation Win32 dialog. Commands: `start`, `stop`, `auton`, `tele`, `test`, `auton-enable` (start + auton). Uses `EnumWindows` to find the window by process ID.
-
-### SmartDashboard plugin status
-
-The SmartDashboard NT4 client plugin is code-complete (phase 2, full bidirectional) on `D:\code\SmartDashboard` branch `feature/shuffleboard-transport`:
-- `plugins/ShuffleboardTransport/` — NT4 client (`nt4_client.h/.cpp`), plugin ABI bridge (`shuffleboard_transport_plugin.cpp`), 17 tests passing (91/91 total).
-- Uses stock vcpkg ixwebsocket (no overlay port needed on client side).
-- `supports_chooser` returns true. Publish path fully wired. `EnsurePublished` uses correct `/SmartDashboard/` prefix.
-
-### NT4 protocol reference (for SmartDashboard plugin authors)
-
-- **Transport:** WebSocket on port 5810, resource path `/nt/<clientname>`
-- **Subprotocols:** `v4.1.networktables.first.wpi.edu` (preferred), `networktables.first.wpi.edu` (v4.0 fallback)
-- **Control messages:** JSON text frames — each frame is a JSON array of message objects with `method` and `params` keys
-- **Server→client methods:** `announce`, `unannounce`, `properties`
-- **Client→server methods:** `subscribe`, `unsubscribe`, `publish`, `unpublish`, `setproperties`
-- **Value updates:** MessagePack binary frames — each message is 4-element array: `[topicID, timestamp_us, dataType, value]`
-- **Data type codes:** boolean=0, double=1, int=2, float=3, string=4, raw/msgpack/protobuf=5, boolean[]=16, double[]=17, int[]=18, float[]=19, string[]=20
-- **Timestamp sync:** Topic ID -1, client sends local time, server responds with server time + echoed client time
-- **Subscribe triggers announces:** Server sends announce ONLY after client subscribes with matching patterns. `prefix=true` with empty string `""` matches all non-meta topics.
-- **Full spec:** https://github.com/wpilibsuite/allwpilib/blob/main/ntcore/doc/networktables4.adoc
+- Expand smoke test published keys from ~6 + chooser to full TeleAutonV2 (~49 keys)
+- Debug builds: manual carrier picker in DriverStation dialog for SHM vs TCP comparisons

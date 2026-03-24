@@ -1,3 +1,15 @@
+// Ian: AutonChooser.h implements the WPILib "String Chooser" protocol used by
+// Shuffleboard, Glass, and SmartDashboard. The chooser base key (e.g.
+// "Test/Auton_Selection/AutoChooser") expands into sub-keys:
+//   .type     = "String Chooser"  (server publishes, read-only for clients)
+//   options   = ["Do Nothing", "Move Forward", ...]  (server publishes)
+//   default   = "Do Nothing"  (server publishes)
+//   active    = current server-side selection  (server publishes)
+//   selected  = client's requested selection   (client writes back)
+// Read-back priority: selected → active → default.
+// All keys are prefixed with /SmartDashboard/ in the NT4 topic namespace.
+// When adding Glass support, this same chooser protocol applies — Glass
+// also speaks NT4 and uses the same sub-key layout.
 #pragma once
 
 #include "../../../Libraries/SmartDashboard/SmartDashboard_Import.h"
