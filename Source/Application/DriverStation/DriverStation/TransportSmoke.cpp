@@ -129,14 +129,15 @@ int smoke_main(int argc, char** argv)
 	RobotTester tester;
 	tester.RobotTester_create();
 	tester.SetConnectionMode(connectionMode);
-	// Ian: RobotTester_init() creates the OSG viewer which crashes in headless
-	// environments (no display, detached RDP, etc.).  For the smoke test we only
-	// need the transport layer, which is already initialized by SetConnectionMode()
-	// above (it calls DashboardTransportRouter::Initialize via SetMode).
-	// We still call init() for non-shuffleboard modes since those tests run in
-	// interactive sessions where the viewer is expected.
-	if (connectionMode != ConnectionMode::eShuffleboard)
-		tester.RobotTester_init();
+	// Ian: SetConnectionMode() already calls DashboardTransportRouter::Initialize()
+	// via SetMode(), which starts the transport backend (e.g. NT4 server on port
+	// 5810 for shuffleboard).  RobotTester_init() then calls Initialize() again,
+	// but DashboardTransportRouter safely deduplicates via m_is_initialized flag —
+	// no second NT4 server is created, no port conflict.
+	// The init() call is needed for TeleAuton_V2::init() which creates the
+	// simulation model, AI goal system, and OSG viewer.  This requires a display
+	// session (interactive or RDP) — will crash if truly headless.
+	tester.RobotTester_init();
 
 	printf("[TransportSmoke] mode=%s run_ms=%lu\n",
 		ConnectionModeLabel(connectionMode),
@@ -175,21 +176,15 @@ int smoke_main(int argc, char** argv)
 	printf("[TransportSmoke] seeded chooser selected='Just Move Forward' TestMove=%g\n", testMove);
 	fflush(stdout);
 
-	// Ian: In shuffleboard mode we skipped RobotTester_init() (to avoid the OSG
-	// viewer crash in headless environments), so we must NOT call SetGameMode or
-	// StartStreaming which depend on TeleAuton_V2::init() having been called.
-	// The transport layer is already running and we can publish values directly
-	// via SmartDashboard::PutNumber/PutString.
-	if (connectionMode != ConnectionMode::eShuffleboard)
-	{
-		tester.SetGameMode(0); // auton
-		tester.StartStreaming();
-	}
+	// Ian: Start the auton sequence.  SetGameMode(0) latches auton mode,
+	// StartStreaming() launches the OSG viewer render loop on an async thread
+	// and activates the auton goal (which reads the chooser selection and
+	// TestMove).  TeleAuton publishes real sim telemetry at ~60fps.
+	tester.SetGameMode(0); // auton
+	tester.StartStreaming();
 
-	// Ian: Two different loop strategies depending on mode:
-	// - Shuffleboard mode: synthetic publish loop (no TeleAuton running).
-	// - All other modes: TeleAuton publishes real sim telemetry on the viewer
-	//   thread at ~60fps, so we just monitor Y_ft to observe the robot moving.
+	// Ian: Monitor loop — TeleAuton publishes real sim telemetry at ~60fps on
+	// the viewer thread, so we just read back and print to observe the robot.
 	printf("[TransportSmoke] running for %lu ms ...\n", static_cast<unsigned long>(runMs));
 	fflush(stdout);
 	const DWORD loopIntervalMs = 100;  // 10 Hz
@@ -197,27 +192,12 @@ int smoke_main(int argc, char** argv)
 	int loopCount = 0;
 	while (elapsed < runMs)
 	{
-		if (connectionMode == ConnectionMode::eShuffleboard)
-		{
-			// Ian: No TeleAuton in shuffleboard mode — publish synthetic data
-			// so connected clients see live-updating values.
-			const double t = elapsed / 1000.0;
-			SmartDashboard::PutNumber("Velocity", 2.0 * sin(t));
-			SmartDashboard::PutNumber("Rotation Velocity", 0.5 * cos(t));
-			SmartDashboard::PutNumber("Heading", fmod(t * 30.0, 360.0));
-			SmartDashboard::PutNumber("Timer", t);
-			SmartDashboard::PutNumber("X_ft", 3.0 + sin(t * 0.3));
-			SmartDashboard::PutNumber("Y_ft", 2.0 + cos(t * 0.3));
-		}
-
 		Sleep(loopIntervalMs);
 		elapsed += loopIntervalMs;
 		loopCount++;
 
 		// Ian: Print telemetry readback every second so we can observe the
-		// simulation state from the console.  In direct/nativelink modes this
-		// shows TeleAuton's real sim values; in shuffleboard mode it echoes
-		// back our own synthetic data.
+		// simulation state from the console.
 		if (loopCount % 10 == 0)
 		{
 			double y_ft = 0.0;
@@ -234,8 +214,7 @@ int smoke_main(int argc, char** argv)
 	printf("[TransportSmoke] loop finished (%d iterations)\n", loopCount);
 	fflush(stdout);
 
-	if (connectionMode != ConnectionMode::eShuffleboard)
-		tester.StopStreaming();
+	tester.StopStreaming();
 	tester.Shutdown();
 
 	printf("[TransportSmoke] done\n");

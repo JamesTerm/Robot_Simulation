@@ -1074,14 +1074,15 @@ void NT4Server::HandleClientBinaryMessage(ix::WebSocket& ws, const std::string& 
 // ============================================================================
 // Handle a decoded client value update
 // ============================================================================
-// Ian: Update the retained cache and re-broadcast to other subscribed clients.
-// This is how dashboard write-back (e.g. chooser selection) reaches the simulator:
+// Ian: Update the retained cache and re-broadcast to ALL subscribed clients
+// (including the sender). This is how dashboard write-back reaches the simulator:
 //   1. Client sends binary value frame → decoded above
 //   2. We update the retained cache (m_retained) with the new value
-//   3. Other subscribed clients see the update (re-broadcast)
+//   3. ALL subscribed clients see the update (including the sender — the server
+//      is the single source of truth, and echoing back confirms acceptance)
 //   4. The simulator reads the value via TryGet* queries on the retained cache
 
-void NT4Server::HandleClientValueUpdate(ix::WebSocket& sender, int32_t topicId, const RetainedValue& value)
+void NT4Server::HandleClientValueUpdate(ix::WebSocket& /*sender*/, int32_t topicId, const RetainedValue& value)
 {
 	std::lock_guard<std::mutex> lock(m_topicsMutex);
 
@@ -1104,13 +1105,16 @@ void NT4Server::HandleClientValueUpdate(ix::WebSocket& sender, int32_t topicId, 
 	if (!m_running || !m_server)
 		return;
 
-	uintptr_t senderKey = reinterpret_cast<uintptr_t>(&sender);
-
+	// Ian: We intentionally do NOT skip the sender. A client that publishes a
+	// value should see it echoed back — the server is the single source of truth.
+	// This lets a dashboard update its own UI tiles from the authoritative echo,
+	// and also means multiple dashboards connected to the same server all converge
+	// on the same retained state. (Matches the design principle: one robot, many
+	// clients, every client sees every update including its own.)
 	for (auto& client : m_server->getClients())
 	{
 		if (!client) continue;
 		uintptr_t clientKey = reinterpret_cast<uintptr_t>(client.get());
-		if (clientKey == senderKey) continue; // Don't echo back to sender
 
 		auto csIt = m_clientState.find(clientKey);
 		if (csIt == m_clientState.end()) continue;

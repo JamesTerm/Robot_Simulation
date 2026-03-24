@@ -148,8 +148,37 @@ Auto-connect/reconnect logic was lifted out of all three transport plugins (Nati
 
 ### Next steps
 
-1. **End-to-end feedback verification** — Run SmartDashboard (with the Shuffleboard plugin on `feature/shuffleboard-transport`) against `DriverStation_TransportSmoke.exe --mode shuffle` to verify both directions: telemetry display AND write-back (TestMove, auton chooser selection reaching the simulator). Monitor `Y_ft` to validate the full feedback loop.
+1. **User running additional manual tests** before merging `feature/shuffleboard-transport` to main on both repos.
 2. **Expand published keys** — Smoke test currently publishes 6 keys + chooser. Full TeleAutonV2 publishes ~49 keys.
+
+### Bug fixes this session
+
+**BUG 5 — NT4 server didn't echo values back to sender** (`NT4Server.cpp` `HandleClientValueUpdate`):
+- The re-broadcast loop skipped the originating client (`if (clientKey == senderKey) continue`).
+- Design principle: one robot, many clients — every client should see every update including its own. The server is the single source of truth, and echoing back confirms acceptance.
+- Fix: Removed the sender-skip. All subscribed clients now receive all value updates.
+
+**Chooser gate bug** (`AI_Input_Example.cpp` `IsChooserEnabledForCurrentConnection()`):
+- Only returned true for `eDirectConnect` and `eNativeLink`, excluding `eShuffleboard`.
+- The auton AI skipped the chooser path and fell back to the numeric `AutonTest` key.
+- Fix: Added `eShuffleboard` to the check.
+
+**Smoke test unification** (`TransportSmoke.cpp`):
+- Previously skipped `RobotTester_init()`, `SetGameMode(0)`, and `StartStreaming()` in shuffleboard mode.
+- Since user has RDP (display available), all mode-specific guards removed. TeleAuton now runs in all modes.
+
+### End-to-end verification: PASSED
+
+Full bidirectional flow verified with real DriverStation + SmartDashboard (not just smoke test):
+1. SmartDashboard connects to DriverStation NT4 server (port 5810)
+2. Telemetry streams continuously (Velocity, X_ft, Y_ft, Timer, wheel velocities)
+3. SmartDashboard publishes `TestMove=3.5` and chooser `selected="Just Move Forward"` via debug pipe → NT4 write-back
+4. NT4 server retains values, echoes back to all clients (including sender)
+5. `dsctl.ps1 auton-enable` starts simulation — robot drives forward, Y_ft reaches 3.029 ft
+
+### DriverStation automation
+
+`dsctl.ps1` — PowerShell script that sends `WM_COMMAND` messages to the DriverStation Win32 dialog. Commands: `start`, `stop`, `auton`, `tele`, `test`, `auton-enable` (start + auton). Uses `EnumWindows` to find the window by process ID.
 
 ### SmartDashboard plugin status
 
