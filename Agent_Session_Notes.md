@@ -56,16 +56,23 @@ Make the simulator talk to the official Shuffleboard app (`D:\code\Shuffleboard`
 - **Keep it simple:** only implement what we currently support in our widget set. Skip advanced widgets (Compass, Camera, Multi-plot, Field2d, Mechanism2d, command/subsystem panels) — add those incrementally later.
 - **Drop what doesn't align:** if a Shuffleboard convention conflicts with our vision, we can choose not to support it.
 
-### Implementation status — NT4 server working, Shuffleboard connects
+### Implementation status — NT4 server working, Shuffleboard shows topics
 
 **Completed:**
-- `NT4Server.h/.cpp` (~860 lines) — full NT4 WebSocket server on port 5810 with custom MessagePack encoder, JSON announce messages, retained-value cache, broadcast to all clients, client message handling.
-- `ShuffleboardBackend` in `Transport.cpp` replaced with real NT4 backend implementing `SmartDashboardDirectPublishSink`. Shuffleboard removed from `UsesLegacyTransportPath()`.
+- `NT4Server.h/.cpp` (~1050 lines) — full NT4 WebSocket server on port 5810 with subscription-driven architecture, custom MessagePack encoder, JSON announce messages, retained-value cache, per-client subscription tracking, client message handling.
+- `ShuffleboardBackend` in `Transport.cpp` — real NT4 backend implementing `SmartDashboardDirectPublishSink` (PublishBoolean, PublishNumber, PublishString, PublishStringArray). Shuffleboard removed from `UsesLegacyTransportPath()`.
 - `TransportSmoke.cpp` rewritten for headless shuffleboard mode: flexible `--mode` arg, skip OSG viewer/TeleAuton, SEH crash handler, continuous 10Hz publish loop.
 - IXWebSocket overlay port at `overlay-ports/ixwebsocket/` fixes `Sec-WebSocket-Protocol` negotiation (see critical bug below).
-- Shuffleboard connected successfully, stable 30+ seconds, 300+ value updates sent.
+- Topics appear in Shuffleboard's Sources panel, values update live.
+- All diagnostic trace logging removed (TraceLog, RobotTrace, TransportTrace).
 
 ### Critical discoveries
+
+**NT4 is subscription-driven (FIXED in NT4Server.cpp):**
+- The server must NOT send `announce` messages until the client sends a `subscribe` message with matching topic patterns.
+- Our first implementation sent announces immediately on connect. ntcore silently ignores unsolicited announces, which is why Shuffleboard showed nothing despite receiving all the data.
+- The correct flow is: (1) client connects, (2) client sends subscribe with topic patterns, (3) server sends announce for matching topics, (4) server sends cached values, (5) future publishes only go to clients with matching subscriptions.
+- Per-client tracking: `ClientSubscription` (subuid, topic patterns, prefix flag) and `ClientState` (subscriptions list, announced topic IDs) stored in `m_clientState` map keyed by WebSocket pointer.
 
 **IXWebSocket subprotocol bug (FIXED via overlay port):**
 - IXWebSocket v11.4.6 server-side does NOT handle `Sec-WebSocket-Protocol` at all. The `serverHandshake()` doesn't read or echo the header.
@@ -127,7 +134,19 @@ Note: The ixwebsocket overlay port only matters at `vcpkg install` time, not at 
 
 ### Next steps
 
-1. **Visual verification** — With Shuffleboard GUI visible (interactive session, not headless RDP), verify topics appear in Sources panel and values update live.
-2. **Test with full DriverStation** — `DriverStation.exe` in shuffleboard mode (requires display for OSG viewer).
-3. **Bidirectional support** — Handle Shuffleboard writing back chooser selections (incoming `publish` + value updates from clients).
-4. **Expand published keys** — Smoke test currently publishes 6 keys + chooser. Full TeleAutonV2 publishes ~49 keys.
+1. **SmartDashboard plugin** — Start the `feature/shuffleboard-transport` branch in `D:\code\SmartDashboard`. The plugin will be an NT4 WebSocket *client* connecting to port 5810, subscribing to topics, and feeding values into SmartDashboard's display pipeline. Follow the existing plugin ABI pattern (`sd_transport_plugin_descriptor_v1`). Phase 1 is receive-only (display telemetry); phase 2 adds write-back for chooser selections.
+2. **Bidirectional support** — Handle Shuffleboard writing back chooser selections (incoming `publish` + value updates from clients). This requires implementing `SmartDashboardDirectQuerySource` on the Robot_Simulation side.
+3. **Expand published keys** — Smoke test currently publishes 6 keys + chooser. Full TeleAutonV2 publishes ~49 keys.
+
+### NT4 protocol reference (for SmartDashboard plugin authors)
+
+- **Transport:** WebSocket on port 5810, resource path `/nt/<clientname>`
+- **Subprotocols:** `v4.1.networktables.first.wpi.edu` (preferred), `networktables.first.wpi.edu` (v4.0 fallback)
+- **Control messages:** JSON text frames — each frame is a JSON array of message objects with `method` and `params` keys
+- **Server→client methods:** `announce`, `unannounce`, `properties`
+- **Client→server methods:** `subscribe`, `unsubscribe`, `publish`, `unpublish`, `setproperties`
+- **Value updates:** MessagePack binary frames — each message is 4-element array: `[topicID, timestamp_us, dataType, value]`
+- **Data type codes:** boolean=0, double=1, int=2, float=3, string=4, raw/msgpack/protobuf=5, boolean[]=16, double[]=17, int[]=18, float[]=19, string[]=20
+- **Timestamp sync:** Topic ID -1, client sends local time, server responds with server time + echoed client time
+- **Subscribe triggers announces:** Server sends announce ONLY after client subscribes with matching patterns. `prefix=true` with empty string `""` matches all non-meta topics.
+- **Full spec:** https://github.com/wpilibsuite/allwpilib/blob/main/ntcore/doc/networktables4.adoc
