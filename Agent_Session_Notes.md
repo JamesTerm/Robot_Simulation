@@ -56,12 +56,49 @@ Make the simulator talk to the official Shuffleboard app (`D:\code\Shuffleboard`
 - **Keep it simple:** only implement what we currently support in our widget set. Skip advanced widgets (Compass, Camera, Multi-plot, Field2d, Mechanism2d, command/subsystem panels) — add those incrementally later.
 - **Drop what doesn't align:** if a Shuffleboard convention conflicts with our vision, we can choose not to support it.
 
-### Existing scaffolding
+### Implementation status — NT4 server working, Shuffleboard connects
 
-- `ConnectionMode::eShuffleboard` enum is wired through UI combo, F7 shortcut, command-line `shuffle`, and INI persistence.
-- `ShuffleboardBackend` in `Transport.cpp` is a stub that currently delegates to the legacy NT2 path.
-- Shuffleboard is classified in `UsesLegacyTransportPath()` — this will need to change once a real NT4 backend exists.
-- No NT4 protocol code exists anywhere in the codebase yet.
+**Completed:**
+- `NT4Server.h/.cpp` (~860 lines) — full NT4 WebSocket server on port 5810 with custom MessagePack encoder, JSON announce messages, retained-value cache, broadcast to all clients, client message handling.
+- `ShuffleboardBackend` in `Transport.cpp` replaced with real NT4 backend implementing `SmartDashboardDirectPublishSink`. Shuffleboard removed from `UsesLegacyTransportPath()`.
+- `TransportSmoke.cpp` rewritten for headless shuffleboard mode: flexible `--mode` arg, skip OSG viewer/TeleAuton, SEH crash handler, continuous 10Hz publish loop.
+- IXWebSocket overlay port at `overlay-ports/ixwebsocket/` fixes `Sec-WebSocket-Protocol` negotiation (see critical bug below).
+- Shuffleboard connected successfully, stable 30+ seconds, 300+ value updates sent.
+
+### Critical discoveries
+
+**IXWebSocket subprotocol bug (FIXED via overlay port):**
+- IXWebSocket v11.4.6 server-side does NOT handle `Sec-WebSocket-Protocol` at all. The `serverHandshake()` doesn't read or echo the header.
+- Initial fix echoed back the entire comma-separated header, which caused Shuffleboard to connect then immediately disconnect in a loop (RFC 6455 requires exactly ONE selected protocol).
+- Final fix: parse comma-separated header, pick first protocol, echo only that one. Applied as vcpkg overlay port.
+- Install with: `"D:/code/vcpkg/vcpkg.exe" install ixwebsocket:x64-windows --overlay-ports="D:/code/Robot_Simulation/overlay-ports"`
+- Patch file MUST use LF line endings and git-style `a/` `b/` path prefixes.
+
+**Shuffleboard server address (NOT command-line args):**
+- `localhost` passed to `java -jar Shuffleboard.jar localhost` is completely ignored — Shuffleboard has no argument parsing.
+- Server address stored via Java Preferences API → Windows Registry: `HKCU\Software\JavaSoft\Prefs\edu\wpi\first\shuffleboard\plugin\networktables` (key: `server`).
+- Default in code is `"localhost"` so it works without registry changes, but can be set explicitly:
+  ```powershell
+  Set-ItemProperty -Path 'HKCU:\Software\JavaSoft\Prefs\edu\wpi\first\shuffleboard\plugin\networktables' -Name 'server' -Value 'localhost' -Type String
+  ```
+
+**Headless crash workaround:**
+- `RobotTester_init()` → `TeleAuton_V2::init()` creates an OSG 3D viewer, which crashes (0xC0000005) in headless/RDP sessions.
+- Smoke test in shuffleboard mode skips `RobotTester_init()` entirely; transport is already initialized by `SetConnectionMode()`.
+
+### Build commands
+
+```bash
+# Configure (fresh build_nt4 directory)
+cmake -G "Visual Studio 17 2022" -B build_nt4 -DCMAKE_TOOLCHAIN_FILE="D:/code/vcpkg/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows -DVCPKG_OVERLAY_PORTS="D:/code/Robot_Simulation/overlay-ports"
+
+# Build
+cmake --build build_nt4 --target DriverStation --config Release
+cmake --build build_nt4 --target DriverStation_TransportSmoke --config Release
+
+# Run smoke test
+build_nt4\bin\Release\DriverStation_TransportSmoke.exe --mode shuffle
+```
 
 ### What to publish (iteration 1 — current widget types only)
 
@@ -84,16 +121,9 @@ Make the simulator talk to the official Shuffleboard app (`D:\code\Shuffleboard`
 - Tank drive keys (test-only)
 - Advanced Shuffleboard widget types: Compass, Camera, Multi-plot, Field2d, Mechanism2d, command/subsystem panels
 
-### Technical approach
+### Next steps
 
-1. Study the NT4 WebSocket protocol (Shuffleboard 2026.2.2 uses NT4 over `ws://host:5810/nt/...`).
-2. Implement a minimal NT4 server or use the existing NT server with NT4 framing.
-3. Replace `ShuffleboardBackend` stub with a real backend that publishes the iteration-1 keys.
-4. Verify by launching `run_shuffleboard_local.bat` against the running DriverStation.
-5. Document what Shuffleboard expects vs what we choose to support, to inform the SmartDashboard plugin later.
-
-### Immediate next-session focus
-
-1. Research the NT4 WebSocket wire protocol (message types, topic announcement, value publish).
-2. Determine whether to implement a standalone NT4 server or adapt the existing NT infrastructure.
-3. Begin the minimal NT4 server implementation in the DriverStation transport layer.
+1. **Visual verification** — With Shuffleboard GUI visible (interactive session, not headless RDP), verify topics appear in Sources panel and values update live.
+2. **Test with full DriverStation** — `DriverStation.exe` in shuffleboard mode (requires display for OSG viewer).
+3. **Bidirectional support** — Handle Shuffleboard writing back chooser selections (incoming `publish` + value updates from clients).
+4. **Expand published keys** — Smoke test currently publishes 6 keys + chooser. Full TeleAutonV2 publishes ~49 keys.
