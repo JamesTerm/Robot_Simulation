@@ -7,7 +7,7 @@
 ## Workflow
 
 - `apply_patch` expects workspace-relative paths with forward slashes.
-- **Use CRLF line endings** for all source files (`.cpp`, `.h`, `.cmake`, `.ps1`, `.py`, `.md`, `.gitignore`, `.json`). Both repos standardized CRLF as of the Shuffleboard merge.
+- **Use CRLF line endings** for all source files (`.cpp`, `.h`, `.cmake`, `.ps1`, `.py`, `.md`, `.gitignore`, `.json`). Both repos standardized CRLF as of the NT4 transport merge.
 - **Do NOT CRLF-normalize `.rc` or `.aps` files** — they are UTF-16 LE encoded. `.gitattributes` marks them `binary`. See "Key invariants" for the full story.
 - Read nearby `Ian:` comments before editing and add new ones where session, ownership, carrier, protocol, or runtime-mode lessons would be easy to lose.
 - Process detection: use `Get-Process -Name <name> -ErrorAction SilentlyContinue` (NOT `tasklist | findstr` which breaks in Git Bash due to flag mangling).
@@ -82,14 +82,14 @@ Current modes:
 | Feature | Branch | Status |
 |---|---|---|
 | Native Link TCP carrier | `feature/native-link-tcpip-carrier` | Merged to master |
-| Shuffleboard NT4 transport | `feature/shuffleboard-transport` | Merged to master |
-| Glass + NT4 rename | `feature/glass-transport` | Active |
+| NT4 transport (originally "Shuffleboard") | `feature/shuffleboard-transport` | Merged to master |
+| Glass verification + Shuffleboard→NT4 rename | `feature/glass-transport` | Merged to master |
 
-## Glass transport + NT4 rename (active — `feature/glass-transport`)
+## Glass support (complete — no separate plugin needed)
 
-Glass is the next dashboard integration target. It uses the same NT4 protocol as Shuffleboard — same WebSocket transport, same MsgPack binary frames, same JSON control messages. Because our NT4 server already works with Shuffleboard, Glass connects with zero server-side changes (beyond the RTT ping fix).
+Glass uses the same NT4 protocol as Shuffleboard — same WebSocket transport, same MsgPack binary frames, same JSON control messages, same port 5810. It connects to the existing NT4 server with zero changes (beyond the RTT ping fix that was already committed). No separate Glass backend or SmartDashboard Glass plugin is needed.
 
-This motivated renaming the transport mode from Shuffleboard-specific naming to generic NT4 naming: `eShuffleboard` → `eNetworkTablesV4`, `ShuffleboardBackend` → `NT4Backend`, CLI `--mode nt4` (with `shuffle`/`shuffleboard` kept as backward-compatible aliases).
+The transport mode was renamed from Shuffleboard-specific naming to generic NT4 naming: `eShuffleboard` → `eNetworkTablesV4`, `ShuffleboardBackend` → `NT4Backend`, CLI `--mode nt4` (with `shuffle`/`shuffleboard` kept as backward-compatible aliases).
 
 ### Glass installation
 
@@ -110,8 +110,8 @@ Glass 2026.2.2 is installed at `D:\code\Glass` (same portable-directory pattern 
 ### Plan
 
 1. ~~Pull Glass into `D:\code\Glass`~~ — Done
-2. **Make Robot_Simulation work with Glass** — Done: zero server changes needed since Glass speaks the same NT4 protocol on port 5810. RTT ping fix was required.
-3. **Create SmartDashboard Glass plugin** under `plugins/GlassTransport/` (future)
+2. ~~Make Robot_Simulation work with Glass~~ — Done: zero server changes needed since Glass speaks the same NT4 protocol on port 5810. RTT ping fix was required.
+3. ~~SmartDashboard Glass plugin~~ — Not needed. Glass connects to the existing NT4Transport plugin with zero changes.
 
 ### Checklist: adding a new transport mode
 
@@ -126,7 +126,7 @@ See the `Ian:` comment on `Transport.h` for the full file list. Summary:
 7. Add hotkey and menu entry in `DriverStation.cpp`
 8. If the NT4 server port differs, make it configurable or support multi-port
 
-### Lessons from Shuffleboard/Glass to apply to future NT4 dashboards
+### NT4 protocol lessons (from Shuffleboard/Glass integration)
 
 **NT4 protocol gotchas (all fixed, but will bite again if forgotten):**
 - NT4 is subscription-driven. The server must NOT send `announce` until the client sends `subscribe`. Silent failure otherwise.
@@ -183,7 +183,7 @@ TestMove and chooser selection start at 0/"Do Nothing" each launch. Values must 
 | Bool controls | `SafetyLock_Drive`, `TestVariables_set` | bool |
 | Chooser | `Test/Auton_Selection/AutoChooser/{.type,options,default,active,selected}` | string / string[] |
 
-## Deferred work (not blocking Glass)
+## Deferred work
 
 - Expand smoke test published keys from ~6 + chooser to full TeleAutonV2 (~49 keys)
 - Debug builds: manual carrier picker in DriverStation dialog for SHM vs TCP comparisons
