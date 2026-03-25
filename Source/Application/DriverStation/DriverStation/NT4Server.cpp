@@ -1,5 +1,6 @@
 // Ian: NT4Server.cpp — NetworkTables 4 WebSocket server implementation.
-// This is the heart of Shuffleboard compatibility.  See NT4Server.h for design overview.
+// This is the heart of NT4 dashboard compatibility (Shuffleboard, Glass, etc.).
+// See NT4Server.h for design overview.
 //
 // Protocol reference: https://github.com/wpilibsuite/allwpilib/blob/main/ntcore/doc/networktables4.adoc
 //
@@ -21,7 +22,7 @@
 //   5. Future value updates only go to clients whose subscriptions match
 //
 // Our first implementation sent announces immediately on connect, BEFORE the client
-// subscribed.  ntcore silently ignored all of them, which is why Shuffleboard showed
+// subscribed.  ntcore silently ignored all of them, which is why dashboards showed
 // nothing despite receiving all the data.
 
 #include "stdafx.h"
@@ -472,7 +473,7 @@ bool NT4Server::Start(int port)
 
 	// Ian: Create the WebSocket server.
 	// Port 5810 is the standard NT4 port. Bind to 0.0.0.0 to accept connections
-	// from any interface (important for remote Shuffleboard on another machine).
+	// from any interface (important for remote dashboards on another machine).
 	// Backlog 5, max 8 connections, handshake timeout 3s.
 	m_server = std::make_unique<ix::WebSocketServer>(
 		port,
@@ -529,6 +530,7 @@ bool NT4Server::Start(int port)
 					connectionState->getRemoteIp().c_str(),
 					msg->closeInfo.code);
 				OutputDebugStringA(dbg);
+				printf("%s", dbg);
 
 				// Clean up client state
 				{
@@ -979,22 +981,31 @@ void NT4Server::HandleClientBinaryMessage(ix::WebSocket& ws, const std::string& 
 		if (!cursor.ReadInt(typeCodeRaw))
 			break;
 
-		// Topic ID -1 = timestamp sync
+		// Topic ID -1 = timestamp sync (RTT ping)
 		if (topicIdOrPubuid == -1)
 		{
-			// Ian: Respond with [−1, serverTime, typeCode, clientTime].
-			// For now we echo 0 for clientTime — proper RTT requires decoding
-			// the client's time value from the 4th element.
-			cursor.SkipElement();
+			// Ian: LESSON LEARNED — ntcore's ClientImpl blocks ALL outgoing messages
+			// (subscribe, publish, etc.) until it gets a valid RTT response.  The response
+			// MUST have:
+			//   - type code 2 (Integer, not Double)
+			//   - value = the client's original timestamp echoed back
+			// Without this, m_haveTimeOffset stays false and SendOutgoing() returns early,
+			// which means the client NEVER sends subscribe messages.  This was the root
+			// cause of Shuffleboard/Glass connecting but appearing silent.
+			//
+			// Client sends: [-1, 0, type=2(int), clientTimestamp]
+			// Server must respond: [-1, serverTimestamp, type=2(int), clientTimestamp]
+			int64_t clientTimestamp = 0;
+			cursor.ReadInt(clientTimestamp);  // 4th element: client's timestamp
 			for (uint32_t i = 4; i < arrayLen; ++i) cursor.SkipElement();
 
 			std::string response;
 			response.reserve(32);
 			MsgPackWriteArrayHeader(response, 4);
-			MsgPackWriteInt(response, -1);
-			MsgPackWriteUInt(response, GetTimestampUs());
-			MsgPackWriteInt(response, 1);
-			MsgPackWriteInt(response, 0);
+			MsgPackWriteInt(response, -1);                      // topic ID -1 = timestamp sync
+			MsgPackWriteUInt(response, GetTimestampUs());        // server timestamp (becomes value.server_time())
+			MsgPackWriteInt(response, 2);                        // type code 2 = Integer (NOT 1/Double!)
+			MsgPackWriteInt(response, clientTimestamp);           // echo client's original timestamp
 			ws.sendBinary(response);
 			continue;
 		}
@@ -1134,7 +1145,7 @@ void NT4Server::HandleClientValueUpdate(ix::WebSocket& /*sender*/, int32_t topic
 }
 
 // ============================================================================
-// Query API — let ShuffleboardBackend read retained values
+// Query API — let NT4Backend read retained values
 // ============================================================================
 // Ian: These are called by the simulator via SmartDashboardDirectQuerySource.
 // They read from the retained value cache, which includes both server-published
@@ -1204,7 +1215,7 @@ void NT4Server::HandleClientTextMessage(ix::WebSocket& ws, const std::string& te
 
 			if (method == "subscribe")
 			{
-				// Ian: THIS is the critical message. When Shuffleboard subscribes,
+				// Ian: THIS is the critical message. When a dashboard subscribes,
 				// we record the subscription and THEN send matching announces + values.
 				const auto& params = msg["params"];
 
@@ -1246,6 +1257,11 @@ void NT4Server::HandleClientTextMessage(ix::WebSocket& ws, const std::string& te
 
 						// Now send announces + cached values for all matching topics
 						SendMatchingTopicsToClient(ws, csIt->second);
+					}
+					else
+					{
+						OutputDebugStringA("[NT4Server] WARNING: subscribe received but no ClientState found!\n");
+						printf("[NT4Server] WARNING: subscribe received but no ClientState found!\n");
 					}
 				}
 			}

@@ -23,11 +23,11 @@ cmake -G "Visual Studio 17 2022" -B build-vcpkg -DCMAKE_TOOLCHAIN_FILE="D:/Git/v
 cmake --build build-vcpkg --target DriverStation --config Release
 cmake --build build-vcpkg --target DriverStation_TransportSmoke --config Release
 
-# Run DriverStation in Shuffleboard mode
-Start-Process -FilePath 'D:\code\Robot_Simulation\build-vcpkg\bin\Release\DriverStation.exe' -ArgumentList 'shuffle' -WorkingDirectory 'D:\code\Robot_Simulation\build-vcpkg\bin\Release'
+# Run DriverStation in NetworkTables V4 mode (serves Shuffleboard, Glass, any NT4 dashboard)
+Start-Process -FilePath 'D:\code\Robot_Simulation\build-vcpkg\bin\Release\DriverStation.exe' -ArgumentList 'nt4' -WorkingDirectory 'D:\code\Robot_Simulation\build-vcpkg\bin\Release'
 
 # Run smoke test
-build-vcpkg\bin\Release\DriverStation_TransportSmoke.exe --mode shuffle
+build-vcpkg\bin\Release\DriverStation_TransportSmoke.exe --mode nt4
 ```
 
 Note: The ixwebsocket overlay port only matters at `vcpkg install` time, not at CMake configure time. The patched library is already in vcpkg's `installed/` directory.
@@ -59,7 +59,7 @@ Current modes:
 |---|---|---|---|---|
 | Legacy SmartDashboard | `eLegacySmartDashboard` | NT v2 TCP | 1735 | Stable |
 | Direct | `eDirectConnect` | Shared memory | N/A | Stable |
-| Shuffleboard | `eShuffleboard` | NT4 WebSocket | 5810 | Stable, merged |
+| NetworkTables V4 | `eNetworkTablesV4` | NT4 WebSocket | 5810 | Stable (serves Shuffleboard, Glass, any NT4 dashboard) |
 | Native Link | `eNativeLink` | Custom TCP/SHM | 5810 | Stable |
 
 ### NT4 server
@@ -69,7 +69,7 @@ Current modes:
 ### DriverStation automation
 
 - `dsctl.ps1` — sends `WM_COMMAND` to DriverStation dialog. Commands: `start`, `stop`, `auton`, `tele`, `test`, `auton-enable`.
-- Hotkeys: F5=Legacy, F6=Direct, F7=Shuffleboard, F8=NativeLink.
+- Hotkeys: F5=Legacy, F6=Direct, F7=NetworkTables V4, F8=NativeLink.
 - Control IDs: `IDC_Start`=1006, `IDC_Stop`=1005, `IDC_Auton`=1003, `IDC_Tele`=1002, `IDC_Test`=1004.
 
 ## Cross-repo sync
@@ -83,11 +83,13 @@ Current modes:
 |---|---|---|
 | Native Link TCP carrier | `feature/native-link-tcpip-carrier` | Merged to master |
 | Shuffleboard NT4 transport | `feature/shuffleboard-transport` | Merged to master |
-| Glass NT4 transport | `feature/glass-transport` | Active |
+| Glass + NT4 rename | `feature/glass-transport` | Active |
 
-## Glass transport (active — `feature/glass-transport`)
+## Glass transport + NT4 rename (active — `feature/glass-transport`)
 
-Glass is the next dashboard integration target. It uses the same NT4 protocol as Shuffleboard — same WebSocket transport, same MsgPack binary frames, same JSON control messages. Because our NT4 server already works with Shuffleboard, Glass should connect with minimal or no server-side changes.
+Glass is the next dashboard integration target. It uses the same NT4 protocol as Shuffleboard — same WebSocket transport, same MsgPack binary frames, same JSON control messages. Because our NT4 server already works with Shuffleboard, Glass connects with zero server-side changes (beyond the RTT ping fix).
+
+This motivated renaming the transport mode from Shuffleboard-specific naming to generic NT4 naming: `eShuffleboard` → `eNetworkTablesV4`, `ShuffleboardBackend` → `NT4Backend`, CLI `--mode nt4` (with `shuffle`/`shuffleboard` kept as backward-compatible aliases).
 
 ### Glass installation
 
@@ -108,15 +110,15 @@ Glass 2026.2.2 is installed at `D:\code\Glass` (same portable-directory pattern 
 ### Plan
 
 1. ~~Pull Glass into `D:\code\Glass`~~ — Done
-2. **Make Robot_Simulation work with Glass** — likely zero server changes since Glass speaks the same NT4 protocol on port 5810
-3. **Create SmartDashboard Glass plugin** under `plugins/GlassTransport/`
+2. **Make Robot_Simulation work with Glass** — Done: zero server changes needed since Glass speaks the same NT4 protocol on port 5810. RTT ping fix was required.
+3. **Create SmartDashboard Glass plugin** under `plugins/GlassTransport/` (future)
 
-### Checklist: adding a new transport mode (e.g. Glass)
+### Checklist: adding a new transport mode
 
 See the `Ian:` comment on `Transport.h` for the full file list. Summary:
 
 1. Add `ConnectionMode` enum value in `Transport.h`
-2. Create `IConnectionBackend` subclass in `Transport.cpp` (like `ShuffleboardBackend`)
+2. Create `IConnectionBackend` subclass in `Transport.cpp` (like `NT4Backend`)
 3. Add factory case in `EnsureBackend()` in `Transport.cpp`
 4. Update `UsesLegacyTransportPath()` — return false for NT4-style transports
 5. **Update `HasDirectTransport()` and `UsesNetworkTablesTransport()` in `SmartDashboard.cpp`** — any mode that uses `DirectPublishSink`/`DirectQuerySource` must be listed, or `PutNumber`/etc. will also start the legacy NT2 server on port 1735
@@ -124,20 +126,21 @@ See the `Ian:` comment on `Transport.h` for the full file list. Summary:
 7. Add hotkey and menu entry in `DriverStation.cpp`
 8. If the NT4 server port differs, make it configurable or support multi-port
 
-### Lessons from Shuffleboard to apply to Glass
+### Lessons from Shuffleboard/Glass to apply to future NT4 dashboards
 
 **NT4 protocol gotchas (all fixed, but will bite again if forgotten):**
 - NT4 is subscription-driven. The server must NOT send `announce` until the client sends `subscribe`. Silent failure otherwise.
+- **RTT ping response is a hard gate.** The ntcore client sends `[-1, 0, type=2(Integer), clientTimestamp]` on connect. The server MUST respond with `[-1, serverTimestamp, type=2(Integer), clientTimestamp]`. If the type code is wrong (e.g. 1/Double instead of 2/Integer) or the client's timestamp isn't echoed back, the client never sets `m_haveTimeOffset` and `SendOutgoing()` blocks ALL outgoing messages (subscribe, publish, etc.) forever. This was the root cause of Shuffleboard/Glass connecting but appearing silent.
 - Client binary frames use **pubuid** (client-chosen), not server-assigned topicId. Server needs per-client `pubuid → topicId` map.
 - Echo values back to sender — the server is the single source of truth.
 - MsgPack frames may contain multiple concatenated messages per WebSocket frame.
-- IXWebSocket's `Sec-WebSocket-Protocol` handling needed a patch (overlay port) to echo exactly ONE selected protocol per RFC 6455. Glass may use a different subprotocol string.
+- IXWebSocket's `Sec-WebSocket-Protocol` handling needed a patch (overlay port) to echo exactly ONE selected protocol per RFC 6455. Glass and Shuffleboard use the same subprotocol (`v4.1.networktables.first.wpi.edu`).
 
 **Simulator-side gotchas:**
-- `ShuffleboardBackend` implements both `SmartDashboardDirectPublishSink` (server→client) AND `SmartDashboardDirectQuerySource` (client→server read-back). Both are needed for the simulator to read values written by dashboard clients.
+- `NT4Backend` implements both `SmartDashboardDirectPublishSink` (server→client) AND `SmartDashboardDirectQuerySource` (client→server read-back). Both are needed for the simulator to read values written by dashboard clients.
 - The query source normalizes flat keys (e.g. `TestMove`) to NT4 paths (`/SmartDashboard/TestMove`).
 - `IsChooserEnabledForCurrentConnection()` must include the new mode or the auton AI falls back to the numeric `AutonTest` key and ignores the chooser.
-- Headless crash: `TeleAuton_V2::init()` creates an OSG 3D viewer which crashes in headless sessions. Smoke test skips this for shuffleboard mode.
+- Headless crash: `TeleAuton_V2::init()` creates an OSG 3D viewer which crashes in headless sessions. Smoke test skips this for NT4 mode.
 - WSAStartup: `ix::initNetSystem()` must be called before any IXWebSocket server operations.
 
 **Chooser protocol:**
@@ -149,9 +152,8 @@ Base key `Test/Auton_Selection/AutoChooser`, all prefixed with `/SmartDashboard/
 
 **Port situation (no conflict):**
 - Shuffleboard NT4 client: port 5810
-- Glass NT4 client: port 5810 (same as Shuffleboard — no server changes needed)
+- Glass NT4 client: port 5810 (same as Shuffleboard — only one NT4 dashboard connects at a time)
 - Legacy SmartDashboard (NT2 TCP): port 1735
-- Note: Glass's NT3 fallback port is 1735, but we configure it as NT4 which uses 5810
 
 **No value persistence by design:**
 TestMove and chooser selection start at 0/"Do Nothing" each launch. Values must be published by a client after the NT4 server is running.

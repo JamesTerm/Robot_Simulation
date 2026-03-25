@@ -194,3 +194,8 @@ smoke_stdout*.txt
 smoke_stderr*.txt
 smoke_output*.txt
 smoke_error*.txt
+smoke_server_out.txt
+smoke_server_err.txt
+
+# Glass/dashboard config artifacts (created when Glass is launched with wrong CWD)
+--help/

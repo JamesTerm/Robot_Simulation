@@ -16,16 +16,15 @@ namespace Module
 			namespace
 			{
 			// Ian: The chooser-based auton selection works through SmartDashboard's
-			// query source, which each transport backend implements.  Shuffleboard
-			// mode uses ShuffleboardBackend::TryGetString to read from the NT4
-			// retained cache.  All connection modes that expose a chooser widget
-			// should be listed here.
+			// query source, which each transport backend implements.  NT4 mode
+			// uses NT4Backend::TryGetString to read from the NT4 retained cache.
+			// All connection modes that expose a chooser widget should be listed here.
 			inline bool IsChooserEnabledForCurrentConnection()
 			{
 				const SmartDashboardConnectionMode mode = SmartDashboard::GetConnectionMode();
 				return (mode == SmartDashboardConnectionMode::eDirectConnect) ||
 					(mode == SmartDashboardConnectionMode::eNativeLink) ||
-					(mode == SmartDashboardConnectionMode::eShuffleboard);
+					(mode == SmartDashboardConnectionMode::eNetworkTablesV4);
 			}
 			}
 

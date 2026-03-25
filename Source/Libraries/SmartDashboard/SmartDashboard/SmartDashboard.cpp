@@ -64,8 +64,8 @@ namespace
 			return SmartDashboardConnectionMode::eLegacySmartDashboard;
 		case static_cast<int>(SmartDashboardConnectionMode::eDirectConnect):
 			return SmartDashboardConnectionMode::eDirectConnect;
-		case static_cast<int>(SmartDashboardConnectionMode::eShuffleboard):
-			return SmartDashboardConnectionMode::eShuffleboard;
+		case static_cast<int>(SmartDashboardConnectionMode::eNetworkTablesV4):
+			return SmartDashboardConnectionMode::eNetworkTablesV4;
 		case static_cast<int>(SmartDashboardConnectionMode::eNativeLink):
 			return SmartDashboardConnectionMode::eNativeLink;
 		default:
@@ -91,22 +91,22 @@ namespace
 	// instead of the legacy NetworkTables TCP path must return true here.  Missing a
 	// mode causes PutNumber/GetNumber to fall through to NetworkTable::GetTable() which
 	// starts the legacy NT2 server on port 1735 — even when the real backend (e.g.
-	// ShuffleboardBackend) is running its own NT4 server on port 5810.
+	// NT4Backend) is running its own NT4 server on port 5810.
 	bool HasDirectTransport()
 	{
 		return (g_connectionMode == SmartDashboardConnectionMode::eDirectConnect) ||
-			(g_connectionMode == SmartDashboardConnectionMode::eShuffleboard) ||
+			(g_connectionMode == SmartDashboardConnectionMode::eNetworkTablesV4) ||
 			(g_connectionMode == SmartDashboardConnectionMode::eNativeLink);
 	}
 
 	// Ian: Must mirror HasDirectTransport() — any mode with a direct sink/source
-	// does NOT use the legacy NetworkTables transport.  If eShuffleboard is missing
+	// does NOT use the legacy NetworkTables transport.  If eNetworkTablesV4 is missing
 	// here, SmartDashboard::init() will call NetworkTable::GetTable() which binds
 	// the legacy NT2 TCP server on port 1735.
 	bool UsesNetworkTablesTransport()
 	{
 		return (g_connectionMode != SmartDashboardConnectionMode::eDirectConnect) &&
-			(g_connectionMode != SmartDashboardConnectionMode::eShuffleboard) &&
+			(g_connectionMode != SmartDashboardConnectionMode::eNetworkTablesV4) &&
 			(g_connectionMode != SmartDashboardConnectionMode::eNativeLink);
 	}
 

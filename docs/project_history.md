@@ -1,5 +1,33 @@
 # Project history
 
+## 2026-03-25 - Glass verified, RTT ping fix, Shuffleboard→NetworkTables V4 rename
+
+### Glass support
+
+- Glass (WPILib's native C++ dashboard) confirmed working with the existing NT4 server — zero server-side protocol changes needed.
+- Glass uses the same NT4 WebSocket subprotocol (`v4.1.networktables.first.wpi.edu`), same subscribe pattern, same chooser `.type` follow-up subscribe as Shuffleboard.
+- Both Shuffleboard and Glass verified: 33 topics announced, data visible and updating.
+
+### RTT ping fix (root cause of Shuffleboard/Glass silence)
+
+- The ntcore client gates ALL outgoing messages (subscribe, publish, etc.) on `m_haveTimeOffset`. The client sends an RTT ping on connect: `[-1, 0, type=2(Integer), clientTimestamp]`. The server must respond with `[-1, serverTimestamp, type=2(Integer), clientTimestamp]`.
+- Our server was sending type code 1 (Double) instead of 2 (Integer) and 0 instead of echoing the client's timestamp. Fixed in NT4Server.cpp.
+
+### Rename: Shuffleboard → NetworkTables V4
+
+Since Glass and Shuffleboard use the identical NT4 protocol, the transport mode was renamed from Shuffleboard-specific to dashboard-agnostic:
+- Enum: `eShuffleboard` → `eNetworkTablesV4`
+- Backend class: `ShuffleboardBackend` → `NT4Backend`
+- Display name: `L"Shuffleboard"` → `L"NetworkTables V4"`
+- CLI: `--mode nt4` is primary; `shuffle`/`shuffleboard` kept as backward-compatible aliases
+- DriverStation hotkey F7 label updated to "NetworkTables V4"
+- All code references, comments, and documentation updated across 12+ files
+
+### Debug cleanup
+
+- Removed 7 blocks of verbose debug printf from NT4Server.cpp (added during RTT investigation)
+- Kept 8 production-useful log lines (server start/stop, client connect/disconnect, errors, warnings)
+
 ## 2026-03-21 - Native Link SHM transport declared stable; live telemetry auto-register fix
 
 ### Live telemetry root cause

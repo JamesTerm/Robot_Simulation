@@ -1521,7 +1521,8 @@ public:
 		bool m_running = false;
 	};
 
-	// Ian: ShuffleboardBackend is the real NT4 WebSocket server backend.
+	// Ian: NT4Backend is the NT4 WebSocket server backend used by Shuffleboard, Glass,
+	// and any other NT4-speaking dashboard.
 	// It implements SmartDashboardDirectPublishSink so that all SmartDashboard::Put*()
 	// calls route through the NT4 server instead of through the legacy NT2 path.
 	// It also implements SmartDashboardDirectQuerySource so that the simulator can
@@ -1529,24 +1530,24 @@ public:
 	// The query path delegates to NT4Server::TryGet*, which reads from the retained
 	// value cache — same cache that HandleClientValueUpdate populates when a dashboard
 	// client writes a value back.
-	class ShuffleboardBackend final : public IConnectionBackend
+	class NT4Backend final : public IConnectionBackend
 		, public SmartDashboardDirectPublishSink
 		, public SmartDashboardDirectQuerySource
 	{
 	public:
 		void Initialize() override
 		{
-			SmartDashboard::SetConnectionMode(SmartDashboardConnectionMode::eShuffleboard);
+			SmartDashboard::SetConnectionMode(SmartDashboardConnectionMode::eNetworkTablesV4);
 			SmartDashboard::SetDirectPublishSink(this);
 			SmartDashboard::SetDirectQuerySource(this);
 			m_running = m_nt4Server.Start(5810);
 			if (m_running)
 			{
-				OutputDebugStringW(L"[Transport] Shuffleboard NT4 backend initialized on port 5810\n");
+				OutputDebugStringW(L"[Transport] NT4 backend initialized on port 5810\n");
 			}
 			else
 			{
-				OutputDebugStringW(L"[Transport] Shuffleboard NT4 backend FAILED to start on port 5810\n");
+				OutputDebugStringW(L"[Transport] NT4 backend FAILED to start on port 5810\n");
 			}
 		}
 		void Shutdown() override
@@ -1555,16 +1556,16 @@ public:
 			SmartDashboard::ClearDirectQuerySource();
 			m_nt4Server.Stop();
 			m_running = false;
-			OutputDebugStringW(L"[Transport] Shuffleboard NT4 backend shutdown\n");
+			OutputDebugStringW(L"[Transport] NT4 backend shutdown\n");
 		}
 		const wchar_t* GetBackendName() const override
 		{
-			return m_running ? L"Shuffleboard (NT4)" : L"Shuffleboard (NT4 inactive)";
+			return m_running ? L"NetworkTables V4" : L"NetworkTables V4 (inactive)";
 		}
 
 		// --- SmartDashboardDirectPublishSink ---
 		// Ian: These convert flat SmartDashboard keys to NT4 topic paths.
-		// Shuffleboard expects topics under /SmartDashboard/<key>.
+		// NT4 dashboards expect topics under /SmartDashboard/<key>.
 		void PublishBoolean(const std::string& keyName, bool value) override
 		{
 			if (m_running)
@@ -1635,8 +1636,8 @@ const wchar_t* GetConnectionModeName(ConnectionMode mode)
 		return L"Legacy SmartDashboard";
 	case ConnectionMode::eDirectConnect:
 		return L"Direct Connect";
-	case ConnectionMode::eShuffleboard:
-		return L"Shuffleboard";
+	case ConnectionMode::eNetworkTablesV4:
+		return L"NetworkTables V4";
 	case ConnectionMode::eNativeLink:
 		return L"Native Link";
 	default:
@@ -1707,9 +1708,9 @@ void DashboardTransportRouter::SetMode(ConnectionMode mode)
 
 bool DashboardTransportRouter::UsesLegacyTransportPath(ConnectionMode mode)
 {
-	// Ian: Shuffleboard is no longer a legacy transport — it has its own NT4 WebSocket
-	// server backend.  Only Legacy SmartDashboard and Direct Connect share the legacy
-	// NetworkTables path and can reuse each other's backend without teardown.
+	// Ian: NT4 is not a legacy transport — it has its own WebSocket server backend.
+	// Only Legacy SmartDashboard and Direct Connect share the legacy NetworkTables
+	// path and can reuse each other's backend without teardown.
 	return (mode == ConnectionMode::eLegacySmartDashboard) ||
 		(mode == ConnectionMode::eDirectConnect);
 }
@@ -1742,8 +1743,8 @@ void DashboardTransportRouter::EnsureBackend()
 	case ConnectionMode::eDirectConnect:
 		m_backend = std::make_unique<DirectConnectBackend>();
 		break;
-	case ConnectionMode::eShuffleboard:
-		m_backend = std::make_unique<ShuffleboardBackend>();
+	case ConnectionMode::eNetworkTablesV4:
+		m_backend = std::make_unique<NT4Backend>();
 		break;
 	case ConnectionMode::eNativeLink:
 		// Ian: Keep Native Link as a separate backend beside Direct instead of

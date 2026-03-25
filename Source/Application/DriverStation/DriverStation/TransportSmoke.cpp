@@ -1,11 +1,11 @@
 // Ian: TransportSmoke is a headless smoke test for transport backends.
 // Usage:
-//   DriverStation_TransportSmoke [run_ms] [--mode nativelink|shuffleboard|direct|legacy]
+//   DriverStation_TransportSmoke [run_ms] [--mode nativelink|nt4|direct|legacy]
 //                                         [--startup-delay-ms N] [--test-move N]
 //
 // Default mode is nativelink (original behavior).
-// Adding --mode shuffleboard starts the NT4 WebSocket server on port 5810
-// so Shuffleboard can connect and verify data flow.
+// Adding --mode nt4 starts the NT4 WebSocket server on port 5810
+// so any NT4 dashboard (Shuffleboard, Glass, etc.) can connect and verify data flow.
 
 #include "stdafx.h"
 
@@ -22,8 +22,8 @@
 
 static ConnectionMode ParseConnectionMode(const std::string& modeStr)
 {
-	if (modeStr == "shuffleboard" || modeStr == "shuffle")
-		return ConnectionMode::eShuffleboard;
+	if (modeStr == "nt4" || modeStr == "shuffleboard" || modeStr == "shuffle")
+		return ConnectionMode::eNetworkTablesV4;
 	if (modeStr == "direct")
 		return ConnectionMode::eDirectConnect;
 	if (modeStr == "legacy")
@@ -38,7 +38,7 @@ static const char* ConnectionModeLabel(ConnectionMode mode)
 	{
 	case ConnectionMode::eLegacySmartDashboard: return "legacy";
 	case ConnectionMode::eDirectConnect:        return "direct";
-	case ConnectionMode::eShuffleboard:         return "shuffleboard";
+	case ConnectionMode::eNetworkTablesV4:     return "nt4";
 	case ConnectionMode::eNativeLink:           return "nativelink";
 	default:                                    return "unknown";
 	}
@@ -120,10 +120,10 @@ int smoke_main(int argc, char** argv)
 		}
 	}
 
-	// Ian: For shuffleboard mode, default to 60 seconds so there's time for
-	// Shuffleboard to connect and see data.  The 500ms default is fine for
+	// Ian: For NT4 mode, default to 60 seconds so there's time for
+	// dashboards to connect and see data.  The 500ms default is fine for
 	// automated tests against the other backends.
-	if (!runMsSet && connectionMode == ConnectionMode::eShuffleboard)
+	if (!runMsSet && connectionMode == ConnectionMode::eNetworkTablesV4)
 		runMs = 60000;
 
 	RobotTester tester;
@@ -131,7 +131,7 @@ int smoke_main(int argc, char** argv)
 	tester.SetConnectionMode(connectionMode);
 	// Ian: SetConnectionMode() already calls DashboardTransportRouter::Initialize()
 	// via SetMode(), which starts the transport backend (e.g. NT4 server on port
-	// 5810 for shuffleboard).  RobotTester_init() then calls Initialize() again,
+	// 5810 for NT4 mode).  RobotTester_init() then calls Initialize() again,
 	// but DashboardTransportRouter safely deduplicates via m_is_initialized flag —
 	// no second NT4 server is created, no port conflict.
 	// The init() call is needed for TeleAuton_V2::init() which creates the
