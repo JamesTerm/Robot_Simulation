@@ -80,13 +80,32 @@ Current modes:
 |---|---|---|
 | Native Link TCP carrier | `feature/native-link-tcpip-carrier` | Merged to master |
 | Shuffleboard NT4 transport | `feature/shuffleboard-transport` | Merged to master |
+| Glass NT4 transport | `feature/glass-transport` | Active |
 
-## Preparing for Glass transport
+## Glass transport (active — `feature/glass-transport`)
 
-Glass is the next dashboard integration target. It uses the same NT4 protocol as Shuffleboard. The process:
+Glass is the next dashboard integration target. It uses the same NT4 protocol as Shuffleboard — same WebSocket transport, same MsgPack binary frames, same JSON control messages. Because our NT4 server already works with Shuffleboard, Glass should connect with minimal or no server-side changes.
 
-1. **Pull Glass source** into `D:\code\Glass`
-2. **Make Robot_Simulation work with Glass** (may need NT4 server adjustments)
+### Glass installation
+
+Glass 2026.2.2 is installed at `D:\code\Glass` (same portable-directory pattern as Shuffleboard):
+
+| File | Purpose |
+|---|---|
+| `glass.exe` | Glass application (native C++ binary — no JRE needed) |
+| `glass.pdb` | Debug symbols |
+| `run_glass.bat` | Launch Glass (default config from `%APPDATA%`) |
+| `run_glass_local.bat` | Launch Glass pre-configured for localhost:5810 |
+| `config_local\glass.json` | Pre-configured: NT4 client mode, `localhost`, port 5810 |
+
+**How local config works:** Glass accepts one CLI argument — a save directory for its JSON config files. `run_glass_local.bat` passes `config_local\` which contains a `glass.json` pre-seeded with `mode="Client (NT4)"`, `serverTeam="localhost"`, port 5810, dsClient=false. Glass reads this on startup and auto-connects. The default `run_glass.bat` uses `%APPDATA%` and requires manual configuration via the GUI.
+
+**Source:** Downloaded from WPILib Maven — `https://frcmaven.wpi.edu/artifactory/release/edu/wpi/first/tools/Glass/2026.2.2/Glass-2026.2.2-windowsx86-64.zip`
+
+### Plan
+
+1. ~~Pull Glass into `D:\code\Glass`~~ — Done
+2. **Make Robot_Simulation work with Glass** — likely zero server changes since Glass speaks the same NT4 protocol on port 5810
 3. **Create SmartDashboard Glass plugin** under `plugins/GlassTransport/`
 
 ### Checklist: adding a new transport mode (e.g. Glass)
@@ -124,10 +143,11 @@ Base key `Test/Auton_Selection/AutoChooser`, all prefixed with `/SmartDashboard/
 - Read-back priority: `selected` → `active` → `default`, with 20-retry × 10ms loop
 - See `AutonChooser.h` for the `Ian:` comment with full protocol description.
 
-**Port differences:**
-- Shuffleboard default: port 5810
-- Glass default: port 1735 (same as legacy NT — potential conflict!)
-- Legacy SmartDashboard: port 1735
+**Port situation (no conflict):**
+- Shuffleboard NT4 client: port 5810
+- Glass NT4 client: port 5810 (same as Shuffleboard — no server changes needed)
+- Legacy SmartDashboard (NT2 TCP): port 1735
+- Note: Glass's NT3 fallback port is 1735, but we configure it as NT4 which uses 5810
 
 **No value persistence by design:**
 TestMove and chooser selection start at 0/"Do Nothing" each launch. Values must be published by a client after the NT4 server is running.
