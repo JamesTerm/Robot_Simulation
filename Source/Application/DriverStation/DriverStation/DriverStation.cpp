@@ -103,8 +103,8 @@ namespace
 			return ConnectionMode::eLegacySmartDashboard;
 		case static_cast<int>(ConnectionMode::eDirectConnect):
 			return ConnectionMode::eDirectConnect;
-		case static_cast<int>(ConnectionMode::eShuffleboard):
-			return ConnectionMode::eShuffleboard;
+		case static_cast<int>(ConnectionMode::eNetworkTablesV4):
+			return ConnectionMode::eNetworkTablesV4;
 		case static_cast<int>(ConnectionMode::eNativeLink):
 			return ConnectionMode::eNativeLink;
 		default:
@@ -345,7 +345,7 @@ namespace
 		{
 			ConnectionMode::eLegacySmartDashboard,
 			ConnectionMode::eDirectConnect,
-			ConnectionMode::eShuffleboard,
+			ConnectionMode::eNetworkTablesV4,
 			ConnectionMode::eNativeLink
 		};
 
@@ -384,9 +384,11 @@ bool TryParseConnectionModeFromCmdLine(LPWSTR cmd_line, ConnectionMode& mode)
 		mode = ConnectionMode::eDirectConnect;
 		return true;
 	}
-	if ((cmd.find(L"shuffle") != std::wstring::npos) || (cmd.find(L"conn=shuffle") != std::wstring::npos))
+	// Ian: Accept "nt4", "shuffle" (backward compat), and "conn=nt4" / "conn=shuffle"
+	if ((cmd.find(L"nt4") != std::wstring::npos) || (cmd.find(L"conn=nt4") != std::wstring::npos) ||
+		(cmd.find(L"shuffle") != std::wstring::npos) || (cmd.find(L"conn=shuffle") != std::wstring::npos))
 	{
-		mode = ConnectionMode::eShuffleboard;
+		mode = ConnectionMode::eNetworkTablesV4;
 		return true;
 	}
 	if ((cmd.find(L"native") != std::wstring::npos) || (cmd.find(L"conn=native") != std::wstring::npos))
@@ -660,7 +662,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 					ApplyConnectionMode(ConnectionMode::eDirectConnect);
 					break;
 				case VK_F7:
-					ApplyConnectionMode(ConnectionMode::eShuffleboard);
+					ApplyConnectionMode(ConnectionMode::eNetworkTablesV4);
 					break;
 				case VK_F8:
 					ApplyConnectionMode(ConnectionMode::eNativeLink);

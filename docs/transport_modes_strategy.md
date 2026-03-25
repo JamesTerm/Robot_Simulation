@@ -8,22 +8,22 @@ Support explicit runtime selection between three connection modes:
 
 1. `Direct Connect` (native protocol, primary near-term path)
 2. `Legacy SmartDashboard` (legacy NT-compatible baseline)
-3. `Shuffleboard` (future mode built on top of stable baseline behavior)
+3. `NetworkTables V4` (NT4 WebSocket — serves Shuffleboard, Glass, and any WPILib NT4 dashboard)
 
 ## Sequencing rule
 
-Before starting Shuffleboard behavior, establish Direct Connect first.
+Before starting NetworkTables V4 behavior, establish Direct Connect first.
 
 - Direct Connect is the first-class implementation target.
 - Legacy SmartDashboard compatibility is preserved as a known-good oracle.
-- Shuffleboard support is added later and should translate to/from the native Direct model where practical.
+- NT4 support is added later and should translate to/from the native Direct model where practical.
 
 ## Architecture intent
 
 - Keep existing SmartDashboard/legacy behavior stable and swappable.
 - Introduce mode-selection boundaries so transport changes do not require robot-behavior rewrites.
 - Treat native Direct payloads as the internal canonical shape where possible.
-- Add compatibility adapters for legacy/shuffleboard-facing contracts.
+- Add compatibility adapters for legacy/NT4-facing contracts.
 
 ## Required mode behavior
 
@@ -39,11 +39,12 @@ Before starting Shuffleboard behavior, establish Direct Connect first.
 - Keep this path deterministic for regression comparison.
 - Do not regress existing SmartDashboard interoperability.
 
-### Shuffleboard (later phase)
+### NetworkTables V4 (later phase)
 
 - Implement after Direct mode contract is stable.
 - Additive behavior only; avoid breaking legacy profile semantics.
-- Translate shuffleboard-facing topics into internal native representation.
+- Translate NT4-facing topics into internal native representation.
+- Serves any NT4-compatible dashboard: Shuffleboard, Glass, AdvantageScope, etc.
 
 ## Chooser contract baseline
 
@@ -59,7 +60,7 @@ Preferred dashboard-native encoding for options is string array on modern NT pat
 
 ## Key naming policy (scoped vs flat)
 
-To align with modern dashboard behavior (including Shuffleboard-style hierarchical keys), robot-side reads should prefer scoped keys while keeping legacy compatibility aliases.
+To align with modern dashboard behavior (including hierarchical keys used by Shuffleboard, Glass, and other NT4 dashboards), robot-side reads should prefer scoped keys while keeping legacy compatibility aliases.
 
 - Canonical control/input keys should be scoped (for example `Test/AutonTest`).
 - Legacy flat aliases (for example `AutonTest`) should remain readable during migration.
@@ -83,11 +84,11 @@ Protocol and implementation references in `../SmartDashboard`:
 
 ## Implementation phases
 
-1. Add explicit mode switch (`Direct`, `Legacy SmartDashboard`, `Shuffleboard`) with startup logging.
+1. Add explicit mode switch (`Direct`, `Legacy SmartDashboard`, `NetworkTables V4`) with startup logging.
 2. Implement shared scalar publish/read contract in Direct + Legacy modes.
 3. Implement chooser publish/read contract in Direct + Legacy modes, including shared `.type/default/options/active/selected` semantics.
 4. Add mode-scoped tests for scalar and chooser roundtrip.
-5. Add Shuffleboard path once Direct and Legacy are stable.
+5. Add NetworkTables V4 path once Direct and Legacy are stable.
 
 ## Session handoff note
 

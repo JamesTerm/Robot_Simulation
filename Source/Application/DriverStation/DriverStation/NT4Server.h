@@ -1,11 +1,12 @@
 #pragma once
-// Ian: NT4Server is the NetworkTables 4.x WebSocket protocol server for Shuffleboard
-// compatibility.  It runs an IXWebSocket server on port 5810 and speaks the NT4 binary
+// Ian: NT4Server is the NetworkTables 4.x WebSocket protocol server for dashboard
+// compatibility (Shuffleboard, Glass, and any NT4-speaking client).
+// It runs an IXWebSocket server on port 5810 and speaks the NT4 binary
 // (MessagePack) + JSON control protocol that official WPILib dashboards expect.
 //
 // Design notes:
-//   - This is *server-side only* — the simulator publishes topics and Shuffleboard
-//     subscribes to them.  We do NOT need to subscribe to remote topics yet (iteration 1).
+//   - This is *server-side only* — the simulator publishes topics and dashboards
+//     subscribe to them.  We do NOT need to subscribe to remote topics yet (iteration 1).
 //   - The MessagePack encoder is custom / minimal (~100 lines) because we only need
 //     to *encode* a small subset of types: bool, double, int, float, string, string[].
 //   - IXWebSocket handles WebSocket framing, PING/PONG, and connection lifecycle.
@@ -55,7 +56,7 @@ public:
 	bool IsRunning() const;
 
 	// --- Query API (for SmartDashboardDirectQuerySource) ---
-	// Ian: These let the ShuffleboardBackend read back values that clients wrote.
+	// Ian: These let the NT4Backend read back values that clients wrote.
 	// They check the retained value cache under m_topicsMutex.
 	bool TryGetBoolean(const std::string& topicName, bool& value) const;
 	bool TryGetNumber(const std::string& topicName, double& value) const;
@@ -101,7 +102,7 @@ private:
 	};
 
 	// Ian: Retained value cache — we keep the latest value for each topic so that
-	// newly subscribing clients get a full snapshot (Shuffleboard expects this).
+	// newly subscribing clients get a full snapshot (NT4 dashboards expect this).
 	struct RetainedValue
 	{
 		NT4Type type = NT4Type::Double;

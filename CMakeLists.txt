@@ -240,6 +240,19 @@ target_link_libraries(DriverStation_TransportSmoke
         bcrypt
 )
 
+# Ian: Standalone NT4 WebSocket client test — mimics ntcore's exact connection
+# sequence to diagnose handshake/subscribe issues with our NT4 server.
+# Run alongside DriverStation_TransportSmoke --mode nt4
+add_executable(NT4ClientTest
+    Source/Application/DriverStation/DriverStation/NT4ClientTest.cpp
+)
+target_link_libraries(NT4ClientTest
+    PRIVATE
+        ixwebsocket::ixwebsocket
+        ws2_32
+        bcrypt
+)
+
 if(BUILD_UNIT_TESTS)
     enable_testing()
     find_package(GTest CONFIG REQUIRED)

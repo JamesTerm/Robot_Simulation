@@ -1,5 +1,5 @@
 // Ian: Transport.h is the central transport abstraction for the simulator.
-// Each new dashboard integration (Legacy, Direct, Shuffleboard, Glass, etc.)
+// Each new dashboard integration (Legacy, Direct, NetworkTables V4, etc.)
 // adds a ConnectionMode enum value and a corresponding IConnectionBackend
 // implementation in Transport.cpp.  The enum value also gates chooser and
 // query-source behavior in AI_Input_Example.cpp — remember to update
@@ -8,7 +8,7 @@
 
 #include <memory>
 
-// Ian: Adding a new transport mode (e.g. Glass) requires:
+// Ian: Adding a new transport mode requires:
 //  1. New enum value here
 //  2. New IConnectionBackend subclass in Transport.cpp
 //  3. EnsureBackend() factory case in Transport.cpp
@@ -23,7 +23,8 @@ enum class ConnectionMode
 {
 	eLegacySmartDashboard = 0,
 	eDirectConnect = 1,
-	eShuffleboard = 2,
+	eNetworkTablesV4 = 2,    // Ian: was eShuffleboard — renamed because Shuffleboard, Glass,
+	                          // and any NT4-speaking dashboard all use the same backend
 	eNativeLink = 3
 };
 

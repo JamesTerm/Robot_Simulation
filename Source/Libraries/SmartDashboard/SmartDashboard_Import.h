@@ -44,7 +44,7 @@ enum class SmartDashboardConnectionMode
 {
 	eLegacySmartDashboard = 0,
 	eDirectConnect = 1,
-	eShuffleboard = 2,
+	eNetworkTablesV4 = 2,    // Ian: was eShuffleboard — any NT4 dashboard uses this mode
 	eNativeLink = 3
 };
 
