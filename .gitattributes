@@ -1,0 +1,10 @@
+# Ian: .rc files are UTF-16 LE encoded by Visual Studio.  Git's CRLF
+# normalization treats them as single-byte text, mangling the byte pairs
+# (0D 00 0A 00 -> 0D 0A 00 0D 0A 00) and destroying UTF-16 alignment.
+# rc.exe then silently produces an empty .res, causing CreateDialogW to
+# return NULL at runtime (ERROR_RESOURCE_TYPE_NOT_FOUND 1813).
+# Mark them binary so git never touches their line endings.
+*.rc  binary
+
+# .aps is the Visual Studio resource editor cache -- also binary.
+*.aps binary

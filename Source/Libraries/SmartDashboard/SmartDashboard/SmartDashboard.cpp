@@ -87,15 +87,26 @@ namespace
 		return NormalizeConnectionMode(static_cast<int>(rawMode));
 	}
 
+	// Ian: Any mode that routes data through a DirectPublishSink / DirectQuerySource
+	// instead of the legacy NetworkTables TCP path must return true here.  Missing a
+	// mode causes PutNumber/GetNumber to fall through to NetworkTable::GetTable() which
+	// starts the legacy NT2 server on port 1735 — even when the real backend (e.g.
+	// ShuffleboardBackend) is running its own NT4 server on port 5810.
 	bool HasDirectTransport()
 	{
 		return (g_connectionMode == SmartDashboardConnectionMode::eDirectConnect) ||
+			(g_connectionMode == SmartDashboardConnectionMode::eShuffleboard) ||
 			(g_connectionMode == SmartDashboardConnectionMode::eNativeLink);
 	}
 
+	// Ian: Must mirror HasDirectTransport() — any mode with a direct sink/source
+	// does NOT use the legacy NetworkTables transport.  If eShuffleboard is missing
+	// here, SmartDashboard::init() will call NetworkTable::GetTable() which binds
+	// the legacy NT2 TCP server on port 1735.
 	bool UsesNetworkTablesTransport()
 	{
 		return (g_connectionMode != SmartDashboardConnectionMode::eDirectConnect) &&
+			(g_connectionMode != SmartDashboardConnectionMode::eShuffleboard) &&
 			(g_connectionMode != SmartDashboardConnectionMode::eNativeLink);
 	}
 

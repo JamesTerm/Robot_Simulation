@@ -7,7 +7,8 @@
 ## Workflow
 
 - `apply_patch` expects workspace-relative paths with forward slashes.
-- **Use CRLF line endings** for all source files (`.cpp`, `.h`, `.cmake`, `.ps1`, `.py`, `.md`, `.rc`, `.gitignore`, `.json`). Both repos standardized CRLF as of the Shuffleboard merge.
+- **Use CRLF line endings** for all source files (`.cpp`, `.h`, `.cmake`, `.ps1`, `.py`, `.md`, `.gitignore`, `.json`). Both repos standardized CRLF as of the Shuffleboard merge.
+- **Do NOT CRLF-normalize `.rc` or `.aps` files** — they are UTF-16 LE encoded. `.gitattributes` marks them `binary`. See "Key invariants" for the full story.
 - Read nearby `Ian:` comments before editing and add new ones where session, ownership, carrier, protocol, or runtime-mode lessons would be easy to lose.
 - Process detection: use `Get-Process -Name <name> -ErrorAction SilentlyContinue` (NOT `tasklist | findstr` which breaks in Git Bash due to flag mangling).
 - Killing processes: use PowerShell `Stop-Process` (NOT `taskkill` through Git Bash).
@@ -16,7 +17,7 @@
 
 ```bash
 # Configure (uses existing build-vcpkg directory)
-cmake -G "Visual Studio 17 2022" -B build-vcpkg -DCMAKE_TOOLCHAIN_FILE="D:/code/vcpkg/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows
+cmake -G "Visual Studio 17 2022" -B build-vcpkg -DCMAKE_TOOLCHAIN_FILE="D:/Git/vcpkg/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows
 
 # Build
 cmake --build build-vcpkg --target DriverStation --config Release
@@ -39,6 +40,8 @@ Note: The ixwebsocket overlay port only matters at `vcpkg install` time, not at 
 - `RegisterDefaultTopics` must not grow to list every TeleAutonV2 key — the auto-register path handles those.
 - `TeleAutonV2` publishes ~26 keys per loop. `Heading` (line 324) and `Travel_Heading` (line 307) are unconditional.
 - Important runtime lesson: `eNativeLink` must stay out of `DashboardTransportRouter::UsesLegacyTransportPath()` or the UI can claim Native Link while the old backend is still running underneath.
+- **`HasDirectTransport()` and `UsesNetworkTablesTransport()` in SmartDashboard.cpp must include every mode that uses a `DirectPublishSink`/`DirectQuerySource`.** Missing a mode causes `PutNumber`/etc. to fall through to `NetworkTable::GetTable()` which starts the legacy NT2 server on port 1735 alongside the intended backend. This was the root cause of the Shuffleboard port bug (port 1735 instead of 5810).
+- **`.rc` files must never be CRLF-normalized by git.** They are UTF-16 LE (BOM `FF FE`). Git's CRLF normalization treats them as single-byte text, mangling `0D 00 0A 00` to `0D 0A 00 0D 0A 00`, destroying UTF-16 alignment. `rc.exe` then silently produces an empty `.res` (32 bytes), and `CreateDialogW` returns NULL with `ERROR_RESOURCE_TYPE_NOT_FOUND` (1813). `.gitattributes` now marks `*.rc` and `*.aps` as `binary`.
 
 ## Strategy
 
@@ -116,9 +119,10 @@ See the `Ian:` comment on `Transport.h` for the full file list. Summary:
 2. Create `IConnectionBackend` subclass in `Transport.cpp` (like `ShuffleboardBackend`)
 3. Add factory case in `EnsureBackend()` in `Transport.cpp`
 4. Update `UsesLegacyTransportPath()` — return false for NT4-style transports
-5. Update `IsChooserEnabledForCurrentConnection()` in `AI_Input_Example.cpp`
-6. Add hotkey and menu entry in `DriverStation.cpp`
-7. If the NT4 server port differs, make it configurable or support multi-port
+5. **Update `HasDirectTransport()` and `UsesNetworkTablesTransport()` in `SmartDashboard.cpp`** — any mode that uses `DirectPublishSink`/`DirectQuerySource` must be listed, or `PutNumber`/etc. will also start the legacy NT2 server on port 1735
+6. Update `IsChooserEnabledForCurrentConnection()` in `AI_Input_Example.cpp`
+7. Add hotkey and menu entry in `DriverStation.cpp`
+8. If the NT4 server port differs, make it configurable or support multi-port
 
 ### Lessons from Shuffleboard to apply to Glass
 

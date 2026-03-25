@@ -13,9 +13,12 @@
 //  2. New IConnectionBackend subclass in Transport.cpp
 //  3. EnsureBackend() factory case in Transport.cpp
 //  4. UsesLegacyTransportPath() updated (return false for new NT4-style transports)
-//  5. IsChooserEnabledForCurrentConnection() in AI_Input_Example.cpp
-//  6. DriverStation.cpp hotkey and menu entry
-//  7. SmartDashboard-side plugin in plugins/<NewTransport>/
+//  5. HasDirectTransport() AND UsesNetworkTablesTransport() in SmartDashboard.cpp
+//     — any mode with a DirectPublishSink must be listed or PutNumber/etc. will
+//       also start the legacy NT2 server on port 1735
+//  6. IsChooserEnabledForCurrentConnection() in AI_Input_Example.cpp
+//  7. DriverStation.cpp hotkey and menu entry
+//  8. SmartDashboard-side plugin in plugins/<NewTransport>/
 enum class ConnectionMode
 {
 	eLegacySmartDashboard = 0,
