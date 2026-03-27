@@ -20,6 +20,8 @@ public:
 	void SetGameMode(int mode);  //currently 0=auton 1=tele and 2=test
 	void SetConnectionMode(ConnectionMode mode);
 	ConnectionMode GetConnectionMode() const;
+	void SetVideoSource(VideoSourceMode mode);
+	VideoSourceMode GetVideoSource() const;
 	void ShowControls(bool show);  //off by default
 	void HookSampleGoals(bool hook = true);  //Give UI access to manage this
 	void RobotTester_SetParentBindCallback(std::function<void(RobotAssem *,bool)> callback);

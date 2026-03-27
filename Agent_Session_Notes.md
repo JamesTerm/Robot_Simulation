@@ -250,3 +250,94 @@ TestMove and chooser selection start at 0/"Do Nothing" each launch. Values must 
 
 - Expand smoke test published keys from ~6 + chooser to full TeleAutonV2 (~49 keys)
 - Debug builds: manual carrier picker in DriverStation dialog for SHM vs TCP comparisons
+
+## In progress: Video Source selector (`feature/camera-widget`)
+
+Video Source dropdown in the DriverStation dialog that lets the user switch between
+video sources feeding the MJPEG server on port 1181.
+
+### Modes
+
+| Mode | Enum | Description |
+|---|---|---|
+| Off | `VideoSourceMode::eOff` | No camera stream; MJPEG server torn down |
+| Camera | `VideoSourceMode::eCamera` | USB webcam via VFW (Video for Windows) |
+| Synthetic Radar | `VideoSourceMode::eSyntheticRadar` | Existing SimCameraSource radar sweep (default) |
+| Virtual Field | `VideoSourceMode::eVirtualField` | 3D virtual playing field (deferred — not yet implemented) |
+
+### Architecture
+
+- **WebCameraSource** (`WebCameraSource.h/.cpp`): VFW-based USB webcam capture.
+  Creates a hidden capture window on a worker thread with its own message pump.
+  Uses `capGrabFrameNoStop` in a timed polling loop to request frames at the
+  target framerate — each grab triggers the `capSetCallbackOnFrame` callback
+  synchronously, which converts bottom-up BGR to top-down RGB, JPEG-encodes
+  via `stbi_write_jpg_to_func`, pushes to `MjpegServer::PushFrame()`.
+
+  Ian: VFW capture windows MUST be created on a thread with a message pump.
+  The worker thread runs the pump; the main thread signals shutdown via atomic flag.
+
+  Ian: LESSON LEARNED — capPreview(TRUE) + capSetCallbackOnFrame relies on the
+  window receiving WM_PAINT messages, which never arrive for hidden windows.
+  capGrabFrameNoStop bypasses this — it synchronously triggers the frame callback
+  regardless of window visibility.
+
+- **NT4Backend refactoring** in Transport.cpp: Replaced monolithic
+  `StartCameraStream()`/`StopCameraStream()` with `SetVideoSource()` override
+  plus helper methods `StartMjpegServer()`, `StopMjpegServer()`, `StopCurrentSource()`,
+  `PublishCameraConnected()`, `PublishCameraDisconnected()`. The MJPEG server stays
+  alive when switching between Camera and Radar sources; only torn down for Off.
+
+- **DriverStation.cpp UI**: Always-visible "Video" label + combo box
+  (control IDs 1012/1013). Persisted to `[Video] Source=<int>` in DriverStation.ini.
+  Applied after connection mode on startup via `ApplyVideoSource(LoadPersistedVideoSource())`.
+
+  Layout: Video row is positioned dynamically below the Connection combo by
+  querying its actual pixel position at runtime (`GetDlgItem` + `GetWindowRect` +
+  `ScreenToClient`). In Debug builds, the NativeLink Carrier combo is on the
+  same row as the Connection combo (to its right, 10px gap), keeping it clear
+  of the Video dropdown.
+
+- **`stb_image_write`**: `STB_IMAGE_WRITE_IMPLEMENTATION` defined exactly once in
+  `SimCameraSource.cpp`. `WebCameraSource.cpp` only includes the header for declarations.
+
+### New files
+
+| File | Purpose |
+|---|---|
+| `Source/Application/DriverStation/DriverStation/WebCameraSource.h` | VFW webcam capture header |
+| `Source/Application/DriverStation/DriverStation/WebCameraSource.cpp` | VFW webcam capture implementation |
+
+### Modified files
+
+| File | Change |
+|---|---|
+| `Transport.h` | Added `VideoSourceMode` enum, `GetVideoSourceModeName()`, virtual `SetVideoSource()`/`GetVideoSource()` on `IConnectionBackend`, forwarding on `DashboardTransportRouter` |
+| `Transport.cpp` | Refactored NT4Backend camera management: `SetVideoSource()` override with helper methods; added `#include "WebCameraSource.h"`; router forwarding implementations |
+| `Robot_Tester.h` | Added `SetVideoSource()`/`GetVideoSource()` declarations |
+| `Robot_Tester.cpp` | Added `SetVideoSource()`/`GetVideoSource()` implementations forwarding through router |
+| `DriverStation.cpp` | Added video source UI controls, persistence, `ApplyVideoSource()`, WM_INITDIALOG/WM_COMMAND wiring |
+| `CMakeLists.txt` | Added `WebCameraSource.cpp` to DriverStation + TransportSmoke targets; added `vfw32` to link libs |
+
+### Status
+
+- [x] WebCameraSource.h/.cpp created
+- [x] Transport.h — VideoSourceMode enum, virtual methods
+- [x] Transport.cpp — NT4Backend refactored with SetVideoSource
+- [x] Robot_Tester.h/.cpp — forwarding methods
+- [x] DriverStation.cpp — UI controls, persistence, event handling, startup wiring
+- [x] DriverStation.cpp — Layout fix: Video row below Connection, Carrier beside Connection (Debug)
+- [x] CMakeLists.txt — WebCameraSource.cpp + vfw32
+- [x] Build verified (Debug + Release DriverStation, Release TransportSmoke — all clean)
+- [x] WebCameraSource rewritten to use capGrabFrameNoStop polling (fixes hidden-window issue)
+- [x] SmartDashboard: auto-connect removed, URL on its own row, diagnostic logging added
+- [ ] End-to-end test (camera + radar switching, SmartDashboard connection)
+
+### SmartDashboard changes (E:\code\SmartDashboard)
+
+| File | Change |
+|---|---|
+| `SmartDashboard/src/widgets/camera_viewer_dock.h` | Updated doc: auto-connect removed, auto-reconnect preserved |
+| `SmartDashboard/src/widgets/camera_viewer_dock.cpp` | Removed auto-connect (TryAutoConnect is no-op); URL edit moved to own row with label; visibility-changed handler no longer auto-connects |
+| `SmartDashboard/src/camera/mjpeg_stream_source.cpp` | Added qDebug logging: connect URL, first readyRead Content-Type, first frame decode, stream errors |
+| `SmartDashboard/tests/camera_viewer_dock_tests.cpp` | Updated 3 auto-connect tests to verify auto-connect does NOT fire; all 168 runnable tests pass |

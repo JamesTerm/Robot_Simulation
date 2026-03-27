@@ -61,6 +61,18 @@ public:
 	{
 		return m_transport_router.GetMode();
 	}
+	void SetVideoSource(VideoSourceMode mode)
+	{
+		m_transport_router.SetVideoSource(mode);
+		std::wstring message = L"[RobotTester] Video source: ";
+		message += GetVideoSourceModeName(mode);
+		message += L"\n";
+		OutputDebugStringW(message.c_str());
+	}
+	VideoSourceMode GetVideoSource() const
+	{
+		return m_transport_router.GetVideoSource();
+	}
 	void Test(int test)
 	{
 		//Note: previous versions do not support this method but should
@@ -111,6 +123,19 @@ ConnectionMode RobotTester::GetConnectionMode() const
 	if (m_p_RobotTester)
 		return m_p_RobotTester->GetConnectionMode();
 	return m_ConnectionMode;
+}
+
+void RobotTester::SetVideoSource(VideoSourceMode mode)
+{
+	if (m_p_RobotTester)
+		m_p_RobotTester->SetVideoSource(mode);
+}
+
+VideoSourceMode RobotTester::GetVideoSource() const
+{
+	if (m_p_RobotTester)
+		return m_p_RobotTester->GetVideoSource();
+	return VideoSourceMode::eOff;
 }
 
 void RobotTester::StartStreaming()
