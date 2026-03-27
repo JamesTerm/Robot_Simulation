@@ -146,6 +146,7 @@ Phase 2 = targeting reticle overlay, Phase 3 = simulator MJPEG server).
 - [x] CMakeLists.txt updated
 - [x] Build verified (both DriverStation + TransportSmoke clean, 17 unit tests pass)
 - [x] MJPEG stream verified via curl (correct multipart headers, valid JPEG frames, ~15fps)
+- [x] SmartDashboard auto-connect wiring complete — discovery→combo→auto-connect pipeline verified end-to-end (SmartDashboard repo, `feature/camera-widget` branch, 28 new tests)
 
 ## Glass support (complete — no separate plugin needed)
 
