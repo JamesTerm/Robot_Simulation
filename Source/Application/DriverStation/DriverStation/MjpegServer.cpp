@@ -44,7 +44,19 @@ MjpegServer::MjpegServer(int port, const std::string& host)
 
 MjpegServer::~MjpegServer()
 {
+	SignalStop();
 	stop();
+}
+
+// Ian: Wake all client handler threads so they exit immediately.
+// The sequence is:  set m_stopping → notify condition variable → threads
+// wake up, see m_stopping, break out of the loop.  This must happen BEFORE
+// ix::SocketServer::stop() which joins the handler threads — otherwise those
+// threads can block on wait_for for up to 1 second per timeout cycle.
+void MjpegServer::SignalStop()
+{
+	m_stopping.store(true);
+	m_frameCondition.notify_all();
 }
 
 void MjpegServer::PushFrame(const std::vector<uint8_t>& jpegData)
@@ -87,7 +99,7 @@ size_t MjpegServer::getConnectedClientsCount()
 //   4. On write failure → client disconnected → return
 void MjpegServer::handleConnection(
 	std::unique_ptr<ix::Socket> socket,
-	std::shared_ptr<ix::ConnectionState> /*connectionState*/)
+	std::shared_ptr<ix::ConnectionState> connectionState)
 {
 	// Ian: Track client count for diagnostics.
 	{
@@ -104,13 +116,16 @@ void MjpegServer::handleConnection(
 	//
 	// Read line-by-line until we see the blank line ending the headers.
 	// ix::Socket doesn't have a readLine that works without a CancellationRequest,
-	// so we use the one with a no-op cancellation.
-	auto neverCancel = []() -> bool { return false; };
+	// so we use the one with a cancellation that checks the stopping flag.
+	// Ian: This lambda serves double duty — it's the ix::Socket CancellationRequest
+	// for readLine/writeBytes AND gives us an early exit during shutdown instead of
+	// blocking until the next I/O timeout.
+	auto shouldCancel = [this]() -> bool { return m_stopping.load(); };
 
 	bool requestValid = false;
 	while (true)
 	{
-		auto [ok, line] = socket->readLine(neverCancel);
+		auto [ok, line] = socket->readLine(shouldCancel);
 		if (!ok)
 		{
 			DebugLog("[MjpegServer] Failed to read HTTP request line\n");
@@ -153,7 +168,7 @@ void MjpegServer::handleConnection(
 	                << "\r\n";
 
 	const std::string headerStr = responseHeaders.str();
-	if (!socket->writeBytes(headerStr, neverCancel))
+	if (!socket->writeBytes(headerStr, shouldCancel))
 	{
 		DebugLog("[MjpegServer] Failed to send response headers\n");
 		std::lock_guard<std::mutex> lock(m_clientMutex);
@@ -174,7 +189,7 @@ void MjpegServer::handleConnection(
 
 	uint64_t lastSequence = 0;
 
-	while (true)
+	while (!m_stopping.load())
 	{
 		std::vector<uint8_t> frameCopy;
 
@@ -183,11 +198,15 @@ void MjpegServer::handleConnection(
 			// Ian: Wait for a new frame.  Use wait_for with a timeout so we can
 			// periodically check if the connection is still alive even if no frames
 			// are being produced.  1 second timeout is generous — at 15fps we'd
-			// normally wake every ~66ms.
+			// normally wake every ~66ms.  The predicate also checks m_stopping so
+			// that SignalStop() → notify_all() wakes us immediately for shutdown.
 			m_frameCondition.wait_for(lock, std::chrono::seconds(1), [&]()
 			{
-				return m_frameSequence > lastSequence;
+				return m_stopping.load() || m_frameSequence > lastSequence;
 			});
+
+			if (m_stopping.load())
+				break;
 
 			if (m_frameSequence == lastSequence)
 			{
@@ -214,7 +233,7 @@ void MjpegServer::handleConnection(
 		const std::string partHeaderStr = partHeader.str();
 
 		// Write part header
-		if (!socket->writeBytes(partHeaderStr, neverCancel))
+		if (!socket->writeBytes(partHeaderStr, shouldCancel))
 		{
 			DebugLog("[MjpegServer] Client disconnected (header write failed)\n");
 			break;
@@ -224,14 +243,14 @@ void MjpegServer::handleConnection(
 		// Ian: ix::Socket::writeBytes takes a std::string, so we need to convert.
 		// This is a copy, but at 320x240 JPEG (~10-30KB) it's negligible.
 		const std::string jpegStr(reinterpret_cast<const char*>(frameCopy.data()), frameCopy.size());
-		if (!socket->writeBytes(jpegStr, neverCancel))
+		if (!socket->writeBytes(jpegStr, shouldCancel))
 		{
 			DebugLog("[MjpegServer] Client disconnected (data write failed)\n");
 			break;
 		}
 
 		// Write trailing CRLF after the JPEG data (before the next boundary)
-		if (!socket->writeBytes("\r\n", neverCancel))
+		if (!socket->writeBytes("\r\n", shouldCancel))
 		{
 			DebugLog("[MjpegServer] Client disconnected (trailing CRLF write failed)\n");
 			break;
@@ -244,4 +263,13 @@ void MjpegServer::handleConnection(
 		--m_clientCount;
 	}
 	DebugLog("[MjpegServer] Client disconnected (%zu remaining)\n", GetClientCount());
+
+	// Ian: CRITICAL — tell ix::SocketServer's GC thread that this handler is done.
+	// Without this call, the GC thread's closeTerminatedThreads() never joins our
+	// thread (it only joins threads whose ConnectionState::isTerminated() is true).
+	// That means getConnectionsThreadsCount() never reaches 0, the GC loop in
+	// runGC() spins forever, and SocketServer::stop() deadlocks on _gcThread.join().
+	// This was the root cause of the zombie DriverStation process — the window
+	// closed, Shutdown() called stop(), but stop() hung waiting for the GC thread.
+	connectionState->setTerminated();
 }

@@ -46,6 +46,14 @@ public:
 	                     const std::string& host = "0.0.0.0");
 	~MjpegServer() override;
 
+	// Ian: Signal all client handler threads to exit immediately.
+	// This sets m_stopping and wakes every thread blocked on m_frameCondition
+	// so they break out of the frame-push loop without waiting for the next
+	// 1-second timeout.  Call this BEFORE ix::SocketServer::stop() to ensure
+	// client threads are already unwinding when stop() tries to join them.
+	// Without this, shutdown can stall for up to 1 second per connected client.
+	void SignalStop();
+
 	// Ian: Push a new JPEG frame to all connected clients.
 	// Called by the producer (SimCameraSource) on its own thread.
 	// The data is copied internally; the caller can reuse the buffer immediately.
@@ -80,4 +88,9 @@ private:
 	// Ian: Client count tracking.  Incremented/decremented in handleConnection.
 	mutable std::mutex m_clientMutex;
 	size_t m_clientCount = 0;
+
+	// Ian: Shutdown signal.  When set to true, client handler threads break out
+	// of the frame-push loop immediately instead of waiting for the next timeout
+	// or write failure.  This is set by SignalStop() and checked in handleConnection().
+	std::atomic<bool> m_stopping{false};
 };

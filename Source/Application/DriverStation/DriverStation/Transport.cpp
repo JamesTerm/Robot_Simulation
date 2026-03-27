@@ -1687,8 +1687,24 @@ public:
 
 		void StopCameraStream()
 		{
-			// Ian: Stop in reverse order of creation: source first (stops producing
-			// frames), then server (closes connections and stops listening).
+			// Ian: Graceful camera shutdown sequence:
+			//   1. Signal the MJPEG server to stop — this wakes all client handler
+			//      threads immediately via m_stopping + notify_all on the condition
+			//      variable, so they begin unwinding instead of blocking for up to
+			//      1 second on the next wait_for timeout.
+			//   2. Stop the camera source — joins the frame-producer worker thread
+			//      so no more PushFrame() calls arrive.
+			//   3. Stop the MJPEG server — joins client handler threads (which are
+			//      already unwinding from step 1) and closes the listen socket.
+			//
+			// Without step 1 the server's stop() would block while client threads
+			// sit in wait_for(), causing up to 1 second of shutdown delay per
+			// connected client — and leaving ghost sockets if the process exits
+			// before the threads finish.
+			if (m_mjpegServer)
+			{
+				m_mjpegServer->SignalStop();
+			}
 			if (m_cameraSource)
 			{
 				m_cameraSource->Stop();
