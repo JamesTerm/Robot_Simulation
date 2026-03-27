@@ -2,6 +2,8 @@
 #include "Transport.h"
 #include "NativeLink.h"
 #include "NT4Server.h"
+#include "MjpegServer.h"
+#include "SimCameraSource.h"
 
 #include "../../../Libraries/SmartDashboard/SmartDashboard_Import.h"
 
@@ -1544,6 +1546,16 @@ public:
 			if (m_running)
 			{
 				OutputDebugStringW(L"[Transport] NT4 backend initialized on port 5810\n");
+
+				// Ian: Start the MJPEG camera streaming server on port 1181.
+				// This runs alongside the NT4 server so dashboards can discover
+				// the camera stream via CameraPublisher NT4 keys and connect to
+				// the MJPEG stream over plain HTTP.
+				//
+				// LESSON LEARNED: The MjpegServer must be started BEFORE publishing
+				// the CameraPublisher keys, because a fast dashboard might try to
+				// connect to the stream URL immediately upon seeing the NT4 key.
+				StartCameraStream();
 			}
 			else
 			{
@@ -1552,6 +1564,7 @@ public:
 		}
 		void Shutdown() override
 		{
+			StopCameraStream();
 			SmartDashboard::ClearDirectPublishSink();
 			SmartDashboard::ClearDirectQuerySource();
 			m_nt4Server.Stop();
@@ -1615,6 +1628,89 @@ public:
 	private:
 		NT4Server m_nt4Server;
 		bool m_running = false;
+
+		// Ian: Camera streaming infrastructure.
+		// MjpegServer owns the HTTP server on port 1181.
+		// SimCameraSource generates frames on a worker thread and pushes them to MjpegServer.
+		// Both are created/destroyed alongside the NT4 server.
+		//
+		// Ian: LESSON LEARNED — these must be unique_ptrs, not inline members, because
+		// MjpegServer inherits from ix::SocketServer which is not movable/copyable.
+		// We create them on demand in StartCameraStream() and destroy in StopCameraStream().
+		std::unique_ptr<MjpegServer> m_mjpegServer;
+		std::unique_ptr<SimCameraSource> m_cameraSource;
+
+		void StartCameraStream()
+		{
+			// Ian: Create and start the MJPEG server on port 1181.
+			m_mjpegServer = std::make_unique<MjpegServer>(1181, "0.0.0.0");
+			auto [listenOk, listenErr] = m_mjpegServer->listen();
+			if (!listenOk)
+			{
+				OutputDebugStringA(("[Transport] MJPEG server failed to listen: " + listenErr + "\n").c_str());
+				m_mjpegServer.reset();
+				return;
+			}
+			m_mjpegServer->start();
+			OutputDebugStringW(L"[Transport] MJPEG server started on port 1181\n");
+
+			// Ian: Create and start the camera frame source.
+			// 320x240 @ 15fps is the standard FRC camera resolution/framerate.
+			m_cameraSource = std::make_unique<SimCameraSource>();
+			m_cameraSource->Start(m_mjpegServer.get(), 320, 240, 15);
+
+			// Ian: Publish CameraPublisher discovery keys via NT4.
+			// SmartDashboard's CameraPublisherDiscovery watches for:
+			//   /CameraPublisher/{name}/streams  (string array with "mjpg:" prefix)
+			//   /CameraPublisher/{name}/source   (string, description)
+			//   /CameraPublisher/{name}/connected (boolean)
+			//
+			// The "streams" key is the critical one — it contains the URL(s) that
+			// the MJPEG client connects to.  The "mjpg:" prefix tells the dashboard
+			// this is an MJPEG stream (vs. other formats like H.264).
+			//
+			// Ian: We publish 127.0.0.1 because the simulator and dashboard run on
+			// the same machine.  If we later need LAN access, we'd publish the
+			// machine's actual IP or 0.0.0.0 and let the dashboard resolve it.
+			m_nt4Server.PublishStringArray(
+				"/CameraPublisher/SimCamera/streams",
+				{"mjpg:http://127.0.0.1:1181/?action=stream"});
+			m_nt4Server.PublishString(
+				"/CameraPublisher/SimCamera/source",
+				"Simulator Synthetic Camera");
+			m_nt4Server.PublishBoolean(
+				"/CameraPublisher/SimCamera/connected",
+				true);
+
+			OutputDebugStringW(L"[Transport] SimCamera published on NT4 for auto-discovery\n");
+		}
+
+		void StopCameraStream()
+		{
+			// Ian: Stop in reverse order of creation: source first (stops producing
+			// frames), then server (closes connections and stops listening).
+			if (m_cameraSource)
+			{
+				m_cameraSource->Stop();
+				m_cameraSource.reset();
+			}
+			if (m_mjpegServer)
+			{
+				m_mjpegServer->stop();
+				m_mjpegServer.reset();
+			}
+
+			// Ian: Publish disconnected state so dashboards know the camera is gone.
+			// (The NT4 server is still running at this point.)
+			if (m_running)
+			{
+				m_nt4Server.PublishBoolean(
+					"/CameraPublisher/SimCamera/connected",
+					false);
+			}
+
+			OutputDebugStringW(L"[Transport] Camera stream stopped\n");
+		}
 
 		// Ian: Convert a flat SmartDashboard key to an NT4 topic path.
 		// If the key already starts with '/', use it as-is.

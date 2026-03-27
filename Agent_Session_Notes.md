@@ -85,6 +85,68 @@ Current modes:
 | NT4 transport (originally "Shuffleboard") | `feature/shuffleboard-transport` | Merged to master |
 | Glass verification + Shuffleboard→NT4 rename | `feature/glass-transport` | Merged to master |
 
+## In progress: Camera MJPEG server (`feature/camera-widget`)
+
+MJPEG camera stream server for SmartDashboard's camera viewer dock.  This is
+Phase 3 of the camera widget feature (Phase 1 = SmartDashboard MJPEG client,
+Phase 2 = targeting reticle overlay, Phase 3 = simulator MJPEG server).
+
+### Architecture
+
+- **MjpegServer** (`MjpegServer.h/.cpp`): MJPEG-over-HTTP streaming server on
+  port 1181.  Subclasses `ix::SocketServer` directly (NOT `ix::HttpServer`, which
+  is request-response only and can't do streaming).  Each client connection gets its
+  own thread.  `handleConnection()` parses the HTTP request, sends MJPEG response
+  headers (`multipart/x-mixed-replace`), then loops pushing frames from a shared
+  buffer via condition variable.
+
+  Ian: LESSON LEARNED — ix::HttpServer is strictly request-response.  The
+  OnConnectionCallback must return a complete HttpResponsePtr.  MJPEG requires an
+  infinite streaming response, so we bypass HttpServer and subclass SocketServer.
+
+- **SimCameraSource** (`SimCameraSource.h/.cpp`): Frame generator running on a
+  dedicated worker thread.  Renders a synthetic test pattern (radar sweep, crosshair,
+  frame counter, "SIM CAM" label) into an RGB buffer, JPEG-encodes via
+  `stb_image_write`, and pushes to MjpegServer.  320x240 @ 15fps default.
+
+- **Integration** in `NT4Backend::Initialize()` / `Shutdown()` in Transport.cpp:
+  Creates MjpegServer + SimCameraSource, publishes CameraPublisher discovery keys
+  via NT4 (`/CameraPublisher/SimCamera/streams`, `/source`, `/connected`).
+
+### New files
+
+| File | Purpose |
+|---|---|
+| `Source/Application/DriverStation/DriverStation/MjpegServer.h` | MJPEG HTTP server header |
+| `Source/Application/DriverStation/DriverStation/MjpegServer.cpp` | MJPEG HTTP server implementation |
+| `Source/Application/DriverStation/DriverStation/SimCameraSource.h` | Frame source header |
+| `Source/Application/DriverStation/DriverStation/SimCameraSource.cpp` | Frame generation + JPEG encoding |
+| `Source/ThirdParty/stb/stb_image_write.h` | Single-header JPEG encoder (v1.16) |
+
+### Modified files
+
+| File | Change |
+|---|---|
+| `Source/Application/DriverStation/DriverStation/Transport.cpp` | Added `#include` for MjpegServer/SimCameraSource; NT4Backend now owns MjpegServer + SimCameraSource; StartCameraStream()/StopCameraStream() methods; CameraPublisher NT4 key publishing |
+| `CMakeLists.txt` | Added MjpegServer.cpp + SimCameraSource.cpp to DriverStation and TransportSmoke targets; added stb include path |
+
+### Key protocol details
+
+- MJPEG boundary: `mjpegstream` (sent without leading dashes in Content-Type header)
+- CameraPublisher NT4 key: `/CameraPublisher/SimCamera/streams` = `["mjpg:http://127.0.0.1:1181/?action=stream"]`
+- SmartDashboard's `MjpegStreamSource` strips the `mjpg:` prefix and connects to the URL
+- SmartDashboard's `CameraPublisherDiscovery` watches `/CameraPublisher/*/streams` for auto-discovery
+
+### Status
+
+- [x] stb_image_write.h downloaded
+- [x] MjpegServer.h/.cpp created
+- [x] SimCameraSource.h/.cpp created
+- [x] Transport.cpp integration (NT4Backend owns MjpegServer + SimCameraSource)
+- [x] CMakeLists.txt updated
+- [x] Build verified (both DriverStation + TransportSmoke clean, 17 unit tests pass)
+- [x] MJPEG stream verified via curl (correct multipart headers, valid JPEG frames, ~15fps)
+
 ## Glass support (complete — no separate plugin needed)
 
 Glass uses the same NT4 protocol as Shuffleboard — same WebSocket transport, same MsgPack binary frames, same JSON control messages, same port 5810. It connects to the existing NT4 server with zero changes (beyond the RTT ping fix that was already committed). No separate Glass backend or SmartDashboard Glass plugin is needed.
