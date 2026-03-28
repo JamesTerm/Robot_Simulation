@@ -1687,6 +1687,19 @@ public:
 			case VideoSourceMode::eCamera:
 				m_webCamSource = std::make_unique<WebCameraSource>();
 				m_webCamSource->Start(m_mjpegServer.get(), 320, 240, 15);
+				// Ian: Wait for the worker thread to report whether the camera
+				// driver connected.  If no camera is found (or the driver fails),
+				// fall back to Off so the user doesn't see a stalled stream.
+				if (!m_webCamSource->WaitForStartup(2000))
+				{
+					OutputDebugStringW(L"[Transport] Camera failed to start — no camera found, falling back to Off\n");
+					m_webCamSource->Stop();
+					m_webCamSource.reset();
+					StopMjpegServer();
+					m_videoMode = VideoSourceMode::eOff;
+					PublishCameraDisconnected();
+					return;
+				}
 				PublishCameraConnected("USB Webcam");
 				OutputDebugStringW(L"[Transport] Video source: Camera (USB webcam)\n");
 				break;

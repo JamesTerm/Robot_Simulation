@@ -271,8 +271,9 @@ video sources feeding the MJPEG server on port 1181.
   Creates a hidden capture window on a worker thread with its own message pump.
   Uses `capGrabFrameNoStop` in a timed polling loop to request frames at the
   target framerate — each grab triggers the `capSetCallbackOnFrame` callback
-  synchronously, which converts bottom-up BGR to top-down RGB, JPEG-encodes
-  via `stbi_write_jpg_to_func`, pushes to `MjpegServer::PushFrame()`.
+  synchronously, which converts the frame to top-down RGB (from YUY2 or
+  bottom-up BGR), JPEG-encodes via `stbi_write_jpg_to_func`, pushes to
+  `MjpegServer::PushFrame()`.
 
   Ian: VFW capture windows MUST be created on a thread with a message pump.
   The worker thread runs the pump; the main thread signals shutdown via atomic flag.
@@ -281,6 +282,19 @@ video sources feeding the MJPEG server on port 1181.
   window receiving WM_PAINT messages, which never arrive for hidden windows.
   capGrabFrameNoStop bypasses this — it synchronously triggers the frame callback
   regardless of window visibility.
+
+  Ian: CRITICAL LESSON — Most USB cameras on Windows deliver YUY2 (packed YCbCr
+  4:2:2) through VFW, NOT BI_RGB.  capSetVideoFormat to request RGB24 often fails
+  because the VFW driver doesn't support format conversion.  The frame callback
+  must handle YUY2→RGB conversion using BT.601 color space coefficients
+  (fixed-point integer arithmetic for speed).  YUY2 format: every 4 bytes encode
+  2 pixels as [Y0, U, Y1, V], where each pixel pair shares U,V chrominance.
+
+  Ian: No-camera fallback — WebCameraSource::WaitForStartup() lets the caller
+  block until capDriverConnect succeeds or fails.  If no camera is found,
+  NT4Backend::SetVideoSource() tears down the MJPEG server and falls back to Off.
+  ApplyVideoSource() in DriverStation.cpp reads back GetVideoSource() after
+  SetVideoSource() to detect the fallback and update the UI combo + INI file.
 
 - **NT4Backend refactoring** in Transport.cpp: Replaced monolithic
   `StartCameraStream()`/`StopCameraStream()` with `SetVideoSource()` override
@@ -330,8 +344,15 @@ video sources feeding the MJPEG server on port 1181.
 - [x] CMakeLists.txt — WebCameraSource.cpp + vfw32
 - [x] Build verified (Debug + Release DriverStation, Release TransportSmoke — all clean)
 - [x] WebCameraSource rewritten to use capGrabFrameNoStop polling (fixes hidden-window issue)
+- [x] CameraCapture prototype: discovered camera delivers YUY2, not BI_RGB
+- [x] YUY2→RGB conversion (BT.601, fixed-point) added to prototype and verified — valid JPEG output
+- [x] YUY2 support ported to WebCameraSource.cpp — handles both YUY2 and BI_RGB (24/32 bpp)
+- [x] DriverStation rebuilt (Debug + Release) with YUY2 support — clean
 - [x] SmartDashboard: auto-connect removed, URL on its own row, diagnostic logging added
-- [ ] End-to-end test (camera + radar switching, SmartDashboard connection)
+- [x] End-to-end test: Synthetic Radar verified (320x240, ~7KB frames)
+- [x] End-to-end test: Off mode verified (port 1181 connection refused)
+- [x] End-to-end test: Camera mode verified (640x480, ~22KB real webcam frames)
+- [x] No-camera fallback: WaitForStartup() + SetVideoSource falls back to Off, UI combo + INI updated
 
 ### SmartDashboard changes (E:\code\SmartDashboard)
 

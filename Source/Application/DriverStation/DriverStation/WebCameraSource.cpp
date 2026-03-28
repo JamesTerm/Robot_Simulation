@@ -10,7 +10,12 @@
 // use capGrabFrameNoStop in a timed polling loop — it synchronously triggers the
 // frame callback regardless of window visibility.
 //
-// The frame callback converts the DIB data to top-down RGB, JPEG-encodes it,
+// LESSON LEARNED: Most USB cameras on Windows deliver YUY2 (packed YCbCr 4:2:2)
+// through VFW, NOT BI_RGB.  capSetVideoFormat to request RGB24 often fails
+// because the VFW driver doesn't support format conversion.  We handle both
+// YUY2 and BI_RGB (24/32 bpp) formats in the frame callback.
+//
+// The frame callback converts the frame data to top-down RGB, JPEG-encodes it,
 // and pushes to the MjpegServer.
 //
 // We do NOT define STB_IMAGE_WRITE_IMPLEMENTATION here — it's already defined
@@ -34,6 +39,62 @@ namespace
 		const auto* bytes = static_cast<const uint8_t*>(data);
 		buffer->insert(buffer->end(), bytes, bytes + size);
 	}
+
+	// Ian: YUY2 FourCC — 0x32595559 = 'Y','U','Y','2' in little-endian.
+	// Every 4 bytes encode 2 pixels: [Y0, U, Y1, V].
+	// Each pixel pair shares U,V chrominance.
+	constexpr DWORD FOURCC_YUY2 = 0x32595559;
+
+	// Ian: Clamp an int to [0, 255] and return as uint8_t.
+	inline uint8_t ClampByte(int v)
+	{
+		return static_cast<uint8_t>(v < 0 ? 0 : (v > 255 ? 255 : v));
+	}
+
+	// Ian: Convert YUY2 (packed YCbCr 4:2:2) to top-down RGB.
+	// Every 4 bytes = 2 pixels: [Y0, U, Y1, V].
+	// Uses BT.601 conversion with fixed-point arithmetic (<<10):
+	//   R = 1.164*(Y-16) + 1.596*(V-128)
+	//   G = 1.164*(Y-16) - 0.391*(U-128) - 0.813*(V-128)
+	//   B = 1.164*(Y-16) + 2.018*(U-128)
+	void ConvertYUY2toRGB(const uint8_t* src, int srcStride,
+	                       uint8_t* dst, int width, int height,
+	                       bool topDown)
+	{
+		for (int y = 0; y < height; ++y)
+		{
+			int srcY = topDown ? y : (height - 1 - y);
+			const uint8_t* srcRow = src + static_cast<size_t>(srcY) * srcStride;
+			uint8_t* dstRow = dst + static_cast<size_t>(y) * width * 3;
+
+			for (int x = 0; x < width; x += 2)
+			{
+				uint8_t y0 = srcRow[x * 2 + 0];
+				uint8_t u  = srcRow[x * 2 + 1];
+				uint8_t y1 = srcRow[x * 2 + 2];
+				uint8_t v  = srcRow[x * 2 + 3];
+
+				int C0 = (static_cast<int>(y0) - 16) * 1192;  // 1.164 * 1024
+				int C1 = (static_cast<int>(y1) - 16) * 1192;
+				int D  = static_cast<int>(u) - 128;
+				int E  = static_cast<int>(v) - 128;
+
+				int rAdd = 1634 * E;              // 1.596 * 1024
+				int gAdd = -401 * D - 833 * E;    // -0.391, -0.813 * 1024
+				int bAdd = 2066 * D;              // 2.018 * 1024
+
+				// Pixel 0
+				dstRow[x * 3 + 0] = ClampByte((C0 + rAdd + 512) >> 10);
+				dstRow[x * 3 + 1] = ClampByte((C0 + gAdd + 512) >> 10);
+				dstRow[x * 3 + 2] = ClampByte((C0 + bAdd + 512) >> 10);
+
+				// Pixel 1
+				dstRow[x * 3 + 3] = ClampByte((C1 + rAdd + 512) >> 10);
+				dstRow[x * 3 + 4] = ClampByte((C1 + gAdd + 512) >> 10);
+				dstRow[x * 3 + 5] = ClampByte((C1 + bAdd + 512) >> 10);
+			}
+		}
+	}
 }
 
 WebCameraSource::WebCameraSource() = default;
@@ -53,8 +114,15 @@ void WebCameraSource::Start(MjpegServer* server, int width, int height, int targ
 	m_targetFps = targetFps;
 	m_frameCount = 0;
 	m_stopRequested = false;
-	m_running = true;
 
+	// Ian: Reset startup synchronization state before launching the worker.
+	{
+		std::lock_guard<std::mutex> lock(m_startupMutex);
+		m_startupDone = false;
+		m_startupSuccess = false;
+	}
+
+	m_running = true;
 	m_workerThread = std::thread(&WebCameraSource::WorkerThread, this);
 }
 
@@ -82,11 +150,34 @@ int WebCameraSource::GetFrameCount() const
 	return m_frameCount;
 }
 
+// Ian: Wait for the worker thread to report whether capDriverConnect succeeded.
+// Returns true if the camera connected, false on failure or timeout.
+bool WebCameraSource::WaitForStartup(int timeoutMs)
+{
+	std::unique_lock<std::mutex> lock(m_startupMutex);
+	if (m_startupCv.wait_for(lock, std::chrono::milliseconds(timeoutMs),
+		[this] { return m_startupDone; }))
+	{
+		return m_startupSuccess;
+	}
+	// Timed out — treat as failure
+	OutputDebugStringW(L"[WebCam] WaitForStartup timed out\n");
+	return false;
+}
+
 // Ian: VFW frame callback — called on the capture thread for each frame.
 // capSetUserData stores our 'this' pointer; capGetUserData retrieves it.
+//
+// LESSON LEARNED: Some VFW drivers set dwBytesUsed=0 even for valid frames.
+// We must NOT reject the frame based solely on dwBytesUsed.  Instead, compute
+// the expected data size from the BITMAPINFOHEADER (biSizeImage, or stride × height).
+//
+// LESSON LEARNED: Do NOT call capSetVideoFormat to resize — the driver lies
+// about success and the confused state produces zeroed frame data.  Always
+// capture at native resolution (see WorkerThread comments for details).
 LRESULT CALLBACK WebCameraSource::FrameCallbackProc(HWND hWnd, LPVIDEOHDR lpVHdr)
 {
-	if (!lpVHdr || !lpVHdr->lpData || lpVHdr->dwBytesUsed == 0)
+	if (!lpVHdr || !lpVHdr->lpData)
 		return TRUE;
 
 	// Ian: capGetUserData retrieves the pointer we stored via capSetUserData.
@@ -94,8 +185,8 @@ LRESULT CALLBACK WebCameraSource::FrameCallbackProc(HWND hWnd, LPVIDEOHDR lpVHdr
 	if (!self)
 		return TRUE;
 
-	// Ian: We need the BITMAPINFOHEADER to know the actual frame dimensions and
-	// pixel format.  capGetVideoFormat returns it.
+	// Ian: We need the BITMAPINFOHEADER to know the actual frame dimensions,
+	// pixel format, and compression type (BI_RGB vs YUY2).
 	DWORD biSize = capGetVideoFormatSize(hWnd);
 	if (biSize < sizeof(BITMAPINFOHEADER))
 		return TRUE;
@@ -104,30 +195,43 @@ LRESULT CALLBACK WebCameraSource::FrameCallbackProc(HWND hWnd, LPVIDEOHDR lpVHdr
 	capGetVideoFormat(hWnd, formatBuf.data(), biSize);
 	const auto* bih = reinterpret_cast<const BITMAPINFOHEADER*>(formatBuf.data());
 
-	self->OnFrame(lpVHdr->lpData, static_cast<int>(lpVHdr->dwBytesUsed),
-		bih->biWidth, std::abs(bih->biHeight), bih->biBitCount);
+	int width = bih->biWidth;
+	int height = std::abs(bih->biHeight);
+	const int bpp = bih->biBitCount;
+	const DWORD compression = bih->biCompression;
+	// Ian: LESSON LEARNED — VFW YUY2 data is always in top-down scan order
+	// regardless of the sign of biHeight.  The biHeight sign only controls
+	// scan direction for BI_RGB.  For YUY2, the first row in the buffer is
+	// always the top row of the image.  If we respect the biHeight sign for
+	// YUY2, the image comes out upside-down.
+	const bool topDown = (compression == FOURCC_YUY2)
+		? true
+		: (bih->biHeight < 0);
+
+	// Ian: Determine actual data size.  Prefer dwBytesUsed if the driver set it;
+	// otherwise fall back to biSizeImage, or compute from stride × height.
+	// LESSON LEARNED: Some VFW drivers set dwBytesUsed=0 even for valid frames.
+	// This is NOT a reason to reject the frame — the data may still be valid.
+	int dataSize = static_cast<int>(lpVHdr->dwBytesUsed);
+	if (dataSize <= 0)
+		dataSize = static_cast<int>(bih->biSizeImage);
+	if (dataSize <= 0)
+	{
+		const int bytesPerPixel = bpp / 8;
+		const int stride = ((width * bytesPerPixel + 3) & ~3);
+		dataSize = stride * height;
+	}
+
+	self->OnFrame(lpVHdr->lpData, dataSize,
+		width, height, bpp, compression, topDown);
 
 	return TRUE;
 }
 
-void WebCameraSource::OnFrame(const uint8_t* data, int dataSize, int width, int height, int bitsPerPixel)
+void WebCameraSource::OnFrame(const uint8_t* data, int dataSize,
+	int width, int height, int bitsPerPixel, DWORD compression, bool topDown)
 {
 	if (!m_server || m_stopRequested)
-		return;
-
-	// Ian: VFW typically delivers frames as bottom-up BGR24 (BI_RGB, 24bpp).
-	// We need to flip vertically and convert BGR→RGB for JPEG encoding.
-	const int bytesPerPixel = bitsPerPixel / 8;
-	if (bytesPerPixel != 3 && bytesPerPixel != 4)
-	{
-		// Ian: We only handle 24-bit BGR or 32-bit BGRA.  Other formats
-		// (YUV, compressed) would need conversion — punt for now.
-		OutputDebugStringA("[WebCam] Unsupported pixel format, skipping frame\n");
-		return;
-	}
-
-	const int srcStride = ((width * bytesPerPixel + 3) & ~3);  // DWORD-aligned
-	if (dataSize < srcStride * height)
 		return;
 
 	std::lock_guard<std::mutex> lock(m_bufferMutex);
@@ -136,20 +240,43 @@ void WebCameraSource::OnFrame(const uint8_t* data, int dataSize, int width, int 
 	const int rgbSize = width * height * 3;
 	m_rgbBuffer.resize(rgbSize);
 
-	// Ian: Convert bottom-up BGR(A) to top-down RGB.
-	for (int y = 0; y < height; ++y)
+	if (compression == FOURCC_YUY2 && bitsPerPixel == 16)
 	{
-		const uint8_t* srcRow = data + static_cast<size_t>(height - 1 - y) * srcStride;
-		uint8_t* dstRow = m_rgbBuffer.data() + static_cast<size_t>(y) * width * 3;
+		// Ian: YUY2 packed YCbCr 4:2:2.  Stride = width * 2, DWORD-aligned.
+		const int srcStride = ((width * 2 + 3) & ~3);
+		if (dataSize < srcStride * height)
+			return;
+		ConvertYUY2toRGB(data, srcStride, m_rgbBuffer.data(), width, height, topDown);
+	}
+	else if (compression == BI_RGB && (bitsPerPixel == 24 || bitsPerPixel == 32))
+	{
+		// Ian: BI_RGB 24-bit BGR or 32-bit BGRA, typically bottom-up.
+		const int bytesPerPixel = bitsPerPixel / 8;
+		const int srcStride = ((width * bytesPerPixel + 3) & ~3);
+		if (dataSize < srcStride * height)
+			return;
 
-		for (int x = 0; x < width; ++x)
+		for (int y = 0; y < height; ++y)
 		{
-			const uint8_t* srcPixel = srcRow + static_cast<size_t>(x) * bytesPerPixel;
-			uint8_t* dstPixel = dstRow + static_cast<size_t>(x) * 3;
-			dstPixel[0] = srcPixel[2];  // R <- B
-			dstPixel[1] = srcPixel[1];  // G <- G
-			dstPixel[2] = srcPixel[0];  // B <- R
+			int srcY = topDown ? y : (height - 1 - y);
+			const uint8_t* srcRow = data + static_cast<size_t>(srcY) * srcStride;
+			uint8_t* dstRow = m_rgbBuffer.data() + static_cast<size_t>(y) * width * 3;
+
+			for (int x = 0; x < width; ++x)
+			{
+				const uint8_t* srcPixel = srcRow + static_cast<size_t>(x) * bytesPerPixel;
+				uint8_t* dstPixel = dstRow + static_cast<size_t>(x) * 3;
+				dstPixel[0] = srcPixel[2];  // R <- B
+				dstPixel[1] = srcPixel[1];  // G <- G
+				dstPixel[2] = srcPixel[0];  // B <- R
+			}
 		}
+	}
+	else
+	{
+		// Ian: Unsupported format — log once and skip.
+		OutputDebugStringA("[WebCam] Unsupported pixel format, skipping frame\n");
+		return;
 	}
 
 	// JPEG encode
@@ -183,6 +310,13 @@ void WebCameraSource::WorkerThread()
 	if (!hCapWnd)
 	{
 		OutputDebugStringW(L"[WebCam] capCreateCaptureWindow failed\n");
+		// Ian: Signal startup failure so WaitForStartup returns false.
+		{
+			std::lock_guard<std::mutex> lock(m_startupMutex);
+			m_startupDone = true;
+			m_startupSuccess = false;
+		}
+		m_startupCv.notify_one();
 		m_running = false;
 		return;
 	}
@@ -192,22 +326,53 @@ void WebCameraSource::WorkerThread()
 	{
 		OutputDebugStringW(L"[WebCam] capDriverConnect failed — no camera found\n");
 		DestroyWindow(hCapWnd);
+		// Ian: Signal startup failure so WaitForStartup returns false.
+		{
+			std::lock_guard<std::mutex> lock(m_startupMutex);
+			m_startupDone = true;
+			m_startupSuccess = false;
+		}
+		m_startupCv.notify_one();
 		m_running = false;
 		return;
 	}
 
-	// Ian: Try to set the requested resolution.  Not all cameras support 320x240,
-	// so we read back what the driver actually set.
+	OutputDebugStringW(L"[WebCam] Driver connected\n");
+
+	// Ian: Signal startup success — camera driver connected OK.
+	{
+		std::lock_guard<std::mutex> lock(m_startupMutex);
+		m_startupDone = true;
+		m_startupSuccess = true;
+	}
+	m_startupCv.notify_one();
+
+	// Ian: LESSON LEARNED — Do NOT call capSetVideoFormat to resize.
+	// The VFW driver (Microsoft WDM Image Capture Win32) lies about supporting
+	// non-native resolutions.  capSetVideoFormat(320x240) returns TRUE but the
+	// driver doesn't actually resize — it keeps the native 640x480 buffer.
+	// Worse, the confused state causes capGrabFrameNoStop to return frames
+	// with dwBytesUsed=0 and potentially zeroed/invalid pixel data (producing
+	// solid green output after YUY2→RGB conversion).
+	//
+	// Instead, always capture at native resolution.  The MJPEG server and
+	// SmartDashboard don't care about the frame size — they handle whatever
+	// we send.
 	{
 		DWORD biSize = capGetVideoFormatSize(hCapWnd);
 		if (biSize >= sizeof(BITMAPINFOHEADER))
 		{
 			std::vector<uint8_t> formatBuf(biSize);
 			capGetVideoFormat(hCapWnd, formatBuf.data(), biSize);
-			auto* bih = reinterpret_cast<BITMAPINFOHEADER*>(formatBuf.data());
-			bih->biWidth = m_requestedWidth;
-			bih->biHeight = m_requestedHeight;
-			capSetVideoFormat(hCapWnd, bih, biSize);
+			const auto* bih = reinterpret_cast<const BITMAPINFOHEADER*>(formatBuf.data());
+
+			// Ian: Log native format to OutputDebugString for diagnostics.
+			char dbgBuf[128];
+			snprintf(dbgBuf, sizeof(dbgBuf),
+				"[WebCam] Native format: %ldx%d, %d bpp, compression=0x%08lX\n",
+				bih->biWidth, std::abs(bih->biHeight), bih->biBitCount,
+				bih->biCompression);
+			OutputDebugStringA(dbgBuf);
 		}
 	}
 
@@ -246,10 +411,10 @@ void WebCameraSource::WorkerThread()
 			// Ian: capGrabFrameNoStop grabs one frame from the driver.
 			// It triggers the capSetCallbackOnFrame callback synchronously
 			// before returning (if a callback is installed).
-			if (!capGrabFrameNoStop(hCapWnd))
+			// Grab can fail transiently (driver busy, etc.) — just skip.
+			if (capGrabFrameNoStop(hCapWnd))
 			{
-				// Ian: Grab can fail transiently (driver busy, etc.).
-				// Don't spam the log — just skip this frame.
+				// Frame callback fires synchronously inside this call.
 			}
 			nextGrabTime = now + frameIntervalMs;
 		}

@@ -666,6 +666,15 @@ void ApplyVideoSource(VideoSourceMode mode)
 	if (s_pRobotTester)
 	{
 		s_pRobotTester->SetVideoSource(mode);
+		// Ian: The backend may fall back to Off if the requested source fails
+		// (e.g. Camera selected but no camera connected).  Read back the actual
+		// mode so the UI combo and INI stay in sync with reality.
+		const VideoSourceMode actualMode = s_pRobotTester->GetVideoSource();
+		if (actualMode != mode)
+		{
+			OutputDebugStringW(L"Video source fell back from requested mode — updating UI\n");
+			mode = actualMode;
+		}
 	}
 	if (g_hVideoSourceCombo)
 	{

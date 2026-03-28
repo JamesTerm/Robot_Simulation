@@ -8,8 +8,8 @@
 //   - A worker thread runs a message pump and a timed polling loop that calls
 //     capGrabFrameNoStop to request frames at the target framerate.  Each grab
 //     triggers the capSetCallbackOnFrame callback synchronously, which converts
-//     bottom-up BGR to top-down RGB, JPEG-encodes via stb_image_write, and pushes
-//     to the MjpegServer.
+//     the frame to top-down RGB (from YUY2 or bottom-up BGR), JPEG-encodes via
+//     stb_image_write, and pushes to the MjpegServer.
 //   - Resolution defaults to 320x240 @ 15fps to match SimCameraSource.
 //
 // Ian: VFW is the simplest Windows camera API — just a few Win32 calls, no COM,
@@ -23,6 +23,7 @@
 // instead — it triggers the callback synchronously regardless of window visibility.
 
 #include <atomic>
+#include <condition_variable>
 #include <cstdint>
 #include <mutex>
 #include <thread>
@@ -48,19 +49,33 @@ public:
 	bool IsRunning() const;
 	int GetFrameCount() const;
 
+	// Ian: Wait for the worker thread to finish startup (driver connect attempt).
+	// Returns true if the camera connected successfully, false if it failed or
+	// timed out.  Call this after Start() to detect "no camera" scenarios.
+	// Typical timeout: 2000ms (VFW driver probing can take ~1s on some systems).
+	bool WaitForStartup(int timeoutMs = 2000);
+
 private:
 	void WorkerThread();
 
 	// Ian: VFW frame callback — called on the capture thread when a frame arrives.
 	// We use the lParam trick to pass 'this' via capSetUserData / capGetUserData.
 	static LRESULT CALLBACK FrameCallbackProc(HWND hWnd, LPVIDEOHDR lpVHdr);
-	void OnFrame(const uint8_t* data, int dataSize, int width, int height, int bitsPerPixel);
+	void OnFrame(const uint8_t* data, int dataSize, int width, int height,
+		int bitsPerPixel, DWORD compression, bool topDown);
 
 	MjpegServer* m_server = nullptr;
 	std::thread m_workerThread;
 	std::atomic<bool> m_running{false};
 	std::atomic<bool> m_stopRequested{false};
 	std::atomic<int> m_frameCount{0};
+
+	// Ian: Startup synchronization — lets the caller wait for the worker thread
+	// to finish its capDriverConnect attempt and know if it succeeded.
+	std::mutex m_startupMutex;
+	std::condition_variable m_startupCv;
+	bool m_startupDone = false;     // protected by m_startupMutex
+	bool m_startupSuccess = false;  // protected by m_startupMutex
 
 	int m_requestedWidth = 320;
 	int m_requestedHeight = 240;
