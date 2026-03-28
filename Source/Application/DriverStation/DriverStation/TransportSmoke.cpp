@@ -160,7 +160,7 @@ int smoke_main(int argc, char** argv)
 
 	// Ian: Seed the chooser and test values — these exercise the full publish path
 	// regardless of which backend is active.
-	SmartDashboard::PutString("Test/Auton_Selection/AutoChooser/.type", "String Chooser");
+	SmartDashboard::PutString("Autonomous/Auton_Selection/AutoChooser/.type", "String Chooser");
 	std::vector<std::string> chooserOptions;
 	chooserOptions.push_back("Do Nothing");
 	chooserOptions.push_back("Just Move Forward");
@@ -168,11 +168,11 @@ int smoke_main(int argc, char** argv)
 	chooserOptions.push_back("Move Rotate Sequence");
 	chooserOptions.push_back("Box Waypoints");
 	chooserOptions.push_back("Smart Waypoints");
-	SmartDashboard::PutStringArray("Test/Auton_Selection/AutoChooser/options", chooserOptions);
-	SmartDashboard::PutString("Test/Auton_Selection/AutoChooser/default", "Do Nothing");
-	SmartDashboard::PutString("Test/Auton_Selection/AutoChooser/active", "Do Nothing");
-	SmartDashboard::PutString("Test/Auton_Selection/AutoChooser/selected", "Just Move Forward");
-	SmartDashboard::PutNumber("TestMove", testMove);
+	SmartDashboard::PutStringArray("Autonomous/Auton_Selection/AutoChooser/options", chooserOptions);
+	SmartDashboard::PutString("Autonomous/Auton_Selection/AutoChooser/default", "Do Nothing");
+	SmartDashboard::PutString("Autonomous/Auton_Selection/AutoChooser/active", "Do Nothing");
+	SmartDashboard::PutString("Autonomous/Auton_Selection/AutoChooser/selected", "Just Move Forward");
+	SmartDashboard::PutNumber("Autonomous/TestMove", testMove);
 	printf("[TransportSmoke] seeded chooser selected='Just Move Forward' TestMove=%g\n", testMove);
 	fflush(stdout);
 

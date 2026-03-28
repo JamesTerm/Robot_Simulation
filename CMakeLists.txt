@@ -221,6 +221,10 @@ add_executable(DriverStation_TransportSmoke
     Source/Application/DriverStation/DriverStation/Robot_Tester.cpp
     Source/Application/DriverStation/DriverStation/Transport.cpp
     Source/Application/DriverStation/DriverStation/NT4Server.cpp
+    Source/Application/DriverStation/DriverStation/MjpegServer.cpp
+    Source/Application/DriverStation/DriverStation/SimCameraSource.cpp
+    Source/Application/DriverStation/DriverStation/TronGridSource.cpp
+    Source/Application/DriverStation/DriverStation/WebCameraSource.cpp
     Source/Application/DriverStation/DriverStation/NativeLinkAuthorityHelpers.cpp
     Source/Application/DriverStation/DriverStation/NativeLink.cpp
     Source/Application/DriverStation/DriverStation/NativeLinkSharedMemory.cpp
@@ -229,6 +233,7 @@ add_executable(DriverStation_TransportSmoke
 target_include_directories(DriverStation_TransportSmoke
     PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/plugins/NativeLinkTransport/include"
+        "${CMAKE_CURRENT_SOURCE_DIR}/Source/ThirdParty/stb"
 )
 target_link_libraries(DriverStation_TransportSmoke
     PRIVATE
@@ -238,6 +243,7 @@ target_link_libraries(DriverStation_TransportSmoke
         nlohmann_json::nlohmann_json
         ws2_32
         bcrypt
+        vfw32
 )
 
 # Ian: Standalone NT4 WebSocket client test — mimics ntcore's exact connection
@@ -296,6 +302,10 @@ if(BUILD_DRIVER_STATION)
         Source/Application/DriverStation/DriverStation/Robot_Tester.cpp
         Source/Application/DriverStation/DriverStation/Transport.cpp
         Source/Application/DriverStation/DriverStation/NT4Server.cpp
+        Source/Application/DriverStation/DriverStation/MjpegServer.cpp
+        Source/Application/DriverStation/DriverStation/SimCameraSource.cpp
+        Source/Application/DriverStation/DriverStation/TronGridSource.cpp
+        Source/Application/DriverStation/DriverStation/WebCameraSource.cpp
         Source/Application/DriverStation/DriverStation/NativeLinkAuthorityHelpers.cpp
         Source/Application/DriverStation/DriverStation/NativeLink.cpp
         Source/Application/DriverStation/DriverStation/NativeLinkSharedMemory.cpp
@@ -306,6 +316,7 @@ if(BUILD_DRIVER_STATION)
     target_include_directories(DriverStation
         PRIVATE
             "${CMAKE_CURRENT_SOURCE_DIR}/plugins/NativeLinkTransport/include"
+            "${CMAKE_CURRENT_SOURCE_DIR}/Source/ThirdParty/stb"
     )
     target_link_libraries(DriverStation
         PRIVATE
@@ -317,6 +328,7 @@ if(BUILD_DRIVER_STATION)
             winmm
             ws2_32
             bcrypt
+            vfw32
     )
 
     add_custom_command(TARGET DriverStation POST_BUILD

@@ -49,25 +49,25 @@ private:
 		Vec2D velocity_normalized(linear_velocity.x, linear_velocity.y);
 		double magnitude = velocity_normalized.normalize();
 		//Entity variables-------------------------------------------
-		SmartDashboard::PutNumber("Velocity", Meters2Feet(magnitude));
+		SmartDashboard::PutNumber("Drive/Velocity", Meters2Feet(magnitude));
 		Entity2D::Vector2D position = entity.GetCurrentPosition();
-		SmartDashboard::PutNumber("X", Meters2Feet(position.x));
-		SmartDashboard::PutNumber("Y", Meters2Feet(position.y));
+		SmartDashboard::PutNumber("Drive/X", Meters2Feet(position.x));
+		SmartDashboard::PutNumber("Drive/Y", Meters2Feet(position.y));
 		//for swerve the direction of travel is not necessarily the heading, so we show this as well as heading
-		SmartDashboard::PutNumber("Travel_Heading", RAD_2_DEG(atan2(velocity_normalized[0], velocity_normalized[1])));
-		SmartDashboard::PutNumber("Heading", RAD_2_DEG(entity.GetCurrentHeading()));
+		SmartDashboard::PutNumber("Drive/Travel_Heading", RAD_2_DEG(atan2(velocity_normalized[0], velocity_normalized[1])));
+		SmartDashboard::PutNumber("Drive/Heading", RAD_2_DEG(entity.GetCurrentHeading()));
 		//SmartDashboard::PutNumber("setpoint_angle", RAD_2_DEG(entity.Get_IntendedOrientation()));
 		//kinematic variables-------------------------------------------
-		SmartDashboard::PutNumber("Wheel_fl_Velocity", Meters2Feet(m_robot.GetIntendedVelocitiesFromIndex(0)));
-		SmartDashboard::PutNumber("Wheel_fr_Velocity", Meters2Feet(m_robot.GetIntendedVelocitiesFromIndex(1)));
-		SmartDashboard::PutNumber("Wheel_rl_Velocity", Meters2Feet(m_robot.GetIntendedVelocitiesFromIndex(2)));
-		SmartDashboard::PutNumber("Wheel_rr_Velocity", Meters2Feet(m_robot.GetIntendedVelocitiesFromIndex(3)));
+		SmartDashboard::PutNumber("Drive/Wheel_fl_Velocity", Meters2Feet(m_robot.GetIntendedVelocitiesFromIndex(0)));
+		SmartDashboard::PutNumber("Drive/Wheel_fr_Velocity", Meters2Feet(m_robot.GetIntendedVelocitiesFromIndex(1)));
+		SmartDashboard::PutNumber("Drive/Wheel_rl_Velocity", Meters2Feet(m_robot.GetIntendedVelocitiesFromIndex(2)));
+		SmartDashboard::PutNumber("Drive/Wheel_rr_Velocity", Meters2Feet(m_robot.GetIntendedVelocitiesFromIndex(3)));
 		//For the angles either show raw or use simple dial using 180 to -180 with a 45 tick interval
 		//its not perfect, but it gives a good enough direction to tell (especially when going down)
-		SmartDashboard::PutNumber("swivel_fl_Raw", RAD_2_DEG(m_robot.GetSwerveVelocitiesFromIndex(0)));
-		SmartDashboard::PutNumber("swivel_fr_Raw", RAD_2_DEG(m_robot.GetSwerveVelocitiesFromIndex(1)));
-		SmartDashboard::PutNumber("swivel_rl_Raw", RAD_2_DEG(m_robot.GetSwerveVelocitiesFromIndex(2)));
-		SmartDashboard::PutNumber("swivel_rr_Raw", RAD_2_DEG(m_robot.GetSwerveVelocitiesFromIndex(3)));
+		SmartDashboard::PutNumber("Swerve/swivel_fl_Raw", RAD_2_DEG(m_robot.GetSwerveVelocitiesFromIndex(0)));
+		SmartDashboard::PutNumber("Swerve/swivel_fr_Raw", RAD_2_DEG(m_robot.GetSwerveVelocitiesFromIndex(1)));
+		SmartDashboard::PutNumber("Swerve/swivel_rl_Raw", RAD_2_DEG(m_robot.GetSwerveVelocitiesFromIndex(2)));
+		SmartDashboard::PutNumber("Swerve/swivel_rr_Raw", RAD_2_DEG(m_robot.GetSwerveVelocitiesFromIndex(3)));
 	}
 
 	void GetInputSlice()

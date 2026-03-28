@@ -28,6 +28,24 @@ enum class ConnectionMode
 	eNativeLink = 3
 };
 
+// Ian: VideoSourceMode controls which frame source feeds the MJPEG server.
+// The MJPEG server (port 1181) stays alive for any non-Off mode; only the
+// source pushing frames into it changes.  "Off" tears down the server entirely
+// and publishes CameraPublisher/connected = false.
+//
+// This enum is independent of ConnectionMode — the video source can be changed
+// at any time while NT4 is active.  Other connection modes ignore it (they have
+// no MJPEG server).
+enum class VideoSourceMode
+{
+	eOff = 0,             // No camera stream — MJPEG server shut down
+	eCamera = 1,          // USB webcam via Video for Windows (VFW)
+	eSyntheticRadar = 2,  // Existing SimCameraSource radar sweep pattern
+	eVirtualField = 3     // "The Grid" — Tron-style first-person virtual field (TronGridSource)
+};
+
+const wchar_t* GetVideoSourceModeName(VideoSourceMode mode);
+
 const wchar_t* GetConnectionModeName(ConnectionMode mode);
 
 class IConnectionBackend
@@ -37,6 +55,11 @@ public:
 	virtual void Initialize() = 0;
 	virtual void Shutdown() = 0;
 	virtual const wchar_t* GetBackendName() const = 0;
+
+	// Ian: Video source switching.  Only NT4Backend implements these meaningfully;
+	// other backends return eOff / ignore the call since they have no MJPEG server.
+	virtual void SetVideoSource(VideoSourceMode /*mode*/) {}
+	virtual VideoSourceMode GetVideoSource() const { return VideoSourceMode::eOff; }
 };
 
 class DashboardTransportRouter
@@ -48,6 +71,11 @@ public:
 	ConnectionMode GetMode() const;
 	const wchar_t* GetActiveBackendName() const;
 	void Shutdown();
+
+	// Ian: Video source is forwarded to the active backend.  If the backend
+	// doesn't support video (e.g. Legacy, DirectConnect) the call is a no-op.
+	void SetVideoSource(VideoSourceMode mode);
+	VideoSourceMode GetVideoSource() const;
 private:
 	ConnectionMode m_mode = ConnectionMode::eLegacySmartDashboard;
 	bool m_is_initialized = false;

@@ -61,8 +61,8 @@ private:
 		double magnitude = velocity_normalized.normalize();
 		SmartDashboard::PutNumber("CurrentVelocity", Meters2Feet(magnitude));
 		Entity2D::Vector2D position = entity.GetCurrentPosition();
-		SmartDashboard::PutNumber("X", Meters2Feet(position.x));
-		SmartDashboard::PutNumber("Y", Meters2Feet(position.y));
+		SmartDashboard::PutNumber("Drive/X", Meters2Feet(position.x));
+		SmartDashboard::PutNumber("Drive/Y", Meters2Feet(position.y));
 		//for swerve the direction of travel is not necessarily the heading, so we show this as well as heading
 		SmartDashboard::PutNumber("CurrentVelocity_yaw", RAD_2_DEG(atan2(velocity_normalized[0], velocity_normalized[1])));
 		SmartDashboard::PutNumber("yaw", RAD_2_DEG(entity.GetCurrentHeading()));

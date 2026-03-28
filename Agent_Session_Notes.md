@@ -85,6 +85,69 @@ Current modes:
 | NT4 transport (originally "Shuffleboard") | `feature/shuffleboard-transport` | Merged to master |
 | Glass verification + Shuffleboard→NT4 rename | `feature/glass-transport` | Merged to master |
 
+## In progress: Camera MJPEG server (`feature/camera-widget`)
+
+MJPEG camera stream server for SmartDashboard's camera viewer dock.  This is
+Phase 3 of the camera widget feature (Phase 1 = SmartDashboard MJPEG client,
+Phase 2 = targeting reticle overlay, Phase 3 = simulator MJPEG server).
+
+### Architecture
+
+- **MjpegServer** (`MjpegServer.h/.cpp`): MJPEG-over-HTTP streaming server on
+  port 1181.  Subclasses `ix::SocketServer` directly (NOT `ix::HttpServer`, which
+  is request-response only and can't do streaming).  Each client connection gets its
+  own thread.  `handleConnection()` parses the HTTP request, sends MJPEG response
+  headers (`multipart/x-mixed-replace`), then loops pushing frames from a shared
+  buffer via condition variable.
+
+  Ian: LESSON LEARNED — ix::HttpServer is strictly request-response.  The
+  OnConnectionCallback must return a complete HttpResponsePtr.  MJPEG requires an
+  infinite streaming response, so we bypass HttpServer and subclass SocketServer.
+
+- **SimCameraSource** (`SimCameraSource.h/.cpp`): Frame generator running on a
+  dedicated worker thread.  Renders a synthetic test pattern (radar sweep, crosshair,
+  frame counter, "SIM CAM" label) into an RGB buffer, JPEG-encodes via
+  `stb_image_write`, and pushes to MjpegServer.  320x240 @ 15fps default.
+
+- **Integration** in `NT4Backend::Initialize()` / `Shutdown()` in Transport.cpp:
+  Creates MjpegServer + SimCameraSource, publishes CameraPublisher discovery keys
+  via NT4 (`/CameraPublisher/SimCamera/streams`, `/source`, `/connected`).
+
+### New files
+
+| File | Purpose |
+|---|---|
+| `Source/Application/DriverStation/DriverStation/MjpegServer.h` | MJPEG HTTP server header |
+| `Source/Application/DriverStation/DriverStation/MjpegServer.cpp` | MJPEG HTTP server implementation |
+| `Source/Application/DriverStation/DriverStation/SimCameraSource.h` | Frame source header |
+| `Source/Application/DriverStation/DriverStation/SimCameraSource.cpp` | Frame generation + JPEG encoding |
+| `Source/ThirdParty/stb/stb_image_write.h` | Single-header JPEG encoder (v1.16) |
+
+### Modified files
+
+| File | Change |
+|---|---|
+| `Source/Application/DriverStation/DriverStation/Transport.cpp` | Added `#include` for MjpegServer/SimCameraSource; NT4Backend now owns MjpegServer + SimCameraSource; StartCameraStream()/StopCameraStream() methods; CameraPublisher NT4 key publishing |
+| `CMakeLists.txt` | Added MjpegServer.cpp + SimCameraSource.cpp to DriverStation and TransportSmoke targets; added stb include path |
+
+### Key protocol details
+
+- MJPEG boundary: `mjpegstream` (sent without leading dashes in Content-Type header)
+- CameraPublisher NT4 key: `/CameraPublisher/SimCamera/streams` = `["mjpg:http://127.0.0.1:1181/?action=stream"]`
+- SmartDashboard's `MjpegStreamSource` strips the `mjpg:` prefix and connects to the URL
+- SmartDashboard's `CameraPublisherDiscovery` watches `/CameraPublisher/*/streams` for auto-discovery
+
+### Status
+
+- [x] stb_image_write.h downloaded
+- [x] MjpegServer.h/.cpp created
+- [x] SimCameraSource.h/.cpp created
+- [x] Transport.cpp integration (NT4Backend owns MjpegServer + SimCameraSource)
+- [x] CMakeLists.txt updated
+- [x] Build verified (both DriverStation + TransportSmoke clean, 17 unit tests pass)
+- [x] MJPEG stream verified via curl (correct multipart headers, valid JPEG frames, ~15fps)
+- [x] SmartDashboard auto-connect wiring complete — discovery→combo→auto-connect pipeline verified end-to-end (SmartDashboard repo, `feature/camera-widget` branch, 28 new tests)
+
 ## Glass support (complete — no separate plugin needed)
 
 Glass uses the same NT4 protocol as Shuffleboard — same WebSocket transport, same MsgPack binary frames, same JSON control messages, same port 5810. It connects to the existing NT4 server with zero changes (beyond the RTT ping fix that was already committed). No separate Glass backend or SmartDashboard Glass plugin is needed.
@@ -187,3 +250,184 @@ TestMove and chooser selection start at 0/"Do Nothing" each launch. Values must 
 
 - Expand smoke test published keys from ~6 + chooser to full TeleAutonV2 (~49 keys)
 - Debug builds: manual carrier picker in DriverStation dialog for SHM vs TCP comparisons
+
+## In progress: Video Source selector (`feature/camera-widget`)
+
+Video Source dropdown in the DriverStation dialog that lets the user switch between
+video sources feeding the MJPEG server on port 1181.
+
+### Modes
+
+| Mode | Enum | Description |
+|---|---|---|
+| Off | `VideoSourceMode::eOff` | No camera stream; MJPEG server torn down |
+| Camera | `VideoSourceMode::eCamera` | USB webcam via VFW (Video for Windows) |
+| Synthetic Radar | `VideoSourceMode::eSyntheticRadar` | Existing SimCameraSource radar sweep (default) |
+| The Grid | `VideoSourceMode::eVirtualField` | Tron-style first-person virtual field camera (TronGridSource) |
+
+### Architecture
+
+- **WebCameraSource** (`WebCameraSource.h/.cpp`): VFW-based USB webcam capture.
+  Creates a hidden capture window on a worker thread with its own message pump.
+  Uses `capGrabFrameNoStop` in a timed polling loop to request frames at the
+  target framerate — each grab triggers the `capSetCallbackOnFrame` callback
+  synchronously, which converts the frame to top-down RGB (from YUY2 or
+  bottom-up BGR), JPEG-encodes via `stbi_write_jpg_to_func`, pushes to
+  `MjpegServer::PushFrame()`.
+
+  Ian: VFW capture windows MUST be created on a thread with a message pump.
+  The worker thread runs the pump; the main thread signals shutdown via atomic flag.
+
+  Ian: LESSON LEARNED — capPreview(TRUE) + capSetCallbackOnFrame relies on the
+  window receiving WM_PAINT messages, which never arrive for hidden windows.
+  capGrabFrameNoStop bypasses this — it synchronously triggers the frame callback
+  regardless of window visibility.
+
+  Ian: CRITICAL LESSON — Most USB cameras on Windows deliver YUY2 (packed YCbCr
+  4:2:2) through VFW, NOT BI_RGB.  capSetVideoFormat to request RGB24 often fails
+  because the VFW driver doesn't support format conversion.  The frame callback
+  must handle YUY2→RGB conversion using BT.601 color space coefficients
+  (fixed-point integer arithmetic for speed).  YUY2 format: every 4 bytes encode
+  2 pixels as [Y0, U, Y1, V], where each pixel pair shares U,V chrominance.
+
+  Ian: No-camera fallback — WebCameraSource::WaitForStartup() lets the caller
+  block until capDriverConnect succeeds or fails.  If no camera is found,
+  NT4Backend::SetVideoSource() tears down the MJPEG server and falls back to Off.
+  ApplyVideoSource() in DriverStation.cpp reads back GetVideoSource() after
+  SetVideoSource() to detect the fallback and update the UI combo + INI file.
+
+- **NT4Backend refactoring** in Transport.cpp: Replaced monolithic
+  `StartCameraStream()`/`StopCameraStream()` with `SetVideoSource()` override
+  plus helper methods `StartMjpegServer()`, `StopMjpegServer()`, `StopCurrentSource()`,
+  `PublishCameraConnected()`, `PublishCameraDisconnected()`. The MJPEG server stays
+  alive when switching between Camera and Radar sources; only torn down for Off.
+
+- **DriverStation.cpp UI**: Always-visible "Video" label + combo box
+  (control IDs 1012/1013). Persisted to `[Video] Source=<int>` in DriverStation.ini.
+  Applied after connection mode on startup via `ApplyVideoSource(LoadPersistedVideoSource())`.
+
+  Layout: Video row is positioned dynamically below the Connection combo by
+  querying its actual pixel position at runtime (`GetDlgItem` + `GetWindowRect` +
+  `ScreenToClient`). In Debug builds, the NativeLink Carrier combo is on the
+  same row as the Connection combo (to its right, 10px gap), keeping it clear
+  of the Video dropdown.
+
+- **`stb_image_write`**: `STB_IMAGE_WRITE_IMPLEMENTATION` defined exactly once in
+  `SimCameraSource.cpp`. `WebCameraSource.cpp` and `TronGridSource.cpp` only include
+  the header for declarations.
+
+- **TronGridSource** (`TronGridSource.h/.cpp`): "The Grid" — first-person Tron-style
+  virtual field camera.  Pure software 3D renderer using the same pixel-buffer +
+  Bresenham drawing pattern as SimCameraSource.  Zero OSG/OpenGL dependency — avoids
+  crash risk from GPU context creation on worker threads.
+
+  Renders a 54×27 ft FRC field as a glowing cyan wireframe grid on black background,
+  viewed from the robot's perspective (camera at robot position, 2 ft height, looking
+  in heading direction).  Features:
+  - 3D perspective projection via software pinhole camera model (90° HFOV)
+  - 1-foot-spaced floor grid with depth fog (cyan fades to dark blue with distance)
+  - Field boundary walls as bright cyan-white wireframe rectangles (1.5 ft tall)
+  - Squid Games FIRST emblem at field center: red circle, white triangle, blue square
+  - Background clouds: distant dim wireframe rectangles floating in the void (Flynn
+    falling into the digital world aesthetic)
+  - MCP tower: tall red wireframe monolith far to the north with glowing band stripes
+  - CRT scanline effect for retro aesthetic (no HUD text — pure black background)
+  - Off-field arrow: orange arrow pointing back toward field center when robot
+    wanders outside field bounds
+  - Near-plane line clipping to prevent projection artifacts from behind-camera geometry
+  - Safety limits on Bresenham line length to prevent frame lockup from bad projections
+
+  Ian: LESSON LEARNED — OSG offscreen FBO rendering on a worker thread crashes on
+  many Windows GPU drivers.  The pure-software approach is immune — only needs CPU
+  and std::vector<uint8_t>.  At 320×240 @ 15fps the CPU cost is negligible.
+
+  Ian: Robot position is read each frame via a callback that queries the NT4 retained
+  value cache for `/SmartDashboard/Drive/X_ft`, `Y_ft`, and `Heading`.  The callback
+  is set by NT4Backend when creating the source, capturing `this` pointer — safe because
+  StopCurrentSource() is always called before backend shutdown.
+
+  Ian: Field coordinate mapping — the robot starts at (0,0) in the simulator which is
+  mapped to field position (27, 1) — center of the near alliance wall, 1 ft from the
+  wall.  This places the robot naturally on the field.
+
+  Ian: HEADING INVERSION — The published Drive/Heading uses atan2(x,y) which gives
+  CW-positive from +Y.  But WorldToCamera() expects CCW-positive (standard math
+  convention).  The heading must be negated: `m_headingDeg = -heading;`.  This also
+  fixed the grid lines and walls rendering in wrong positions — they all flow through
+  the same WorldToCamera() rotation matrix.
+
+  Ian: CENTERED COORDINATE SYSTEM — Robot (0,0) from the simulator maps directly to
+  field center (0,0).  The field spans X ∈ [-27, +27], Y ∈ [-13.5, +13.5].  No offset
+  mapping needed.  The old system offset to (27, 1) which was wrong — when the robot
+  reported negative Y it triggered the off-field arrow prematurely.
+
+  Ian: SCREEN-SPACE CLIPPING — Lines outside the camera FOV were still being drawn
+  because the old code used a generous 200px margin check.  Replaced with proper
+  Cohen-Sutherland 2D line clipping against the screen rectangle.  This clips line
+  segments to exactly the visible area before Bresenham, eliminating wasted pixel
+  traversals and incorrect rendering of off-FOV geometry.
+
+### New files
+
+| File | Purpose |
+|---|---|
+| `Source/Application/DriverStation/DriverStation/WebCameraSource.h` | VFW webcam capture header |
+| `Source/Application/DriverStation/DriverStation/WebCameraSource.cpp` | VFW webcam capture implementation |
+| `Source/Application/DriverStation/DriverStation/TronGridSource.h` | "The Grid" Tron-style first-person virtual field camera header |
+| `Source/Application/DriverStation/DriverStation/TronGridSource.cpp` | "The Grid" implementation: software 3D renderer, perspective grid, Squid Games emblem, background clouds, MCP tower |
+
+### Modified files
+
+| File | Change |
+|---|---|
+| `Transport.h` | Added `VideoSourceMode` enum, `GetVideoSourceModeName()`, virtual `SetVideoSource()`/`GetVideoSource()` on `IConnectionBackend`, forwarding on `DashboardTransportRouter`; updated eVirtualField comment to "The Grid" |
+| `Transport.cpp` | Refactored NT4Backend camera management: `SetVideoSource()` override with helper methods; added `#include "TronGridSource.h"`; `eVirtualField` case creates TronGridSource with position callback reading NT4 cache; `StopCurrentSource()` handles TronGridSource cleanup; display name "The Grid"; router forwarding implementations |
+| `Robot_Tester.h` | Added `SetVideoSource()`/`GetVideoSource()` declarations |
+| `Robot_Tester.cpp` | Added `SetVideoSource()`/`GetVideoSource()` implementations forwarding through router |
+| `DriverStation.cpp` | Added video source UI controls, persistence, `ApplyVideoSource()`, WM_INITDIALOG/WM_COMMAND wiring |
+| `CMakeLists.txt` | Added `WebCameraSource.cpp` and `TronGridSource.cpp` to DriverStation + TransportSmoke targets; added `vfw32` to link libs |
+
+### Status
+
+- [x] WebCameraSource.h/.cpp created
+- [x] Transport.h — VideoSourceMode enum, virtual methods
+- [x] Transport.cpp — NT4Backend refactored with SetVideoSource
+- [x] Robot_Tester.h/.cpp — forwarding methods
+- [x] DriverStation.cpp — UI controls, persistence, event handling, startup wiring
+- [x] DriverStation.cpp — Layout fix: Video row below Connection, Carrier beside Connection (Debug)
+- [x] CMakeLists.txt — WebCameraSource.cpp + vfw32
+- [x] Build verified (Debug + Release DriverStation, Release TransportSmoke — all clean)
+- [x] WebCameraSource rewritten to use capGrabFrameNoStop polling (fixes hidden-window issue)
+- [x] CameraCapture prototype: discovered camera delivers YUY2, not BI_RGB
+- [x] YUY2→RGB conversion (BT.601, fixed-point) added to prototype and verified — valid JPEG output
+- [x] YUY2 support ported to WebCameraSource.cpp — handles both YUY2 and BI_RGB (24/32 bpp)
+- [x] DriverStation rebuilt (Debug + Release) with YUY2 support — clean
+- [x] SmartDashboard: auto-connect removed, URL on its own row, diagnostic logging added
+- [x] End-to-end test: Synthetic Radar verified (320x240, ~7KB frames)
+- [x] End-to-end test: Off mode verified (port 1181 connection refused)
+- [x] End-to-end test: Camera mode verified (640x480, ~22KB real webcam frames)
+- [x] No-camera fallback: WaitForStartup() + SetVideoSource falls back to Off, UI combo + INI updated
+- [x] TronGridSource.h/.cpp created — "The Grid" first-person Tron-style virtual field camera
+- [x] Transport.cpp — eVirtualField wired to TronGridSource with NT4 position callback
+- [x] Transport.h — eVirtualField comment updated to "The Grid"
+- [x] GetVideoSourceModeName returns "The Grid" for eVirtualField
+- [x] CMakeLists.txt — TronGridSource.cpp added to both targets
+- [x] Build verified (Debug + Release DriverStation, Release TransportSmoke — all clean, 17 unit tests pass)
+- [x] Heading inversion fixed: `m_headingDeg = -heading` — fixes rotation direction AND grid/wall rendering
+- [x] HUD text removed: "THE GRID" title, position, heading, FPS, frame counter all stripped; CRT scanlines kept
+- [x] Background clouds added: 12 distant dim wireframe rectangles floating in the void with gentle drift
+- [x] MCP tower added: tall red wireframe monolith at Y=40 with 5 glowing band stripes
+- [x] Build verified after all fixes (Debug + Release DriverStation, Release TransportSmoke — all clean)
+- [x] Coordinate system fixed: field centered at origin, X ∈ [-27,+27], Y ∈ [-13.5,+13.5], no offset mapping
+- [x] Cohen-Sutherland screen-space line clipping added — lines outside FOV properly culled
+- [x] Clouds/MCP repositioned for centered coords and brought within fog range (~40 ft from center)
+- [x] Build verified after centering fixes (Debug + Release DriverStation, Release TransportSmoke — all clean)
+
+### SmartDashboard changes (E:\code\SmartDashboard)
+
+| File | Change |
+|---|---|
+| `SmartDashboard/src/widgets/camera_viewer_dock.h` | Updated doc: auto-connect removed, auto-reconnect preserved |
+| `SmartDashboard/src/widgets/camera_viewer_dock.cpp` | Removed auto-connect (TryAutoConnect is no-op); URL edit moved to own row with label; visibility-changed handler no longer auto-connects |
+| `SmartDashboard/src/camera/mjpeg_stream_source.cpp` | Added qDebug logging: connect URL, first readyRead Content-Type, first frame decode, stream errors |
+| `SmartDashboard/tests/camera_viewer_dock_tests.cpp` | Updated 3 auto-connect tests to verify auto-connect does NOT fire; all 168 runnable tests pass |

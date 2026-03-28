@@ -30,6 +30,8 @@ WCHAR szWindowClass[MAX_LOADSTRING];            // the main window class name
 HWND g_hDlg = nullptr;
 HWND g_hNativeLinkCarrierLabel = nullptr;
 HWND g_hNativeLinkCarrierCombo = nullptr;
+HWND g_hVideoSourceLabel = nullptr;
+HWND g_hVideoSourceCombo = nullptr;
 
 //Since the lambda cannot capture, we must give it access to the robot here
 RobotTester *s_pRobotTester = nullptr;  
@@ -53,6 +55,14 @@ namespace
 	const wchar_t* c_WindowPosYKey = L"PosY";
 	const int c_NativeLinkCarrierLabelId = 1010;
 	const int c_NativeLinkCarrierComboId = 1011;
+	const int c_VideoSourceLabelId = 1012;
+	const int c_VideoSourceComboId = 1013;
+	const wchar_t* c_VideoSettingsSection = L"Video";
+	const wchar_t* c_VideoSourceKey = L"Source";
+
+	// Ian: Guard flag for video source combo — same pattern as s_populatingCombo
+	// for the connection mode combo.
+	bool s_populatingVideoCombo = false;
 
 	ConnectionMode GetDefaultConnectionMode()
 	{
@@ -224,13 +234,56 @@ namespace
 	void CreateNativeLinkCarrierControls(HWND hWnd)
 	{
 	#ifdef _DEBUG
+		// Ian: In Debug builds, the carrier combo goes on the SAME row as the
+		// Connection combo (to the right of it).  This keeps it out of the way
+		// of the Video Source combo's dropdown and doesn't add vertical space.
+		//
+		// Layout:  [Connection] [conn combo] [Carrier] [carrier combo]
+		// We query the Connection combo's actual position at runtime to stay
+		// DPI-independent.
+
+		// Ian: Get the Connection combo's position and size to place the Carrier
+		// to its right on the same row.
+		int carrierY = 0;
+		int carrierLabelY = 0;
+		int carrierLabelX = 200;   // fallback
+		int carrierComboX = 250;   // fallback
+
+		HWND hConnCombo = GetDlgItem(hWnd, IDC_ConnectionMode);
+		if (hConnCombo)
+		{
+			RECT rcConn = {};
+			GetWindowRect(hConnCombo, &rcConn);
+			POINT ptConnTL = { rcConn.left, rcConn.top };
+			POINT ptConnBR = { rcConn.right, rcConn.bottom };
+			ScreenToClient(hWnd, &ptConnTL);
+			ScreenToClient(hWnd, &ptConnBR);
+			carrierY = ptConnTL.y;
+			carrierLabelY = carrierY + 4;  // vertically center label with combo
+			// Ian: Place the carrier label 10px to the right of the Connection
+			// combo's right edge — enough gap to clear the Video dropdown below.
+			carrierLabelX = ptConnBR.x + 10;
+			carrierComboX = carrierLabelX + 46;  // "Carrier" label ~40px + 6px gap
+		}
+		else
+		{
+			carrierY = 90;
+			carrierLabelY = 94;
+		}
+
+		// Ian: Widen the dialog to fit the carrier controls.
 		RECT windowRect = {};
 		if (GetWindowRect(hWnd, &windowRect))
 		{
-			SetWindowPos(hWnd, nullptr, 0, 0,
-				windowRect.right - windowRect.left,
-				(windowRect.bottom - windowRect.top) + 26,
-				SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+			const int currentWidth = windowRect.right - windowRect.left;
+			const int neededWidth = carrierComboX + 120 + 30;  // combo width + margin
+			if (currentWidth < neededWidth)
+			{
+				SetWindowPos(hWnd, nullptr, 0, 0,
+					neededWidth,
+					windowRect.bottom - windowRect.top,
+					SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+			}
 		}
 
 		const HFONT dialogFont = reinterpret_cast<HFONT>(SendMessageW(hWnd, WM_GETFONT, 0, 0));
@@ -238,9 +291,9 @@ namespace
 			L"STATIC",
 			L"Carrier",
 			WS_CHILD | WS_VISIBLE,
-			26,
-			98 + 50,
-			46,
+			carrierLabelX,
+			carrierLabelY,
+			40,
 			12,
 			hWnd,
 			reinterpret_cast<HMENU>(static_cast<INT_PTR>(c_NativeLinkCarrierLabelId)),
@@ -250,9 +303,9 @@ namespace
 			L"COMBOBOX",
 			L"",
 			WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST | WS_VSCROLL,
-			78,
-			94 + 50,
-			112,
+			carrierComboX,
+			carrierY,
+			120,
 			100,
 			hWnd,
 			reinterpret_cast<HMENU>(static_cast<INT_PTR>(c_NativeLinkCarrierComboId)),
@@ -282,6 +335,185 @@ namespace
 	#else
 		UNREFERENCED_PARAMETER(hWnd);
 	#endif
+	}
+
+	// --- Video Source persistence and UI ---
+
+	VideoSourceMode GetDefaultVideoSource()
+	{
+		return VideoSourceMode::eSyntheticRadar;
+	}
+
+	VideoSourceMode NormalizeVideoSourceMode(int rawMode)
+	{
+		switch (rawMode)
+		{
+		case static_cast<int>(VideoSourceMode::eOff):
+			return VideoSourceMode::eOff;
+		case static_cast<int>(VideoSourceMode::eCamera):
+			return VideoSourceMode::eCamera;
+		case static_cast<int>(VideoSourceMode::eSyntheticRadar):
+			return VideoSourceMode::eSyntheticRadar;
+		case static_cast<int>(VideoSourceMode::eVirtualField):
+			return VideoSourceMode::eVirtualField;
+		default:
+			return GetDefaultVideoSource();
+		}
+	}
+
+	VideoSourceMode LoadPersistedVideoSource()
+	{
+		std::wstring settingsPath;
+		if (!TryGetConnectionSettingsPath(settingsPath))
+			return GetDefaultVideoSource();
+
+		const UINT rawMode = GetPrivateProfileIntW(
+			c_VideoSettingsSection,
+			c_VideoSourceKey,
+			static_cast<UINT>(GetDefaultVideoSource()),
+			settingsPath.c_str());
+		return NormalizeVideoSourceMode(static_cast<int>(rawMode));
+	}
+
+	void PersistVideoSource(VideoSourceMode mode)
+	{
+		std::wstring settingsPath;
+		if (!TryGetConnectionSettingsPath(settingsPath))
+			return;
+
+		wchar_t buffer[16];
+		_swprintf_p(buffer, _countof(buffer), L"%d", static_cast<int>(mode));
+		WritePrivateProfileStringW(
+			c_VideoSettingsSection,
+			c_VideoSourceKey,
+			buffer,
+			settingsPath.c_str());
+	}
+
+	void PopulateVideoSourceCombo(VideoSourceMode selectedMode)
+	{
+		if (!g_hVideoSourceCombo)
+			return;
+
+		s_populatingVideoCombo = true;
+		SendMessageW(g_hVideoSourceCombo, CB_RESETCONTENT, 0, 0);
+
+		// Ian: All four video source modes.
+		const VideoSourceMode modes[] =
+		{
+			VideoSourceMode::eOff,
+			VideoSourceMode::eCamera,
+			VideoSourceMode::eSyntheticRadar,
+			VideoSourceMode::eVirtualField,
+		};
+
+		int selectedIndex = 0;
+		for (int i = 0; i < static_cast<int>(_countof(modes)); ++i)
+		{
+			const wchar_t* label = GetVideoSourceModeName(modes[i]);
+			const LRESULT index = SendMessageW(g_hVideoSourceCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(label));
+			SendMessageW(g_hVideoSourceCombo, CB_SETITEMDATA, static_cast<WPARAM>(index), static_cast<LPARAM>(modes[i]));
+			if (modes[i] == selectedMode)
+				selectedIndex = static_cast<int>(index);
+		}
+
+		SendMessageW(g_hVideoSourceCombo, CB_SETCURSEL, static_cast<WPARAM>(selectedIndex), 0);
+		s_populatingVideoCombo = false;
+	}
+
+	// Ian: Create the Video Source label + combo box dynamically.
+	// Always visible (not debug-only like the NativeLink carrier combo).
+	// Placed below the Connection combo, extending the dialog height.
+	void CreateVideoSourceControls(HWND hWnd)
+	{
+		// Extend the dialog height to fit the new row
+		RECT windowRect = {};
+		if (GetWindowRect(hWnd, &windowRect))
+		{
+			SetWindowPos(hWnd, nullptr, 0, 0,
+				windowRect.right - windowRect.left,
+				(windowRect.bottom - windowRect.top) + 26,
+				SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+		}
+
+		const HFONT dialogFont = reinterpret_cast<HFONT>(SendMessageW(hWnd, WM_GETFONT, 0, 0));
+
+		// Ian: Position the Video controls directly below the Connection combo
+		// by querying its actual pixel position at runtime.  This avoids
+		// hardcoded pixel offsets that break if the dialog DLU→pixel mapping
+		// changes (e.g. different DPI or font).  The Connection combo and label
+		// are defined in the .rc template (DLU 78,70 and 26,74 respectively);
+		// we mirror their X positions and derive Y from the combo's bottom edge.
+		int xLabel = 26;   // fallback if GetDlgItem fails
+		int xCombo = 78;
+		int comboWidth = 112;
+		int yCombo = 90;
+		int labelHeight = 12;
+		constexpr int kRowGap = 4;  // pixels between Connection bottom and Video top
+
+		HWND hConnCombo = GetDlgItem(hWnd, IDC_ConnectionMode);
+		HWND hConnLabel = GetDlgItem(hWnd, IDC_ConnectionModeLabel);
+		if (hConnCombo)
+		{
+			RECT rcCombo = {};
+			GetWindowRect(hConnCombo, &rcCombo);
+			POINT ptComboTL = { rcCombo.left, rcCombo.top };
+			POINT ptComboBR = { rcCombo.right, rcCombo.bottom };
+			ScreenToClient(hWnd, &ptComboTL);
+			ScreenToClient(hWnd, &ptComboBR);
+			xCombo = ptComboTL.x;
+			comboWidth = ptComboBR.x - ptComboTL.x;
+			yCombo = ptComboBR.y + kRowGap;  // just below Connection combo
+		}
+		if (hConnLabel)
+		{
+			RECT rcLabel = {};
+			GetWindowRect(hConnLabel, &rcLabel);
+			POINT ptLabelTL = { rcLabel.left, rcLabel.top };
+			POINT ptLabelBR = { rcLabel.left, rcLabel.bottom };
+			ScreenToClient(hWnd, &ptLabelTL);
+			ScreenToClient(hWnd, &ptLabelBR);
+			xLabel = ptLabelTL.x;
+			labelHeight = ptLabelBR.y - ptLabelTL.y;
+		}
+		// Ian: Label is vertically centered relative to the combo.  The combo
+		// is taller than the label, so offset the label down by ~4px.
+		const int yLabel = yCombo + 4;
+
+		g_hVideoSourceLabel = CreateWindowW(
+			L"STATIC",
+			L"Video",
+			WS_CHILD | WS_VISIBLE,
+			xLabel,
+			yLabel,
+			46,
+			labelHeight,
+			hWnd,
+			reinterpret_cast<HMENU>(static_cast<INT_PTR>(c_VideoSourceLabelId)),
+			hInst,
+			nullptr);
+		g_hVideoSourceCombo = CreateWindowW(
+			L"COMBOBOX",
+			L"",
+			WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST | WS_VSCROLL,
+			xCombo,
+			yCombo,
+			comboWidth,
+			100,
+			hWnd,
+			reinterpret_cast<HMENU>(static_cast<INT_PTR>(c_VideoSourceComboId)),
+			hInst,
+			nullptr);
+
+		if (dialogFont)
+		{
+			if (g_hVideoSourceLabel)
+				SendMessageW(g_hVideoSourceLabel, WM_SETFONT, reinterpret_cast<WPARAM>(dialogFont), TRUE);
+			if (g_hVideoSourceCombo)
+				SendMessageW(g_hVideoSourceCombo, WM_SETFONT, reinterpret_cast<WPARAM>(dialogFont), TRUE);
+		}
+
+		PopulateVideoSourceCombo(LoadPersistedVideoSource());
 	}
 
 	bool LoadPersistedWindowPosition(POINT& windowPosition)
@@ -428,6 +660,34 @@ void ApplyConnectionMode(ConnectionMode mode)
 	message += L"\n";
 	OutputDebugStringW(message.c_str());
 }
+
+void ApplyVideoSource(VideoSourceMode mode)
+{
+	if (s_pRobotTester)
+	{
+		s_pRobotTester->SetVideoSource(mode);
+		// Ian: The backend may fall back to Off if the requested source fails
+		// (e.g. Camera selected but no camera connected).  Read back the actual
+		// mode so the UI combo and INI stay in sync with reality.
+		const VideoSourceMode actualMode = s_pRobotTester->GetVideoSource();
+		if (actualMode != mode)
+		{
+			OutputDebugStringW(L"Video source fell back from requested mode — updating UI\n");
+			mode = actualMode;
+		}
+	}
+	if (g_hVideoSourceCombo)
+	{
+		PopulateVideoSourceCombo(mode);
+	}
+	PersistVideoSource(mode);
+
+	std::wstring vmsg = L"Video Source: ";
+	vmsg += GetVideoSourceModeName(mode);
+	vmsg += L"\n";
+	OutputDebugStringW(vmsg.c_str());
+}
+
 //Keyboard *s_Keyboard = nullptr;
 
 __inline void GetParentDirectory(std::wstring &path)
@@ -488,6 +748,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 			CheckDlgButton(hWnd, IDC_Tele, BM_SETCHECK);
 			CheckDlgButton(hWnd, IDC_Stop, BM_SETCHECK);
 			PopulateConnectionModeCombo(hWnd, s_InitialConnectionMode);
+			CreateVideoSourceControls(hWnd);
 			CreateNativeLinkCarrierControls(hWnd);
 			RestorePersistedWindowPosition(hWnd);
 			return (INT_PTR)TRUE;
@@ -572,6 +833,20 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 					s_pRobotTester->SetConnectionMode(ConnectionMode::eNativeLink);
 			}
 			break;
+		// Ian: Video source combo — same pattern as connection mode combo.
+		// The guard flag s_populatingVideoCombo prevents re-entrancy when
+		// PopulateVideoSourceCombo fires CBN_SELCHANGE during repopulation.
+		case c_VideoSourceComboId:
+			if (HIWORD(wParam) == CBN_SELCHANGE && !s_populatingVideoCombo)
+			{
+				const LRESULT selectedIndex = SendMessageW(g_hVideoSourceCombo, CB_GETCURSEL, 0, 0);
+				if (selectedIndex != CB_ERR)
+				{
+					const LRESULT itemData = SendMessageW(g_hVideoSourceCombo, CB_GETITEMDATA, static_cast<WPARAM>(selectedIndex), 0);
+					ApplyVideoSource(static_cast<VideoSourceMode>(itemData));
+				}
+			}
+			break;
 			case IDM_EXIT:
 			case IDCANCEL:  //Not sure why this 2 is the same as the close button
 				printf("Shutting down\n");
@@ -635,6 +910,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	s_pRobotTester = &_robot_tester;
 	_robot_tester.RobotTester_create();
 	ApplyConnectionMode(s_InitialConnectionMode);
+	// Ian: Apply persisted video source after connection mode is established,
+	// so the backend exists and can receive the SetVideoSource call.
+	ApplyVideoSource(LoadPersistedVideoSource());
 	//Bind robot for Keyboard binding
 	//BindRobot(_robot_tester);
 	_robot_tester.RobotTester_init();

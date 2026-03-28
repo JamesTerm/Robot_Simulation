@@ -2,6 +2,10 @@
 #include "Transport.h"
 #include "NativeLink.h"
 #include "NT4Server.h"
+#include "MjpegServer.h"
+#include "SimCameraSource.h"
+#include "TronGridSource.h"
+#include "WebCameraSource.h"
 
 #include "../../../Libraries/SmartDashboard/SmartDashboard_Import.h"
 
@@ -1544,6 +1548,10 @@ public:
 			if (m_running)
 			{
 				OutputDebugStringW(L"[Transport] NT4 backend initialized on port 5810\n");
+
+				// Ian: Default to Synthetic Radar to preserve existing behavior.
+				// The DriverStation UI can change this at runtime via SetVideoSource().
+				SetVideoSource(VideoSourceMode::eSyntheticRadar);
 			}
 			else
 			{
@@ -1552,6 +1560,8 @@ public:
 		}
 		void Shutdown() override
 		{
+			// Ian: Stop any active video source and the MJPEG server.
+			SetVideoSource(VideoSourceMode::eOff);
 			SmartDashboard::ClearDirectPublishSink();
 			SmartDashboard::ClearDirectQuerySource();
 			m_nt4Server.Stop();
@@ -1616,6 +1626,209 @@ public:
 		NT4Server m_nt4Server;
 		bool m_running = false;
 
+		// Ian: Camera streaming infrastructure — refactored for video source switching.
+		// The MJPEG server stays alive for any non-Off video source.  The frame source
+		// (SimCameraSource, WebCameraSource, or TronGridSource) is swapped at runtime
+		// via SetVideoSource().
+		//
+		// Ian: LESSON LEARNED — these must be unique_ptrs, not inline members, because
+		// MjpegServer inherits from ix::SocketServer which is not movable/copyable.
+		std::unique_ptr<MjpegServer> m_mjpegServer;
+		std::unique_ptr<SimCameraSource> m_syntheticSource;
+		std::unique_ptr<WebCameraSource> m_webCamSource;
+		std::unique_ptr<TronGridSource> m_tronGridSource;
+		VideoSourceMode m_videoMode = VideoSourceMode::eOff;
+
+		// Ian: SetVideoSource handles the full transition between video modes:
+		//   Off → Source:  start MJPEG server, start source, publish discovery keys
+		//   Source → Source: stop old source, start new source (server stays alive)
+		//   Source → Off:  stop source, stop MJPEG server, publish disconnected
+		void SetVideoSource(VideoSourceMode mode) override
+		{
+			if (mode == m_videoMode && mode != VideoSourceMode::eOff)
+				return;
+
+			if (!m_running && mode != VideoSourceMode::eOff)
+			{
+				OutputDebugStringW(L"[Transport] Cannot set video source — NT4 backend not running\n");
+				return;
+			}
+
+			// Ian: eVirtualField is "The Grid" — first-person Tron-style virtual field camera.
+			// No special fallback needed; handled in the switch below.
+
+			// Stop current source (but keep MJPEG server alive if switching sources)
+			StopCurrentSource();
+
+			if (mode == VideoSourceMode::eOff)
+			{
+				// Tear down MJPEG server entirely
+				StopMjpegServer();
+				m_videoMode = VideoSourceMode::eOff;
+				PublishCameraDisconnected();
+				OutputDebugStringW(L"[Transport] Video source: Off\n");
+				return;
+			}
+
+			// Ensure MJPEG server is running
+			if (!m_mjpegServer)
+			{
+				if (!StartMjpegServer())
+				{
+					m_videoMode = VideoSourceMode::eOff;
+					return;
+				}
+			}
+
+			// Start the requested source
+			switch (mode)
+			{
+			case VideoSourceMode::eCamera:
+				m_webCamSource = std::make_unique<WebCameraSource>();
+				m_webCamSource->Start(m_mjpegServer.get(), 320, 240, 15);
+				// Ian: Wait for the worker thread to report whether the camera
+				// driver connected.  If no camera is found (or the driver fails),
+				// fall back to Off so the user doesn't see a stalled stream.
+				if (!m_webCamSource->WaitForStartup(2000))
+				{
+					OutputDebugStringW(L"[Transport] Camera failed to start — no camera found, falling back to Off\n");
+					m_webCamSource->Stop();
+					m_webCamSource.reset();
+					StopMjpegServer();
+					m_videoMode = VideoSourceMode::eOff;
+					PublishCameraDisconnected();
+					return;
+				}
+				PublishCameraConnected("USB Webcam");
+				OutputDebugStringW(L"[Transport] Video source: Camera (USB webcam)\n");
+				break;
+
+			case VideoSourceMode::eSyntheticRadar:
+				m_syntheticSource = std::make_unique<SimCameraSource>();
+				m_syntheticSource->Start(m_mjpegServer.get(), 320, 240, 15);
+				PublishCameraConnected("Simulator Synthetic Camera");
+				OutputDebugStringW(L"[Transport] Video source: Synthetic Radar\n");
+				break;
+
+			case VideoSourceMode::eVirtualField:
+			{
+				// Ian: "The Grid" — Tron-style first-person virtual field camera.
+				// Position callback reads robot X/Y/Heading from the NT4 retained
+				// cache each frame.  The callback captures `this` (NT4Backend)
+				// which outlives the TronGridSource (StopCurrentSource is called
+				// before backend shutdown).
+				m_tronGridSource = std::make_unique<TronGridSource>();
+				m_tronGridSource->SetPositionCallback(
+					[this](double& x_ft, double& y_ft, double& heading_deg) -> bool
+					{
+						if (!m_running) return false;
+						bool gotX = m_nt4Server.TryGetNumber("/SmartDashboard/Drive/X_ft", x_ft);
+						bool gotY = m_nt4Server.TryGetNumber("/SmartDashboard/Drive/Y_ft", y_ft);
+						bool gotH = m_nt4Server.TryGetNumber("/SmartDashboard/Drive/Heading", heading_deg);
+						return gotX && gotY && gotH;
+					});
+				m_tronGridSource->Start(m_mjpegServer.get(), 320, 240, 15);
+				PublishCameraConnected("The Grid (Tron Virtual Field)");
+				OutputDebugStringW(L"[Transport] Video source: The Grid (Tron Virtual Field)\n");
+				break;
+			}
+
+			default:
+				break;
+			}
+
+			m_videoMode = mode;
+		}
+
+		VideoSourceMode GetVideoSource() const override
+		{
+			return m_videoMode;
+		}
+
+		// Ian: Start the MJPEG HTTP server on port 1181.
+		// Returns true on success.  Must be called BEFORE publishing CameraPublisher
+		// keys, because a fast dashboard might try to connect immediately.
+		bool StartMjpegServer()
+		{
+			m_mjpegServer = std::make_unique<MjpegServer>(1181, "0.0.0.0");
+			auto [listenOk, listenErr] = m_mjpegServer->listen();
+			if (!listenOk)
+			{
+				OutputDebugStringA(("[Transport] MJPEG server failed to listen: " + listenErr + "\n").c_str());
+				m_mjpegServer.reset();
+				return false;
+			}
+			m_mjpegServer->start();
+			OutputDebugStringW(L"[Transport] MJPEG server started on port 1181\n");
+			return true;
+		}
+
+		// Ian: Stop the MJPEG server.  Must call StopCurrentSource() first to avoid
+		// PushFrame() calls arriving on a stopped server.
+		void StopMjpegServer()
+		{
+			if (!m_mjpegServer)
+				return;
+
+			m_mjpegServer->SignalStop();
+			m_mjpegServer->stop();
+			m_mjpegServer.reset();
+			OutputDebugStringW(L"[Transport] MJPEG server stopped\n");
+		}
+
+		// Ian: Stop whichever frame source is currently active.
+		void StopCurrentSource()
+		{
+			if (m_syntheticSource)
+			{
+				m_syntheticSource->Stop();
+				m_syntheticSource.reset();
+			}
+			if (m_webCamSource)
+			{
+				m_webCamSource->Stop();
+				m_webCamSource.reset();
+			}
+			if (m_tronGridSource)
+			{
+				m_tronGridSource->Stop();
+				m_tronGridSource.reset();
+			}
+		}
+
+		// Ian: Publish CameraPublisher discovery keys via NT4.
+		// SmartDashboard's CameraPublisherDiscovery watches for:
+		//   /CameraPublisher/{name}/streams  (string array with "mjpg:" prefix)
+		//   /CameraPublisher/{name}/source   (string, description)
+		//   /CameraPublisher/{name}/connected (boolean)
+		void PublishCameraConnected(const std::string& sourceDescription)
+		{
+			if (!m_running)
+				return;
+
+			m_nt4Server.PublishStringArray(
+				"/CameraPublisher/SimCamera/streams",
+				{"mjpg:http://127.0.0.1:1181/?action=stream"});
+			m_nt4Server.PublishString(
+				"/CameraPublisher/SimCamera/source",
+				sourceDescription);
+			m_nt4Server.PublishBoolean(
+				"/CameraPublisher/SimCamera/connected",
+				true);
+
+			OutputDebugStringW(L"[Transport] CameraPublisher keys published for auto-discovery\n");
+		}
+
+		void PublishCameraDisconnected()
+		{
+			if (!m_running)
+				return;
+
+			m_nt4Server.PublishBoolean(
+				"/CameraPublisher/SimCamera/connected",
+				false);
+		}
+
 		// Ian: Convert a flat SmartDashboard key to an NT4 topic path.
 		// If the key already starts with '/', use it as-is.
 		// Otherwise prefix with "/SmartDashboard/".
@@ -1640,6 +1853,23 @@ const wchar_t* GetConnectionModeName(ConnectionMode mode)
 		return L"NetworkTables V4";
 	case ConnectionMode::eNativeLink:
 		return L"Native Link";
+	default:
+		return L"Unknown";
+	}
+}
+
+const wchar_t* GetVideoSourceModeName(VideoSourceMode mode)
+{
+	switch (mode)
+	{
+	case VideoSourceMode::eOff:
+		return L"Off";
+	case VideoSourceMode::eCamera:
+		return L"Camera";
+	case VideoSourceMode::eSyntheticRadar:
+		return L"Synthetic Radar";
+	case VideoSourceMode::eVirtualField:
+		return L"The Grid";
 	default:
 		return L"Unknown";
 	}
@@ -1731,6 +1961,19 @@ void DashboardTransportRouter::Shutdown()
 {
 	if (m_backend)
 		m_backend->Shutdown();
+}
+
+void DashboardTransportRouter::SetVideoSource(VideoSourceMode mode)
+{
+	if (m_backend)
+		m_backend->SetVideoSource(mode);
+}
+
+VideoSourceMode DashboardTransportRouter::GetVideoSource() const
+{
+	if (m_backend)
+		return m_backend->GetVideoSource();
+	return VideoSourceMode::eOff;
 }
 
 void DashboardTransportRouter::EnsureBackend()

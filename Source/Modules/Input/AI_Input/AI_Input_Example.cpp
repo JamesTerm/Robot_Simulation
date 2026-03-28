@@ -51,7 +51,7 @@ private:
 			double& Timer = m_Parent->m_Timer;
 			if (m_Status == eActive)
 			{
-				SmartDashboard::PutNumber("Timer", AutonomousTimeLimit - Timer);
+				SmartDashboard::PutNumber("Autonomous/Timer", AutonomousTimeLimit - Timer);
 				Timer += dTime_s;
 				if (Timer >= AutonomousTimeLimit)
 					m_Status = eCompleted;
@@ -76,12 +76,12 @@ private:
 				bool SafetyLock=false;
 				try
 				{
-					SafetyLock = SmartDashboard::GetBoolean("SafetyLock_Drive");
+					SafetyLock = SmartDashboard::GetBoolean("Autonomous/SafetyLock_Drive");
 				}
 				catch (...)
 				{
 					//set up default for nothing
-					SmartDashboard::PutBoolean("SafetyLock_Drive", false);
+					SmartDashboard::PutBoolean("Autonomous/SafetyLock_Drive", false);
 				}
 
 				if (SafetyLock)
@@ -327,7 +327,7 @@ public:
 		m_Timer = 0.0;
 		AutonType AutonTest = eDoNothing;
 		const char* const AutonTestSelection = "AutonTest";
-		const char* const AutonChooserBase = "Test/Auton_Selection/AutoChooser";
+		const char* const AutonChooserBase = "Autonomous/Auton_Selection/AutoChooser";
 		size_t autonOptionCount = 0;
 		const AutonChooserOption* autonOptions = GetAutonChooserOptions(autonOptionCount);
 		// Ian: Keep chooser state on its own key path so Direct chooser work never
