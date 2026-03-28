@@ -398,13 +398,13 @@ namespace
 		s_populatingVideoCombo = true;
 		SendMessageW(g_hVideoSourceCombo, CB_RESETCONTENT, 0, 0);
 
-		// Ian: Only list the first 3 modes for now.
-		// eVirtualField (3) will be added once implemented.
+		// Ian: All four video source modes.
 		const VideoSourceMode modes[] =
 		{
 			VideoSourceMode::eOff,
 			VideoSourceMode::eCamera,
 			VideoSourceMode::eSyntheticRadar,
+			VideoSourceMode::eVirtualField,
 		};
 
 		int selectedIndex = 0;

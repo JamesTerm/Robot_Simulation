@@ -223,6 +223,7 @@ add_executable(DriverStation_TransportSmoke
     Source/Application/DriverStation/DriverStation/NT4Server.cpp
     Source/Application/DriverStation/DriverStation/MjpegServer.cpp
     Source/Application/DriverStation/DriverStation/SimCameraSource.cpp
+    Source/Application/DriverStation/DriverStation/TronGridSource.cpp
     Source/Application/DriverStation/DriverStation/WebCameraSource.cpp
     Source/Application/DriverStation/DriverStation/NativeLinkAuthorityHelpers.cpp
     Source/Application/DriverStation/DriverStation/NativeLink.cpp
@@ -303,6 +304,7 @@ if(BUILD_DRIVER_STATION)
         Source/Application/DriverStation/DriverStation/NT4Server.cpp
         Source/Application/DriverStation/DriverStation/MjpegServer.cpp
         Source/Application/DriverStation/DriverStation/SimCameraSource.cpp
+        Source/Application/DriverStation/DriverStation/TronGridSource.cpp
         Source/Application/DriverStation/DriverStation/WebCameraSource.cpp
         Source/Application/DriverStation/DriverStation/NativeLinkAuthorityHelpers.cpp
         Source/Application/DriverStation/DriverStation/NativeLink.cpp

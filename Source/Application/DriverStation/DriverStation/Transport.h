@@ -41,7 +41,7 @@ enum class VideoSourceMode
 	eOff = 0,             // No camera stream — MJPEG server shut down
 	eCamera = 1,          // USB webcam via Video for Windows (VFW)
 	eSyntheticRadar = 2,  // Existing SimCameraSource radar sweep pattern
-	eVirtualField = 3     // Future: 3D vector graphic virtual playing field
+	eVirtualField = 3     // "The Grid" — Tron-style first-person virtual field (TronGridSource)
 };
 
 const wchar_t* GetVideoSourceModeName(VideoSourceMode mode);

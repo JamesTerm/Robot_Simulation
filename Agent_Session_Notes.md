@@ -263,7 +263,7 @@ video sources feeding the MJPEG server on port 1181.
 | Off | `VideoSourceMode::eOff` | No camera stream; MJPEG server torn down |
 | Camera | `VideoSourceMode::eCamera` | USB webcam via VFW (Video for Windows) |
 | Synthetic Radar | `VideoSourceMode::eSyntheticRadar` | Existing SimCameraSource radar sweep (default) |
-| Virtual Field | `VideoSourceMode::eVirtualField` | 3D virtual playing field (deferred — not yet implemented) |
+| The Grid | `VideoSourceMode::eVirtualField` | Tron-style first-person virtual field camera (TronGridSource) |
 
 ### Architecture
 
@@ -313,7 +313,59 @@ video sources feeding the MJPEG server on port 1181.
   of the Video dropdown.
 
 - **`stb_image_write`**: `STB_IMAGE_WRITE_IMPLEMENTATION` defined exactly once in
-  `SimCameraSource.cpp`. `WebCameraSource.cpp` only includes the header for declarations.
+  `SimCameraSource.cpp`. `WebCameraSource.cpp` and `TronGridSource.cpp` only include
+  the header for declarations.
+
+- **TronGridSource** (`TronGridSource.h/.cpp`): "The Grid" — first-person Tron-style
+  virtual field camera.  Pure software 3D renderer using the same pixel-buffer +
+  Bresenham drawing pattern as SimCameraSource.  Zero OSG/OpenGL dependency — avoids
+  crash risk from GPU context creation on worker threads.
+
+  Renders a 54×27 ft FRC field as a glowing cyan wireframe grid on black background,
+  viewed from the robot's perspective (camera at robot position, 2 ft height, looking
+  in heading direction).  Features:
+  - 3D perspective projection via software pinhole camera model (90° HFOV)
+  - 1-foot-spaced floor grid with depth fog (cyan fades to dark blue with distance)
+  - Field boundary walls as bright cyan-white wireframe rectangles (1.5 ft tall)
+  - Squid Games FIRST emblem at field center: red circle, white triangle, blue square
+  - Background clouds: distant dim wireframe rectangles floating in the void (Flynn
+    falling into the digital world aesthetic)
+  - MCP tower: tall red wireframe monolith far to the north with glowing band stripes
+  - CRT scanline effect for retro aesthetic (no HUD text — pure black background)
+  - Off-field arrow: orange arrow pointing back toward field center when robot
+    wanders outside field bounds
+  - Near-plane line clipping to prevent projection artifacts from behind-camera geometry
+  - Safety limits on Bresenham line length to prevent frame lockup from bad projections
+
+  Ian: LESSON LEARNED — OSG offscreen FBO rendering on a worker thread crashes on
+  many Windows GPU drivers.  The pure-software approach is immune — only needs CPU
+  and std::vector<uint8_t>.  At 320×240 @ 15fps the CPU cost is negligible.
+
+  Ian: Robot position is read each frame via a callback that queries the NT4 retained
+  value cache for `/SmartDashboard/Drive/X_ft`, `Y_ft`, and `Heading`.  The callback
+  is set by NT4Backend when creating the source, capturing `this` pointer — safe because
+  StopCurrentSource() is always called before backend shutdown.
+
+  Ian: Field coordinate mapping — the robot starts at (0,0) in the simulator which is
+  mapped to field position (27, 1) — center of the near alliance wall, 1 ft from the
+  wall.  This places the robot naturally on the field.
+
+  Ian: HEADING INVERSION — The published Drive/Heading uses atan2(x,y) which gives
+  CW-positive from +Y.  But WorldToCamera() expects CCW-positive (standard math
+  convention).  The heading must be negated: `m_headingDeg = -heading;`.  This also
+  fixed the grid lines and walls rendering in wrong positions — they all flow through
+  the same WorldToCamera() rotation matrix.
+
+  Ian: CENTERED COORDINATE SYSTEM — Robot (0,0) from the simulator maps directly to
+  field center (0,0).  The field spans X ∈ [-27, +27], Y ∈ [-13.5, +13.5].  No offset
+  mapping needed.  The old system offset to (27, 1) which was wrong — when the robot
+  reported negative Y it triggered the off-field arrow prematurely.
+
+  Ian: SCREEN-SPACE CLIPPING — Lines outside the camera FOV were still being drawn
+  because the old code used a generous 200px margin check.  Replaced with proper
+  Cohen-Sutherland 2D line clipping against the screen rectangle.  This clips line
+  segments to exactly the visible area before Bresenham, eliminating wasted pixel
+  traversals and incorrect rendering of off-FOV geometry.
 
 ### New files
 
@@ -321,17 +373,19 @@ video sources feeding the MJPEG server on port 1181.
 |---|---|
 | `Source/Application/DriverStation/DriverStation/WebCameraSource.h` | VFW webcam capture header |
 | `Source/Application/DriverStation/DriverStation/WebCameraSource.cpp` | VFW webcam capture implementation |
+| `Source/Application/DriverStation/DriverStation/TronGridSource.h` | "The Grid" Tron-style first-person virtual field camera header |
+| `Source/Application/DriverStation/DriverStation/TronGridSource.cpp` | "The Grid" implementation: software 3D renderer, perspective grid, Squid Games emblem, background clouds, MCP tower |
 
 ### Modified files
 
 | File | Change |
 |---|---|
-| `Transport.h` | Added `VideoSourceMode` enum, `GetVideoSourceModeName()`, virtual `SetVideoSource()`/`GetVideoSource()` on `IConnectionBackend`, forwarding on `DashboardTransportRouter` |
-| `Transport.cpp` | Refactored NT4Backend camera management: `SetVideoSource()` override with helper methods; added `#include "WebCameraSource.h"`; router forwarding implementations |
+| `Transport.h` | Added `VideoSourceMode` enum, `GetVideoSourceModeName()`, virtual `SetVideoSource()`/`GetVideoSource()` on `IConnectionBackend`, forwarding on `DashboardTransportRouter`; updated eVirtualField comment to "The Grid" |
+| `Transport.cpp` | Refactored NT4Backend camera management: `SetVideoSource()` override with helper methods; added `#include "TronGridSource.h"`; `eVirtualField` case creates TronGridSource with position callback reading NT4 cache; `StopCurrentSource()` handles TronGridSource cleanup; display name "The Grid"; router forwarding implementations |
 | `Robot_Tester.h` | Added `SetVideoSource()`/`GetVideoSource()` declarations |
 | `Robot_Tester.cpp` | Added `SetVideoSource()`/`GetVideoSource()` implementations forwarding through router |
 | `DriverStation.cpp` | Added video source UI controls, persistence, `ApplyVideoSource()`, WM_INITDIALOG/WM_COMMAND wiring |
-| `CMakeLists.txt` | Added `WebCameraSource.cpp` to DriverStation + TransportSmoke targets; added `vfw32` to link libs |
+| `CMakeLists.txt` | Added `WebCameraSource.cpp` and `TronGridSource.cpp` to DriverStation + TransportSmoke targets; added `vfw32` to link libs |
 
 ### Status
 
@@ -353,6 +407,21 @@ video sources feeding the MJPEG server on port 1181.
 - [x] End-to-end test: Off mode verified (port 1181 connection refused)
 - [x] End-to-end test: Camera mode verified (640x480, ~22KB real webcam frames)
 - [x] No-camera fallback: WaitForStartup() + SetVideoSource falls back to Off, UI combo + INI updated
+- [x] TronGridSource.h/.cpp created — "The Grid" first-person Tron-style virtual field camera
+- [x] Transport.cpp — eVirtualField wired to TronGridSource with NT4 position callback
+- [x] Transport.h — eVirtualField comment updated to "The Grid"
+- [x] GetVideoSourceModeName returns "The Grid" for eVirtualField
+- [x] CMakeLists.txt — TronGridSource.cpp added to both targets
+- [x] Build verified (Debug + Release DriverStation, Release TransportSmoke — all clean, 17 unit tests pass)
+- [x] Heading inversion fixed: `m_headingDeg = -heading` — fixes rotation direction AND grid/wall rendering
+- [x] HUD text removed: "THE GRID" title, position, heading, FPS, frame counter all stripped; CRT scanlines kept
+- [x] Background clouds added: 12 distant dim wireframe rectangles floating in the void with gentle drift
+- [x] MCP tower added: tall red wireframe monolith at Y=40 with 5 glowing band stripes
+- [x] Build verified after all fixes (Debug + Release DriverStation, Release TransportSmoke — all clean)
+- [x] Coordinate system fixed: field centered at origin, X ∈ [-27,+27], Y ∈ [-13.5,+13.5], no offset mapping
+- [x] Cohen-Sutherland screen-space line clipping added — lines outside FOV properly culled
+- [x] Clouds/MCP repositioned for centered coords and brought within fog range (~40 ft from center)
+- [x] Build verified after centering fixes (Debug + Release DriverStation, Release TransportSmoke — all clean)
 
 ### SmartDashboard changes (E:\code\SmartDashboard)
 

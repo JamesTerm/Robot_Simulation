@@ -4,6 +4,7 @@
 #include "NT4Server.h"
 #include "MjpegServer.h"
 #include "SimCameraSource.h"
+#include "TronGridSource.h"
 #include "WebCameraSource.h"
 
 #include "../../../Libraries/SmartDashboard/SmartDashboard_Import.h"
@@ -1627,13 +1628,15 @@ public:
 
 		// Ian: Camera streaming infrastructure — refactored for video source switching.
 		// The MJPEG server stays alive for any non-Off video source.  The frame source
-		// (SimCameraSource or WebCameraSource) is swapped at runtime via SetVideoSource().
+		// (SimCameraSource, WebCameraSource, or TronGridSource) is swapped at runtime
+		// via SetVideoSource().
 		//
 		// Ian: LESSON LEARNED — these must be unique_ptrs, not inline members, because
 		// MjpegServer inherits from ix::SocketServer which is not movable/copyable.
 		std::unique_ptr<MjpegServer> m_mjpegServer;
 		std::unique_ptr<SimCameraSource> m_syntheticSource;
 		std::unique_ptr<WebCameraSource> m_webCamSource;
+		std::unique_ptr<TronGridSource> m_tronGridSource;
 		VideoSourceMode m_videoMode = VideoSourceMode::eOff;
 
 		// Ian: SetVideoSource handles the full transition between video modes:
@@ -1651,12 +1654,8 @@ public:
 				return;
 			}
 
-			// Ian: eVirtualField is not implemented yet — fall back to Off.
-			if (mode == VideoSourceMode::eVirtualField)
-			{
-				OutputDebugStringW(L"[Transport] Virtual Field video source not yet implemented — using Off\n");
-				mode = VideoSourceMode::eOff;
-			}
+			// Ian: eVirtualField is "The Grid" — first-person Tron-style virtual field camera.
+			// No special fallback needed; handled in the switch below.
 
 			// Stop current source (but keep MJPEG server alive if switching sources)
 			StopCurrentSource();
@@ -1710,6 +1709,29 @@ public:
 				PublishCameraConnected("Simulator Synthetic Camera");
 				OutputDebugStringW(L"[Transport] Video source: Synthetic Radar\n");
 				break;
+
+			case VideoSourceMode::eVirtualField:
+			{
+				// Ian: "The Grid" — Tron-style first-person virtual field camera.
+				// Position callback reads robot X/Y/Heading from the NT4 retained
+				// cache each frame.  The callback captures `this` (NT4Backend)
+				// which outlives the TronGridSource (StopCurrentSource is called
+				// before backend shutdown).
+				m_tronGridSource = std::make_unique<TronGridSource>();
+				m_tronGridSource->SetPositionCallback(
+					[this](double& x_ft, double& y_ft, double& heading_deg) -> bool
+					{
+						if (!m_running) return false;
+						bool gotX = m_nt4Server.TryGetNumber("/SmartDashboard/Drive/X_ft", x_ft);
+						bool gotY = m_nt4Server.TryGetNumber("/SmartDashboard/Drive/Y_ft", y_ft);
+						bool gotH = m_nt4Server.TryGetNumber("/SmartDashboard/Drive/Heading", heading_deg);
+						return gotX && gotY && gotH;
+					});
+				m_tronGridSource->Start(m_mjpegServer.get(), 320, 240, 15);
+				PublishCameraConnected("The Grid (Tron Virtual Field)");
+				OutputDebugStringW(L"[Transport] Video source: The Grid (Tron Virtual Field)\n");
+				break;
+			}
 
 			default:
 				break;
@@ -1766,6 +1788,11 @@ public:
 			{
 				m_webCamSource->Stop();
 				m_webCamSource.reset();
+			}
+			if (m_tronGridSource)
+			{
+				m_tronGridSource->Stop();
+				m_tronGridSource.reset();
 			}
 		}
 
@@ -1842,7 +1869,7 @@ const wchar_t* GetVideoSourceModeName(VideoSourceMode mode)
 	case VideoSourceMode::eSyntheticRadar:
 		return L"Synthetic Radar";
 	case VideoSourceMode::eVirtualField:
-		return L"Virtual Field";
+		return L"The Grid";
 	default:
 		return L"Unknown";
 	}
