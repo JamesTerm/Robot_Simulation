@@ -8,15 +8,6 @@ Actionable future work for this repository.
 
 ---
 
-## Active: Camera widget remaining phases (`feature/camera-widget`)
-
-Camera MJPEG server (Phase 3), Video Source selector, and "The Grid" TronGridSource are all **complete**. Full details in `docs/project_history.md` (2026-03-28 and 2026-03-27 entries).
-
-- [ ] **Phase 4:** Backup camera guide lines — OSG-side overlay baked into MJPEG frames (Honda-style curved path lines driven by velocity/angular velocity). See `D:\code\SmartDashboard\docs\camera_widget_design.md` for the design note on two-source-mode support (OSG framebuffer vs USB camera + OSG composite). **(cross-repo)**
-- [ ] Manual end-to-end test with SmartDashboard camera viewer dock **(cross-repo)**
-
----
-
 ## Deferred work
 
 Lower-priority items parked for future consideration.

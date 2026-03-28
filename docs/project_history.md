@@ -1,5 +1,24 @@
 # Project history
 
+## 2026-03-28 - Camera Phase 4 closed, manual e2e verified
+
+### Phase 4 — Backup camera guide lines (closed, superseded)
+
+The original Phase 4 concept — OSG-side overlays baked into the MJPEG stream (Honda-style curved path lines driven by velocity/angular velocity) — was dropped. The design decision:
+
+1. **Overlays belong on the dashboard side (QPainter), not baked into the stream.** SmartDashboard's `CameraDisplayWidget` already draws a targeting reticle via QPainter. Any future guide-line or annotation overlay should follow the same pattern. This keeps the MJPEG server simple, the stream reusable by any client, and aligns with how FRC teams handle camera overlays today.
+2. **"The Grid" (TronGridSource)** already provides first-person spatial awareness driven by robot position/heading, which serves the purpose backup camera guide lines were intended to address.
+
+### Manual end-to-end test — verified
+
+SmartDashboard camera viewer dock receives and displays MJPEG streams from Robot_Simulation across all video source modes (Synthetic Radar, The Grid, USB Camera). Auto-discovery via `/CameraPublisher/SimCamera/streams` works end-to-end over NT4.
+
+### H.264 — dropped (cross-repo decision)
+
+Research concluded FRC teams are not using H.264 for dashboard camera streams. FMS bandwidth standards are adequate for MJPEG. No implementation planned.
+
+---
+
 ## 2026-03-28 - Video Source selector complete (`feature/camera-widget`)
 
 Video Source dropdown in the DriverStation dialog that lets the user switch between video sources feeding the MJPEG server on port 1181.
@@ -79,6 +98,27 @@ Video Source dropdown in the DriverStation dialog that lets the user switch betw
 | `camera_viewer_dock.cpp` | Removed auto-connect (TryAutoConnect is no-op); URL edit moved to own row |
 | `mjpeg_stream_source.cpp` | Added qDebug logging for diagnostics |
 | `camera_viewer_dock_tests.cpp` | Updated 3 auto-connect tests; all 168 runnable tests pass |
+
+---
+
+## 2026-03-27 - NT4 keys reorganized into logical groups
+
+Reorganized all published NT4 keys from flat `/SmartDashboard/<key>` into hierarchical groups (`ddc90e1`):
+
+| Group | Keys |
+|---|---|
+| `Drive/` | `Velocity`, `Rotation Velocity`, `X_ft`, `Y_ft`, `Heading`, `Travel_Heading` |
+| `Swerve/` | `Wheel_{fl,fr,rl,rr}_Velocity`, `Wheel_{fl,fr,rl,rr}_Voltage`, `wheel_{fl,fr,rl,rr}_Encoder`, `Swivel_{fl,fr,rl,rr}_Voltage`, `swivel_{fl,fr,rl,rr}_Raw` |
+| `Manipulator/` | (future expansion) |
+| `Autonomous/` | `Timer`, `TestMove`, `AutonTest` |
+
+This gives SmartDashboard's Run Browser dock meaningful tree structure instead of a flat list of ~49 keys. Key paths are now `/SmartDashboard/Drive/Velocity`, etc.
+
+---
+
+## 2026-03-27 - Graceful MJPEG shutdown fix
+
+Fixed zombie process issue (`e7aeb27`): when the DriverStation was closed while the MJPEG server was running, the server's client threads could prevent clean process exit. Added `SignalStop()` + `connectionState->setTerminated()` to the shutdown path so all MJPEG client connections are cleanly torn down and the process exits without hanging.
 
 ---
 
