@@ -1,5 +1,124 @@
 # Project history
 
+## 2026-03-28 - Video Source selector complete (`feature/camera-widget`)
+
+Video Source dropdown in the DriverStation dialog that lets the user switch between video sources feeding the MJPEG server on port 1181.
+
+### Modes
+
+| Mode | Enum | Description |
+|---|---|---|
+| Off | `VideoSourceMode::eOff` | No camera stream; MJPEG server torn down |
+| Camera | `VideoSourceMode::eCamera` | USB webcam via VFW (Video for Windows) |
+| Synthetic Radar | `VideoSourceMode::eSyntheticRadar` | Existing SimCameraSource radar sweep (default) |
+| The Grid | `VideoSourceMode::eVirtualField` | Tron-style first-person virtual field camera (TronGridSource) |
+
+### Architecture
+
+- **WebCameraSource** (`WebCameraSource.h/.cpp`): VFW-based USB webcam capture. Creates a hidden capture window on a worker thread with its own message pump. Uses `capGrabFrameNoStop` in a timed polling loop to request frames at the target framerate — each grab triggers the `capSetCallbackOnFrame` callback synchronously, which converts the frame to top-down RGB (from YUY2 or bottom-up BGR), JPEG-encodes via `stbi_write_jpg_to_func`, pushes to `MjpegServer::PushFrame()`.
+
+  Ian: VFW capture windows MUST be created on a thread with a message pump. The worker thread runs the pump; the main thread signals shutdown via atomic flag.
+
+  Ian: LESSON LEARNED — capPreview(TRUE) + capSetCallbackOnFrame relies on the window receiving WM_PAINT messages, which never arrive for hidden windows. capGrabFrameNoStop bypasses this — it synchronously triggers the frame callback regardless of window visibility.
+
+  Ian: CRITICAL LESSON — Most USB cameras on Windows deliver YUY2 (packed YCbCr 4:2:2) through VFW, NOT BI_RGB. capSetVideoFormat to request RGB24 often fails because the VFW driver doesn't support format conversion. The frame callback must handle YUY2->RGB conversion using BT.601 color space coefficients (fixed-point integer arithmetic for speed). YUY2 format: every 4 bytes encode 2 pixels as [Y0, U, Y1, V], where each pixel pair shares U,V chrominance.
+
+  Ian: No-camera fallback — WebCameraSource::WaitForStartup() lets the caller block until capDriverConnect succeeds or fails. If no camera is found, NT4Backend::SetVideoSource() tears down the MJPEG server and falls back to Off. ApplyVideoSource() in DriverStation.cpp reads back GetVideoSource() after SetVideoSource() to detect the fallback and update the UI combo + INI file.
+
+- **TronGridSource** (`TronGridSource.h/.cpp`): "The Grid" — first-person Tron-style virtual field camera. Pure software 3D renderer using the same pixel-buffer + Bresenham drawing pattern as SimCameraSource. Zero OSG/OpenGL dependency — avoids crash risk from GPU context creation on worker threads.
+
+  Renders a 54x27 ft FRC field as a glowing cyan wireframe grid on black background, viewed from the robot's perspective (camera at robot position, 2 ft height, looking in heading direction). Features:
+  - 3D perspective projection via software pinhole camera model (90 deg HFOV)
+  - 1-foot-spaced floor grid with depth fog (cyan fades to dark blue with distance)
+  - Field boundary walls as bright cyan-white wireframe rectangles (1.5 ft tall)
+  - Squid Games FIRST emblem at field center: red circle, white triangle, blue square
+  - Background clouds: distant dim wireframe rectangles floating in the void (Flynn falling into the digital world aesthetic)
+  - MCP tower: tall red wireframe monolith far to the north with glowing band stripes
+  - CRT scanline effect for retro aesthetic
+  - Off-field arrow: orange arrow pointing back toward field center when robot wanders outside field bounds
+  - Near-plane line clipping to prevent projection artifacts from behind-camera geometry
+  - Safety limits on Bresenham line length to prevent frame lockup from bad projections
+  - Cohen-Sutherland screen-space line clipping — lines outside FOV properly culled
+
+  Ian: LESSON LEARNED — OSG offscreen FBO rendering on a worker thread crashes on many Windows GPU drivers. The pure-software approach is immune — only needs CPU and std::vector<uint8_t>. At 320x240 @ 15fps the CPU cost is negligible.
+
+  Ian: Robot position is read each frame via a callback that queries the NT4 retained value cache for `/SmartDashboard/Drive/X_ft`, `Y_ft`, and `Heading`. The callback is set by NT4Backend when creating the source, capturing `this` pointer — safe because StopCurrentSource() is always called before backend shutdown.
+
+  Ian: Field coordinate mapping — CENTERED COORDINATE SYSTEM: Robot (0,0) from the simulator maps directly to field center (0,0). The field spans X in [-27, +27], Y in [-13.5, +13.5]. No offset mapping needed.
+
+  Ian: HEADING INVERSION — The published Drive/Heading uses atan2(x,y) which gives CW-positive from +Y. But WorldToCamera() expects CCW-positive (standard math convention). The heading must be negated: `m_headingDeg = -heading;`.
+
+- **NT4Backend refactoring** in Transport.cpp: Replaced monolithic `StartCameraStream()`/`StopCameraStream()` with `SetVideoSource()` override plus helper methods `StartMjpegServer()`, `StopMjpegServer()`, `StopCurrentSource()`, `PublishCameraConnected()`, `PublishCameraDisconnected()`. The MJPEG server stays alive when switching between Camera and Radar sources; only torn down for Off.
+
+- **DriverStation.cpp UI**: Always-visible "Video" label + combo box (control IDs 1012/1013). Persisted to `[Video] Source=<int>` in DriverStation.ini. Applied after connection mode on startup via `ApplyVideoSource(LoadPersistedVideoSource())`. Layout: Video row is positioned dynamically below the Connection combo by querying its actual pixel position at runtime.
+
+- **`stb_image_write`**: `STB_IMAGE_WRITE_IMPLEMENTATION` defined exactly once in `SimCameraSource.cpp`. `WebCameraSource.cpp` and `TronGridSource.cpp` only include the header for declarations.
+
+### New files
+
+| File | Purpose |
+|---|---|
+| `WebCameraSource.h/.cpp` | VFW webcam capture |
+| `TronGridSource.h/.cpp` | "The Grid" Tron-style first-person virtual field camera |
+
+### Modified files
+
+| File | Change |
+|---|---|
+| `Transport.h` | Added `VideoSourceMode` enum, virtual `SetVideoSource()`/`GetVideoSource()` |
+| `Transport.cpp` | Refactored NT4Backend camera management with SetVideoSource + helpers |
+| `Robot_Tester.h/.cpp` | Added forwarding methods |
+| `DriverStation.cpp` | Video source UI controls, persistence, event handling, startup wiring |
+| `CMakeLists.txt` | Added sources + vfw32 link |
+
+### SmartDashboard changes made during this work
+
+| File | Change |
+|---|---|
+| `camera_viewer_dock.h` | Updated doc: auto-connect removed, auto-reconnect preserved |
+| `camera_viewer_dock.cpp` | Removed auto-connect (TryAutoConnect is no-op); URL edit moved to own row |
+| `mjpeg_stream_source.cpp` | Added qDebug logging for diagnostics |
+| `camera_viewer_dock_tests.cpp` | Updated 3 auto-connect tests; all 168 runnable tests pass |
+
+---
+
+## 2026-03-27 - Camera MJPEG server complete (`feature/camera-widget`)
+
+MJPEG camera stream server for SmartDashboard's camera viewer dock. This is Phase 3 of the camera widget feature.
+
+### Architecture
+
+- **MjpegServer** (`MjpegServer.h/.cpp`): MJPEG-over-HTTP streaming server on port 1181. Subclasses `ix::SocketServer` directly (NOT `ix::HttpServer`, which is request-response only and can't do streaming). Each client connection gets its own thread. `handleConnection()` parses the HTTP request, sends MJPEG response headers (`multipart/x-mixed-replace`), then loops pushing frames from a shared buffer via condition variable.
+
+  Ian: LESSON LEARNED — ix::HttpServer is strictly request-response. The OnConnectionCallback must return a complete HttpResponsePtr. MJPEG requires an infinite streaming response, so we bypass HttpServer and subclass SocketServer.
+
+- **SimCameraSource** (`SimCameraSource.h/.cpp`): Frame generator running on a dedicated worker thread. Renders a synthetic test pattern (radar sweep, crosshair, frame counter, "SIM CAM" label) into an RGB buffer, JPEG-encodes via `stb_image_write`, and pushes to MjpegServer. 320x240 @ 15fps default.
+
+- **Integration** in `NT4Backend::Initialize()` / `Shutdown()` in Transport.cpp: Creates MjpegServer + SimCameraSource, publishes CameraPublisher discovery keys via NT4 (`/CameraPublisher/SimCamera/streams`, `/source`, `/connected`).
+
+### Key protocol details
+
+- MJPEG boundary: `mjpegstream` (sent without leading dashes in Content-Type header)
+- CameraPublisher NT4 key: `/CameraPublisher/SimCamera/streams` = `["mjpg:http://127.0.0.1:1181/?action=stream"]`
+- SmartDashboard's `MjpegStreamSource` strips the `mjpg:` prefix and connects to the URL
+- SmartDashboard's `CameraPublisherDiscovery` watches `/CameraPublisher/*/streams` for auto-discovery
+
+### New files
+
+| File | Purpose |
+|---|---|
+| `MjpegServer.h/.cpp` | MJPEG HTTP server |
+| `SimCameraSource.h/.cpp` | Frame generation + JPEG encoding |
+| `stb/stb_image_write.h` | Single-header JPEG encoder (v1.16) |
+
+### Verification
+
+- Build verified (DriverStation + TransportSmoke clean, 17 unit tests pass)
+- MJPEG stream verified via curl (correct multipart headers, valid JPEG frames, ~15fps)
+- SmartDashboard auto-connect pipeline verified end-to-end (28 new tests on SmartDashboard side)
+
+---
+
 ## 2026-03-25 - Glass verified, RTT ping fix, Shuffleboard→NetworkTables V4 rename
 
 ### Glass support
@@ -27,6 +146,85 @@ Since Glass and Shuffleboard use the identical NT4 protocol, the transport mode 
 
 - Removed 7 blocks of verbose debug printf from NT4Server.cpp (added during RTT investigation)
 - Kept 8 production-useful log lines (server start/stop, client connect/disconnect, errors, warnings)
+
+### Glass installation
+
+Glass 2026.2.2 is installed at `D:\code\Glass` (same portable-directory pattern as Shuffleboard):
+
+| File | Purpose |
+|---|---|
+| `glass.exe` | Glass application (native C++ binary — no JRE needed) |
+| `run_glass.bat` | Launch Glass (default config from `%APPDATA%`) |
+| `run_glass_local.bat` | Launch Glass pre-configured for localhost:5810 |
+| `config_local\glass.json` | Pre-configured: NT4 client mode, `localhost`, port 5810 |
+
+Source: `https://frcmaven.wpi.edu/artifactory/release/edu/wpi/first/tools/Glass/2026.2.2/Glass-2026.2.2-windowsx86-64.zip`
+
+### Checklist: adding a new transport mode
+
+See the `Ian:` comment on `Transport.h` for the full file list. Summary:
+
+1. Add `ConnectionMode` enum value in `Transport.h`
+2. Create `IConnectionBackend` subclass in `Transport.cpp` (like `NT4Backend`)
+3. Add factory case in `EnsureBackend()` in `Transport.cpp`
+4. Update `UsesLegacyTransportPath()` — return false for NT4-style transports
+5. **Update `HasDirectTransport()` and `UsesNetworkTablesTransport()` in `SmartDashboard.cpp`** — any mode that uses `DirectPublishSink`/`DirectQuerySource` must be listed, or `PutNumber`/etc. will also start the legacy NT2 server on port 1735
+6. Update `IsChooserEnabledForCurrentConnection()` in `AI_Input_Example.cpp`
+7. Add hotkey and menu entry in `DriverStation.cpp`
+8. If the NT4 server port differs, make it configurable or support multi-port
+
+### NT4 protocol lessons (from Shuffleboard/Glass integration)
+
+**NT4 protocol gotchas (all fixed, but will bite again if forgotten):**
+- NT4 is subscription-driven. The server must NOT send `announce` until the client sends `subscribe`. Silent failure otherwise.
+- **RTT ping response is a hard gate.** The ntcore client sends `[-1, 0, type=2(Integer), clientTimestamp]` on connect. The server MUST respond with `[-1, serverTimestamp, type=2(Integer), clientTimestamp]`. If the type code is wrong or the client's timestamp isn't echoed back, the client never sets `m_haveTimeOffset` and `SendOutgoing()` blocks ALL outgoing messages forever.
+- Client binary frames use **pubuid** (client-chosen), not server-assigned topicId. Server needs per-client `pubuid -> topicId` map.
+- Echo values back to sender — the server is the single source of truth.
+- MsgPack frames may contain multiple concatenated messages per WebSocket frame.
+- IXWebSocket's `Sec-WebSocket-Protocol` handling needed a patch (overlay port) to echo exactly ONE selected protocol per RFC 6455.
+
+**Simulator-side gotchas:**
+- `NT4Backend` implements both `SmartDashboardDirectPublishSink` (server->client) AND `SmartDashboardDirectQuerySource` (client->server read-back). Both are needed for the simulator to read values written by dashboard clients.
+- The query source normalizes flat keys (e.g. `TestMove`) to NT4 paths (`/SmartDashboard/TestMove`).
+- `IsChooserEnabledForCurrentConnection()` must include the new mode or the auton AI falls back to the numeric `AutonTest` key and ignores the chooser.
+- Headless crash: `TeleAuton_V2::init()` creates an OSG 3D viewer which crashes in headless sessions. Smoke test skips this for NT4 mode.
+- WSAStartup: `ix::initNetSystem()` must be called before any IXWebSocket server operations.
+
+**Chooser protocol:**
+Base key `Test/Auton_Selection/AutoChooser`, all prefixed with `/SmartDashboard/`:
+- Server publishes: `.type`="String Chooser", `options`=[array], `default`, `active`
+- Client writes back: `selected` = user's choice
+- Read-back priority: `selected` -> `active` -> `default`, with 20-retry x 10ms loop
+- See `AutonChooser.h` for the `Ian:` comment with full protocol description.
+
+**Port situation (no conflict):**
+- NT4 (Shuffleboard/Glass): port 5810
+- Legacy SmartDashboard (NT2 TCP): port 1735
+
+### NT4 protocol quick reference
+
+- **Transport:** WebSocket, resource path `/nt/<clientname>`
+- **Subprotocols:** `v4.1.networktables.first.wpi.edu` (preferred), `networktables.first.wpi.edu` (v4.0)
+- **Control messages:** JSON text frames — array of `{method, params}` objects
+- **Server→client:** `announce`, `unannounce`, `properties`
+- **Client→server:** `subscribe`, `unsubscribe`, `publish`, `unpublish`, `setproperties`
+- **Value updates:** MsgPack binary — `[topicID, timestamp_us, dataType, value]`
+- **Data types:** boolean=0, double=1, int=2, float=3, string=4, raw=5, boolean[]=16, double[]=17, int[]=18, float[]=19, string[]=20
+- **Full spec:** https://github.com/wpilibsuite/allwpilib/blob/main/ntcore/doc/networktables4.adoc
+
+### What to publish (current widget types)
+
+| Category | Keys | Type |
+|---|---|---|
+| Motion | `Velocity`, `Rotation Velocity`, `X_ft`, `Y_ft`, `Heading`, `Travel_Heading` | double |
+| Wheel velocity | `Wheel_{fl,fr,rl,rr}_Velocity` | double |
+| Wheel voltage | `Wheel_{fl,fr,rl,rr}_Voltage` | double |
+| Wheel encoder | `wheel_{fl,fr,rl,rr}_Encoder` | double |
+| Swivel voltage | `Swivel_{fl,fr,rl,rr}_Voltage` | double |
+| Swivel angle | `swivel_{fl,fr,rl,rr}_Raw` | double |
+| AI / control | `Timer`, `TestMove`, `AutonTest` | double |
+| Bool controls | `SafetyLock_Drive`, `TestVariables_set` | bool |
+| Chooser | `Test/Auton_Selection/AutoChooser/{.type,options,default,active,selected}` | string / string[] |
 
 ## 2026-03-21 - Native Link SHM transport declared stable; live telemetry auto-register fix
 
