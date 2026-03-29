@@ -196,18 +196,22 @@ int smoke_main(int argc, char** argv)
 		elapsed += loopIntervalMs;
 		loopCount++;
 
-		// Ian: Print telemetry readback every second so we can observe the
-		// simulation state from the console.
-		if (loopCount % 10 == 0)
+		// Ian: Print telemetry readback every 500ms so we can catch chooser
+		// state changes quickly.
+		if (loopCount % 5 == 0)
 		{
 			double y_ft = 0.0;
 			double testMoveRead = 0.0;
 			SmartDashboard::TryGetNumber("Y_ft", y_ft);
-			SmartDashboard::TryGetNumber("TestMove", testMoveRead);
+			SmartDashboard::TryGetNumber("Autonomous/TestMove", testMoveRead);
 			const std::string selected = SmartDashboard::GetString(
-				"Test/Auton_Selection/AutoChooser/selected", "(none)");
-			printf("[TransportSmoke] t=%.1fs  Y_ft=%.3f  TestMove=%.1f  selected='%s'\n",
-				elapsed / 1000.0, y_ft, testMoveRead, selected.c_str());
+				"Autonomous/Auton_Selection/AutoChooser/selected", "(none)");
+			const std::string active = SmartDashboard::GetString(
+				"Autonomous/Auton_Selection/AutoChooser/active", "(none)");
+			const std::string dflt = SmartDashboard::GetString(
+				"Autonomous/Auton_Selection/AutoChooser/default", "(none)");
+			printf("[TransportSmoke] t=%.1fs  Y_ft=%.3f  TestMove=%.1f  selected='%s'  active='%s'  default='%s'\n",
+				elapsed / 1000.0, y_ft, testMoveRead, selected.c_str(), active.c_str(), dflt.c_str());
 			fflush(stdout);
 		}
 	}

@@ -1358,6 +1358,38 @@ namespace NativeLink
 			return m_running && m_server.TryGetString(keyName, value);
 		}
 
+		// --- IConnectionBackend: Camera discovery key publication ---
+		// Ian: Publish CameraPublisher discovery keys via NativeLink topics.
+		// SmartDashboard's NativeLink transport plugin reads these keys and
+		// feeds them to CameraPublisherDiscovery the same way NT4/Direct do.
+		void PublishCameraDiscoveryKeys(const std::string& sourceDescription) override
+		{
+			if (!m_running)
+				return;
+
+			m_server.PublishStringArray(
+				"/CameraPublisher/SimCamera/streams",
+				{"mjpg:http://127.0.0.1:1181/?action=stream"});
+			m_server.PublishString(
+				"/CameraPublisher/SimCamera/source",
+				sourceDescription);
+			m_server.PublishBoolean(
+				"/CameraPublisher/SimCamera/connected",
+				true);
+
+			OutputDebugStringW(L"[Transport] CameraPublisher keys published via Native Link\n");
+		}
+
+		void ClearCameraDiscoveryKeys() override
+		{
+			if (!m_running)
+				return;
+
+			m_server.PublishBoolean(
+				"/CameraPublisher/SimCamera/connected",
+				false);
+		}
+
 	private:
 		Server m_server;
 		bool m_running = false;

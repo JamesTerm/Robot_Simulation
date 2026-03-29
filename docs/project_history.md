@@ -1,5 +1,59 @@
 # Project history
 
+## 2026-03-28 - Transport-agnostic video infrastructure (`feature/transport-agnostic-video`)
+
+Extracted video infrastructure (MJPEG server, frame sources, video source state machine) from `NT4Backend` to `DashboardTransportRouter`, making camera streaming work on ALL transport modes (Direct, NativeLink, NT4, Legacy).
+
+### What changed
+
+**Transport.h:**
+- Removed `SetVideoSource`/`GetVideoSource` virtual methods from `IConnectionBackend`
+- Added `PublishCameraDiscoveryKeys(sourceDescription)` and `ClearCameraDiscoveryKeys()` virtual methods to `IConnectionBackend` (default no-op)
+- Moved video members (MjpegServer, SimCameraSource, WebCameraSource, TronGridSource, VideoSourceMode) from `IConnectionBackend` to `DashboardTransportRouter`
+- Added `TryGetNumber()` to `DashboardTransportRouter` for TronGridSource position callback
+- Added destructor to `DashboardTransportRouter` (ordered video teardown)
+
+**Transport.cpp:**
+- Removed ~200 lines of video code from `NT4Backend` (SetVideoSource, GetVideoSource, StartMjpegServer, StopMjpegServer, StopCurrentSource, PublishCameraConnected, PublishCameraDisconnected, video member variables)
+- Added `PublishCameraDiscoveryKeys`/`ClearCameraDiscoveryKeys` to `NT4Backend` — publishes via NT4 server
+- Added `PublishCameraDiscoveryKeys`/`ClearCameraDiscoveryKeys` to `DirectConnectBackend` — publishes via Direct shared-memory ring buffer
+- Moved full video state machine to `DashboardTransportRouter::SetVideoSource()` — identical logic, but backend-independent
+- Router's `Initialize()` now auto-starts `eSyntheticRadar` (was previously in `NT4Backend::Initialize()`)
+- Router's `Shutdown()` now stops video before shutting down the backend
+- Router's `SetMode()` preserves video across transport mode switches — clear discovery keys on old backend, re-publish on new
+- `TryGetNumber()` uses `dynamic_cast<SmartDashboardDirectQuerySource*>` to query the active backend — avoids adding a new virtual to `IConnectionBackend`
+
+**NativeLink.cpp:**
+- Added `PublishCameraDiscoveryKeys`/`ClearCameraDiscoveryKeys` to `NativeLinkBackend` — publishes via NativeLink Server
+
+### Architecture
+
+```
+Before:  NT4Backend → owns MjpegServer + sources + discovery keys
+         Other backends → no video support
+
+After:   DashboardTransportRouter → owns MjpegServer + sources
+         All backends → implement PublishCameraDiscoveryKeys (protocol-specific)
+```
+
+The MJPEG server on port 1181 is now transport-independent. Backends only participate in discovery key publication. The video source can be changed at any time regardless of which transport is active.
+
+### TronGridSource decoupling
+
+TronGridSource's position callback previously captured `NT4Backend*` and read directly from the NT4 retained cache. Now it captures the router and calls `DashboardTransportRouter::TryGetNumber()`, which uses `dynamic_cast<SmartDashboardDirectQuerySource*>` on the active backend. This works for NT4, Direct, and NativeLink (all implement `SmartDashboardDirectQuerySource`).
+
+### Verification
+
+- Build: DriverStation + DriverStation_TransportSmoke both build clean (Release)
+- Smoke tests: NT4, Direct, and NativeLink modes all pass (5s runs)
+- CRLF line endings verified on all modified files
+
+### Cross-repo impact (SmartDashboard side)
+
+SmartDashboard's `CameraPublisherDiscovery` is already transport-agnostic — it receives `(key, valueType, value)` tuples from whatever transport plugin is active. No SmartDashboard changes needed. When Direct or NativeLink backends publish `/CameraPublisher/` keys, SmartDashboard discovers them automatically through its existing variable update pipeline.
+
+---
+
 ## 2026-03-28 - Camera Phase 4 closed, manual e2e verified
 
 ### Phase 4 — Backup camera guide lines (closed, superseded)

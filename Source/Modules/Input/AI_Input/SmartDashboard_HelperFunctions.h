@@ -131,18 +131,19 @@ __inline double Auton_Smart_GetSingleValue(const char* SmartName, double default
 		return false;
 	};
 
-	const std::string scoped_name = std::string("Test/") + SmartName;
-	// Ian: Prefer the scoped key first because SmartDashboard control widgets in
-	// simulator layouts often publish as `Test/<key>`, but keep the flat alias
-	// for legacy compatibility.
+	// Ian: The layout's folder-group reorganisation moved widget keys from
+	// "Test/<key>" to "Autonomous/<key>".  Try the current prefix first, then
+	// the legacy prefix, then the bare key for backward compatibility.
+	const std::string auton_scoped = std::string("Autonomous/") + SmartName;
+	const std::string legacy_scoped = std::string("Test/") + SmartName;
 	if (SmartName && std::string(SmartName) == "TestMove")
 	{
 		char dbg[256] = {};
-		sprintf_s(dbg, "[Auton_Smart_GetSingleValue] reading '%s' scoped='%s'", SmartName, scoped_name.c_str());
+		sprintf_s(dbg, "[Auton_Smart_GetSingleValue] reading '%s' auton='%s' legacy='%s'", SmartName, auton_scoped.c_str(), legacy_scoped.c_str());
 		Module::Input::AppendDirectAutonChainLog(dbg);
 	}
 	bool hasValue = false;
-	hasValue = tryGetNumber(scoped_name.c_str(), result) || tryGetNumber(SmartName, result);
+	hasValue = tryGetNumber(auton_scoped.c_str(), result) || tryGetNumber(legacy_scoped.c_str(), result) || tryGetNumber(SmartName, result);
 	if (SmartName && std::string(SmartName) == "TestMove")
 	{
 		char dbg[256] = {};
@@ -187,9 +188,12 @@ __inline void Auton_Smart_GetMultiValue(size_t NoItems, const char* const SmartN
 
 	for (size_t i = 0; i < NoItems; i++)
 	{
-		const std::string scoped_name = std::string("Test/") + SmartNames[i];
+		// Ian: Same three-tier key resolution as Auton_Smart_GetSingleValue —
+		// Autonomous/ (current folder group), Test/ (legacy), then bare key.
+		const std::string auton_scoped = std::string("Autonomous/") + SmartNames[i];
+		const std::string legacy_scoped = std::string("Test/") + SmartNames[i];
 		double temp = *(SmartVariables[i]);
-		if (tryGetNumber(scoped_name.c_str(), temp) || tryGetNumber(SmartNames[i], temp))
+		if (tryGetNumber(auton_scoped.c_str(), temp) || tryGetNumber(legacy_scoped.c_str(), temp) || tryGetNumber(SmartNames[i], temp))
 			*(SmartVariables[i]) = temp;
 	}
 #else

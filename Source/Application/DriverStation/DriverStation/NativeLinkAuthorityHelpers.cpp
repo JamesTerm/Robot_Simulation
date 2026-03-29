@@ -25,36 +25,40 @@ namespace NativeLink::detail
 
 	void RegisterDefaultTopics(Core& core)
 	{
-		if (core.IsTopicRegistered("Test/Auton_Selection/AutoChooser/selected"))
+		if (core.IsTopicRegistered("Autonomous/TestMove"))
 			return;
 
-		// Ian: This list is intentionally minimal.  Only the few topics that need
-		// special writer policies (LeaseSingleWriter for operator-owned controls,
-		// StringArray for the chooser options blob) must be pre-declared here.
-		// All other robot-code keys (Velocity, Heading, wheel velocities, etc.) are
-		// auto-registered on first server-originated write in Core::PublishInternal
-		// when allowServerOnly=true.  Do NOT add every TeleAutonV2 key here — the
-		// auto-register path is the correct place for those, and duplicating them
-		// here would hide the auto-register logic and make both paths drift.
+		// Ian: OWNERSHIP RULE — whoever comes in last checks if the topic already
+		// exists.  Pre-registration is ONLY for topics that need a WriterPolicy the
+		// auto-register path cannot provide (auto-register always creates ServerOnly).
+		// Do NOT publish initial values for topics the robot code will write — doing
+		// so seeds the retained snapshot with stale defaults that (a) create orphan
+		// tiles on SmartDashboard before the robot loop starts, and (b) would
+		// overwrite a dashboard-selected autonomous choice on robot reboot.
 		//
-		// Ian: Keep the first reference authority seeded with the same visible keys
-		// we already validated in Direct so carrier work changes transport behavior,
-		// not the application-level expectations students are trying to compare.
-		core.RegisterTopic(MakeStateTopic("Test/Auton_Selection/AutoChooser/options", ValueType::StringArray, WriterPolicy::ServerOnly));
-		core.RegisterTopic(MakeStateTopic("Test/Auton_Selection/AutoChooser/default", ValueType::String, WriterPolicy::ServerOnly));
-		core.RegisterTopic(MakeStateTopic("Test/Auton_Selection/AutoChooser/active", ValueType::String, WriterPolicy::ServerOnly));
-		core.RegisterTopic(MakeStateTopic("Test/Auton_Selection/AutoChooser/selected", ValueType::String, WriterPolicy::LeaseSingleWriter));
-		core.RegisterTopic(MakeStateTopic("TestMove", ValueType::Double, WriterPolicy::LeaseSingleWriter));
-		core.RegisterTopic(MakeStateTopic("Timer", ValueType::Double, WriterPolicy::ServerOnly));
-		core.RegisterTopic(MakeStateTopic("Y_ft", ValueType::Double, WriterPolicy::ServerOnly));
+		// AutoChooser topics (options, default, active) are ServerOnly and auto-
+		// register on first write from robot code via PublishAutonChooser().
+		// AutoChooser/selected needs LeaseSingleWriter so the dashboard can write
+		// the user's choice back.  We register the descriptor here but do NOT
+		// publish an initial value — the robot's PublishAutonChooser() populates it.
 
-		core.PublishFromServer("Test/Auton_Selection/AutoChooser/options", TopicValue::StringArray(std::vector<std::string>{ "Do Nothing", "Just Move Forward", "Just Rotate", "Move Rotate Sequence", "Box Waypoints", "Smart Waypoints" }));
-		core.PublishFromServer("Test/Auton_Selection/AutoChooser/default", TopicValue::String("Do Nothing"));
-		core.PublishFromServer("Test/Auton_Selection/AutoChooser/active", TopicValue::String("Do Nothing"));
-		core.PublishFromServer("Test/Auton_Selection/AutoChooser/selected", TopicValue::String("Do Nothing"));
-		core.PublishFromServer("TestMove", TopicValue::Double(0.0));
-		core.PublishFromServer("Timer", TopicValue::Double(0.0));
-		core.PublishFromServer("Y_ft", TopicValue::Double(0.0));
+		// --- AutoChooser/selected: LeaseSingleWriter descriptor only, NO initial value.
+		// The robot code (AI_Input_Example::Activate -> PublishAutonChooser) publishes
+		// the real selected value.  The dashboard writes the user's choice via lease.
+		core.RegisterTopic(MakeStateTopic("Autonomous/Auton_Selection/AutoChooser/selected", ValueType::String, WriterPolicy::LeaseSingleWriter));
+
+		// --- Autonomous/TestMove: LeaseSingleWriter descriptor only, NO initial value.
+		// Ian: The dashboard layout (Swervelayout.json) uses "Autonomous/TestMove" as
+		// the variableKey.  On NativeLink, client writes are rejected as UnknownTopic
+		// unless the exact key is pre-registered.  The robot code reads via
+		// Auton_Smart_GetSingleValue("TestMove") which tries "Autonomous/TestMove"
+		// first, so the read path is covered.  The robot never PutNumber's TestMove —
+		// only the dashboard slider writes it.
+		core.RegisterTopic(MakeStateTopic("Autonomous/TestMove", ValueType::Double, WriterPolicy::LeaseSingleWriter));
+
+		// Ian: All other topics (Timer, Y_ft, chooser options/default/active, etc.)
+		// are ServerOnly and auto-register on first write from robot code via
+		// Core::PublishInternal (allowServerOnly=true).  Do NOT add them here.
 	}
 
 	UpdateEnvelope SnapshotEventToEnvelope(const SnapshotEvent& event, std::uint64_t serverSessionId)
