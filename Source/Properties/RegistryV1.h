@@ -20,6 +20,8 @@ namespace registry_v1
 	Rg_(Build_sim_prediction_vars) //Show encoder-only (velocity only prediction) localization variables (Output viewer uses this for target reticle)
 	Rg_(Build_sim_target_reticle)  //Visual Studio version only
 
+	Rg_(Build_enable_manipulator)  //Enable optional manipulator plugin (e.g. ExcavatorArm)
+
 	Rg_(Misc_have_gyro)  //Visual Studio must be false; otherwise, optional and will auto-simulate when running simulation
 #pragma region _prefix section_
 	//instance named prefix for each wheel front, and rear... of left and right, left is port side, right starboard

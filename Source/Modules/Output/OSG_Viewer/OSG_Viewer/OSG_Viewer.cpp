@@ -5,6 +5,7 @@
 #include "OSG_Viewer.h"
 #include "SwerveRobot_UI.h"
 #include "Entity_UI.h"
+#include "ManipulatorArm_UI.h"
 
 #include <osgUtil/Optimizer>
 
@@ -28,6 +29,8 @@
 #include <osg\Vec3>
 #include <osg\Quat>
 #include <osg/NodeCallback>
+#include <osg/Geometry>
+#include <osg/PositionAttitudeTransform>
 #include <OpenThreads/Mutex>
 #include <OpenThreads/Thread>
 #include <osgGA/GUIEventHandler> //for keyboard support
@@ -5643,6 +5646,282 @@ public:
 #pragma endregion
 #pragma endregion
 
+#pragma region _Manipulator Arm UI_
+// Ian: ManipulatorArm_UI_Internal — ported from Curivator_Robot_UI (Curivator_Robot.cpp lines 1816-2100).
+// 9-vertex LINE_STRIP kinematic chain with per-vertex colors, plus a bucket_round_end() partial
+// circle geometry.  Both are positioned via PositionAttitudeTransform nodes added to rootNode.
+// State is fed via a callback returning ManipulatorArm_UI::ArmState, set by TeleAutonV2.
+
+class ManipulatorArm_UI_Internal
+{
+public:
+	using ArmState = ManipulatorArm_UI::ArmState;
+
+	ManipulatorArm_UI_Internal()
+	{
+		// Ian: 9 vertices in a LINE_STRIP — origin, BigArm end, Boom end (rocker pivot),
+		// Bucket pivot, Clasp midline, back to bucket pivot, CoM, Bucket tip, Bucket angle opening.
+		// Matches Curivator_Robot_UI constructor (line 1827).
+		m_VertexData = new osg::Vec3Array;
+		for (int i = 0; i < 9; ++i)
+			m_VertexData->push_back(osg::Vec3(0, 0, 0));
+
+		// Ian: Per-vertex colors matching the original palette.
+		// Steel blue for arm segments (0-2), peach/salmon for bucket/clasp (3-5), black for CoM (6),
+		// then bucket tip (7) and bucket angle (8) which get error-blended at runtime.
+		m_ColorData = new osg::Vec4Array;
+		m_ColorData->push_back(osg::Vec4(0.49f, 0.62f, 0.75f, 1.0f));  // [0] origin
+		m_ColorData->push_back(osg::Vec4(0.49f, 0.62f, 0.75f, 1.0f));  // [1] big arm end / boom start
+		m_ColorData->push_back(osg::Vec4(0.49f, 0.62f, 0.75f, 1.0f));  // [2] rocker boom pivot
+		m_ColorData->push_back(osg::Vec4(0.98f, 0.78f, 0.64f, 1.0f));  // [3] clasp start (bucket pivot)
+		m_ColorData->push_back(osg::Vec4(0.98f, 0.78f, 0.64f, 1.0f));  // [4] clasp end
+		m_ColorData->push_back(osg::Vec4(0.98f, 0.78f, 0.64f, 1.0f));  // [5] back to bucket pivot
+		m_ColorData->push_back(osg::Vec4(0.0f, 0.0f, 0.0f, 1.0f));     // [6] CoM
+		m_ColorData->push_back(osg::Vec4(0.49f, 0.62f, 0.75f, 1.0f));  // [7] bucket tip
+		m_ColorData->push_back(osg::Vec4(0.98f, 0.78f, 0.64f, 1.0f));  // [8] bucket angle
+	}
+
+	void SetArmState_Callback(std::function<ArmState()> callback)
+	{
+		m_StateCallback = std::move(callback);
+	}
+
+	void Initialize() {}
+	void TimeChange(double /*dTime_s*/) {}
+
+	void UpdateScene(osg::Group* rootNode, osg::Geode* /*geode*/, bool AddOrRemove)
+	{
+		if (AddOrRemove)
+		{
+			// Ian: Guard against multiple calls — UpdateScene is called every frame from the
+			// ViewerCallback.  Without this guard, new geometry nodes are added each frame,
+			// causing the "smearing" effect (old line positions persist as stale child nodes).
+			// This matches the pattern used by Swerve_Robot_UI::UpdateScene (line 5540).
+			if (m_isSceneSetup)
+				return;
+			m_isSceneSetup = true;
+			// --- Arm LINE_STRIP geometry ---
+			osg::Geometry* linesGeom = new osg::Geometry();
+			osg::DrawArrays* drawArrayLines = new osg::DrawArrays(osg::PrimitiveSet::LINE_STRIP);
+			linesGeom->addPrimitiveSet(drawArrayLines);
+			linesGeom->setVertexArray(m_VertexData);
+			linesGeom->setColorArray(m_ColorData);
+			linesGeom->setColorBinding(osg::Geometry::BIND_PER_VERTEX);
+
+			osg::Geode* ArmGeode = new osg::Geode;
+			ArmGeode->addDrawable(linesGeom);
+
+			// Ian: LinesUpdate callback — updates vertex positions every frame from FK results.
+			// This is the same pattern as Curivator_Robot_UI::LinesUpdate (line 1885).
+			m_LinesUpdate = new LinesUpdate(this);
+			linesGeom->setUpdateCallback(m_LinesUpdate);
+			drawArrayLines->setFirst(0);
+			drawArrayLines->setCount(m_VertexData->size());
+
+			// PositionAttitudeTransform positions the entire arm at screen offset (148, 200)
+			m_ArmTransform = new osg::PositionAttitudeTransform();
+			rootNode->addChild(m_ArmTransform);
+			m_ArmTransform->addChild(ArmGeode);
+
+			// --- Bucket round-end circle geometry ---
+			m_Circle = CreateBucketRoundEnd();
+			osg::Vec4Array* circleColors = new osg::Vec4Array;
+			circleColors->push_back(osg::Vec4(0.0f, 0.0f, 1.0f, 1.0f));
+			m_Circle->setColorArray(circleColors);
+			m_Circle->setColorBinding(osg::Geometry::BIND_OVERALL);
+
+			osg::Geode* CircleGeode = new osg::Geode;
+			CircleGeode->addDrawable(m_Circle);
+
+			m_CircleTransform = new osg::PositionAttitudeTransform();
+			rootNode->addChild(m_CircleTransform);
+			m_CircleTransform->addChild(CircleGeode);
+			m_CircleTransform->setPosition(osg::Vec3(50, 50, 0));
+		}
+		else
+		{
+			// Ian: Remove from scene — remove our transforms from rootNode.
+			// The transforms own the geodes/drawables, so they get cleaned up.
+			if (m_ArmTransform.valid() && rootNode)
+				rootNode->removeChild(m_ArmTransform);
+			if (m_CircleTransform.valid() && rootNode)
+				rootNode->removeChild(m_CircleTransform);
+			m_isSceneSetup = false;  // allow re-adding if UpdateScene(true) is called later
+		}
+	}
+
+private:
+	static constexpr double kScale = 10.0;  // inches to pixels
+	static constexpr double kHorizontalOffset = 148.0;
+	static constexpr double kVerticalOffset = 200.0;
+	static constexpr int kPolygonSize = 256;
+
+	osg::ref_ptr<osg::Vec3Array> m_VertexData;
+	osg::ref_ptr<osg::Vec4Array> m_ColorData;
+	osg::ref_ptr<osg::Geometry> m_Circle;
+	osg::ref_ptr<osg::PositionAttitudeTransform> m_ArmTransform;
+	osg::ref_ptr<osg::PositionAttitudeTransform> m_CircleTransform;
+	std::function<ArmState()> m_StateCallback;
+	bool m_isSceneSetup = false;
+
+	// Ian: bucket_round_end() — ported from Curivator_Robot.cpp line 1978.
+	// A partial circle (LINE_STRIP) representing the bucket's curved scoop shape,
+	// with an interface tip and bucket tip vertex in between the arcs.
+	static osg::ref_ptr<osg::Geometry> CreateBucketRoundEnd()
+	{
+		const float centerx = 0;
+		const float centery = 0;
+		const float rad = 5.0f * 10.0f;  // Bucket_CoM_Radius * scale
+		osg::ref_ptr<osg::Geometry> geom = new osg::Geometry;
+		osg::ref_ptr<osg::Vec3Array> v = new osg::Vec3Array;
+
+		const double TopOfCircle_deg = 30.18846043;
+		const double TopOfCircle_ratio = TopOfCircle_deg / 360.0;
+		const int TopOfCircleVertexCount = static_cast<int>(TopOfCircle_ratio * kPolygonSize);
+
+		// First arc: top portion
+		for (int i = 1; i <= TopOfCircleVertexCount; i++)
+		{
+			double theta = 2.0 * M_PI / kPolygonSize * i;
+			double px = centerx + rad * cos(theta);
+			double py = centery + rad * sin(theta);
+			v->push_back(osg::Vec3(static_cast<float>(px), static_cast<float>(py), 0));
+		}
+
+		// Interface tip vertex
+		const double InterfaceTipfromHorizontal = DEG_2_RAD(14.18776649 + 90.0);
+		const double InterfaceTipLength = 3.72263603 * 10.0;
+		v->push_back(osg::Vec3(
+			static_cast<float>(cos(InterfaceTipfromHorizontal) * InterfaceTipLength),
+			static_cast<float>(sin(InterfaceTipfromHorizontal) * InterfaceTipLength), 0));
+
+		// Bucket tip vertex
+		const double BucketTipfromHorizontal = DEG_2_RAD(219.80557109);
+		const double BucketTipLength = 7.81024968 * 10.0;
+		v->push_back(osg::Vec3(
+			static_cast<float>(cos(BucketTipfromHorizontal) * BucketTipLength),
+			static_cast<float>(sin(BucketTipfromHorizontal) * BucketTipLength), 0));
+
+		// Bottom arc: from 270 degrees to 360
+		const int StartCount = static_cast<int>((270.0 / 360.0) * kPolygonSize);
+		for (int i = StartCount; i <= kPolygonSize; i++)
+		{
+			double theta = 2.0 * M_PI / kPolygonSize * i;
+			double px = centerx + rad * cos(theta);
+			double py = centery + rad * sin(theta);
+			v->push_back(osg::Vec3(static_cast<float>(px), static_cast<float>(py), 0));
+		}
+
+		geom->setVertexArray(v.get());
+		geom->addPrimitiveSet(new osg::DrawArrays(osg::PrimitiveSet::LINE_STRIP, 0, v->size()));
+		return geom.get();
+	}
+
+	// Ian: LinesUpdate — osg::Drawable::UpdateCallback that updates vertex positions every frame
+	// from the state callback.  Ported from Curivator_Robot_UI::LinesUpdate (line 1885).
+	class LinesUpdate : public osg::Drawable::UpdateCallback
+	{
+	public:
+		LinesUpdate(ManipulatorArm_UI_Internal* parent) : m_pParent(parent) {}
+	protected:
+		virtual void update(osg::NodeVisitor* /*nv*/, osg::Drawable* draw) override
+		{
+			if (!m_pParent->m_StateCallback)
+				return;
+
+			const ArmState state = m_pParent->m_StateCallback();
+			const double S = kScale;
+
+			// [0] = origin (stays at 0,0,0)
+			// [1] = BigArm end
+			(*m_pParent->m_VertexData)[1].set(
+				static_cast<float>(state.BigArmLength * S),
+				static_cast<float>(state.BigArmHeight * S), 0.0f);
+			// [2] = Boom end (rocker pivot point)
+			(*m_pParent->m_VertexData)[2].set(
+				static_cast<float>(state.BoomLength * S),
+				static_cast<float>(state.BoomHeight * S), 0.0f);
+			// [3] = Bucket pivot point (computed from boom + BRP_BP offset)
+			const double BucketPivotPoint_y = state.BoomHeight - state.Bucket_globalBRP_BP_height;
+			const double BucketPivotPoint_x = state.BoomLength + state.Bucket_globalBRP_BP_distance;
+			(*m_pParent->m_VertexData)[3].set(
+				static_cast<float>(BucketPivotPoint_x * S),
+				static_cast<float>(BucketPivotPoint_y * S), 0.0f);
+			// [4] = Clasp midline
+			(*m_pParent->m_VertexData)[4].set(
+				static_cast<float>(state.ClaspMidlineDistance * S),
+				static_cast<float>(state.ClaspMidlineHeight * S), 0.0f);
+			// [5] = Retrace back to bucket pivot (for the clasp fork)
+			(*m_pParent->m_VertexData)[5].set(
+				static_cast<float>(BucketPivotPoint_x * S),
+				static_cast<float>(BucketPivotPoint_y * S), 0.0f);
+			// [6] = CoM
+			(*m_pParent->m_VertexData)[6].set(
+				static_cast<float>(state.CoMDistance * S),
+				static_cast<float>(state.CoMHeight * S), 0.0f);
+			// [7] = Bucket tip
+			(*m_pParent->m_VertexData)[7].set(
+				static_cast<float>(state.BucketLength * S),
+				static_cast<float>(state.BucketTipHeight * S), 0.0f);
+			// [8] = Bucket angle opening (10-inch line from bucket tip at bucket angle)
+			const double GlobalBucketAngle = state.BucketAngle;
+			const double OpeningLength = 10.0;  // original sketch dimension
+			const double OpeningUpperPoint_y = state.BucketTipHeight + (sin(GlobalBucketAngle) * OpeningLength);
+			const double OpeningUpperPoint_x = state.BucketLength + (cos(GlobalBucketAngle) * OpeningLength);
+			(*m_pParent->m_VertexData)[8].set(
+				static_cast<float>(OpeningUpperPoint_x * S),
+				static_cast<float>(OpeningUpperPoint_y * S), 0.0f);
+
+			// Ian: Color blending for error visualization — blends vertices [7] (bucket tip)
+			// and [8] (bucket angle) from their normal colors toward red based on
+			// BucketAngleContinuity.  Matches legacy LinesUpdate::update() (Curivator_Robot.cpp:1921).
+			// errorRatio = min(continuity / 3.0, 1.0) where 3.0 degrees = toleranceScale.
+			// blendedColor = red * errorRatio + normalColor * (1 - errorRatio)
+			{
+				const double toleranceScale = 3.0;  // degrees — same as legacy
+				const double errorRatio = (std::min)(state.BucketAngleContinuity / toleranceScale, 1.0);
+				const float er = static_cast<float>(errorRatio);
+				const float nr = 1.0f - er;
+				// [7] bucket tip: normal = steel blue (0.49, 0.62, 0.75) → red (1, 0, 0)
+				const osg::Vec4 steelBlue(0.49f, 0.62f, 0.75f, 1.0f);
+				const osg::Vec4 red(1.0f, 0.0f, 0.0f, 1.0f);
+				(*m_pParent->m_ColorData)[7] = osg::Vec4(
+					red.r() * er + steelBlue.r() * nr,
+					red.g() * er + steelBlue.g() * nr,
+					red.b() * er + steelBlue.b() * nr, 1.0f);
+				// [8] bucket angle: normal = peach (0.98, 0.78, 0.64) → red (1, 0, 0)
+				const osg::Vec4 peach(0.98f, 0.78f, 0.64f, 1.0f);
+				(*m_pParent->m_ColorData)[8] = osg::Vec4(
+					red.r() * er + peach.r() * nr,
+					red.g() * er + peach.g() * nr,
+					red.b() * er + peach.b() * nr, 1.0f);
+			}
+
+			draw->dirtyDisplayList();
+			draw->dirtyBound();
+
+			// Update arm transform position
+			m_pParent->m_ArmTransform->setPosition(
+				osg::Vec3(kHorizontalOffset, kVerticalOffset, 0.0f));
+
+			// Update bucket circle transform — positions at CoM with bucket angle rotation.
+			// Matches Curivator_Robot_UI::LinesUpdate::update() line 1936.
+			m_pParent->m_CircleTransform->setPosition(osg::Vec3(
+				static_cast<float>((state.CoMDistance * S) + kHorizontalOffset),
+				static_cast<float>((state.CoMHeight * S) + kVerticalOffset), 0.0f));
+			m_pParent->m_CircleTransform->setAttitude(osg::Quat(
+				0.0, osg::Vec3d(1, 0, 0),
+				0.0, osg::Vec3d(0, 1, 0),
+				GlobalBucketAngle + DEG_2_RAD(30.58112256) - PI_2, osg::Vec3d(0, 0, 1)));
+		}
+	private:
+		ManipulatorArm_UI_Internal* m_pParent;
+	};
+	LinesUpdate* m_LinesUpdate = nullptr;
+};
+
+#pragma endregion
+
 #pragma region _Test Text_
 //const double PI = 3.1415926535897;
 
@@ -6452,6 +6731,30 @@ void SwerveRobot_UI::Initialize()
 void SwerveRobot_UI::TimeChange(double dTime_s)
 {
 	m_Robot->TimeChange(dTime_s);
+}
+#pragma endregion
+#pragma region _Manipulator Arm UI_
+ManipulatorArm_UI::ManipulatorArm_UI()
+{
+	m_Arm = std::make_shared<ManipulatorArm_UI_Internal>();
+}
+ManipulatorArm_UI::~ManipulatorArm_UI() = default;
+
+void ManipulatorArm_UI::SetArmState_Callback(std::function<ArmState()> callback)
+{
+	m_Arm->SetArmState_Callback(std::move(callback));
+}
+void ManipulatorArm_UI::Initialize()
+{
+	m_Arm->Initialize();
+}
+void ManipulatorArm_UI::UpdateScene(void* rootNode, void* geode, bool AddOrRemove)
+{
+	m_Arm->UpdateScene(static_cast<osg::Group*>(rootNode), static_cast<osg::Geode*>(geode), AddOrRemove);
+}
+void ManipulatorArm_UI::TimeChange(double dTime_s)
+{
+	m_Arm->TimeChange(dTime_s);
 }
 #pragma endregion
 

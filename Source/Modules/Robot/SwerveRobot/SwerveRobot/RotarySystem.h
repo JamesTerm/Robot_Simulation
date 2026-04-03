@@ -137,6 +137,11 @@ public:
 	//If this is angular it is always absolute, so relative can be managed by the caller
 	//like written before where 0 is north, pi/2 east, etc.
 	void SetPosition(double position);
+	// Ian: SetIntendedPosition — sets ONLY the PID's intended position (waypoint) without
+	// modifying the internal m_Position tracker.  Used by the 3D positioning layer where IK
+	// computes desired shaft lengths and the PID chases them, while the voltage integrator
+	// (m_simulated_positions via odometry callback) tracks the actual simulated dart position.
+	void SetIntendedPosition(double position);
 	//Give entity a time slice to update its position
 	void TimeSlice(double d_time_s);
 	//set internal caching to a position, or PID variables as needed

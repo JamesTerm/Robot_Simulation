@@ -160,14 +160,14 @@ int smoke_main(int argc, char** argv)
 
 	// Ian: Seed the chooser and test values — these exercise the full publish path
 	// regardless of which backend is active.
+	// Ian: The auton chooser has 2 built-in options + manipulator-contributed options.
+	// "Grab and Return" appears when a manipulator plugin (e.g. ExcavatorArm) is active.
+	// TransportSmoke seeds all possible options so the chooser widget is fully populated.
 	SmartDashboard::PutString("Autonomous/Auton_Selection/AutoChooser/.type", "String Chooser");
 	std::vector<std::string> chooserOptions;
 	chooserOptions.push_back("Do Nothing");
 	chooserOptions.push_back("Just Move Forward");
-	chooserOptions.push_back("Just Rotate");
-	chooserOptions.push_back("Move Rotate Sequence");
-	chooserOptions.push_back("Box Waypoints");
-	chooserOptions.push_back("Smart Waypoints");
+	chooserOptions.push_back("Grab and Return");
 	SmartDashboard::PutStringArray("Autonomous/Auton_Selection/AutoChooser/options", chooserOptions);
 	SmartDashboard::PutString("Autonomous/Auton_Selection/AutoChooser/default", "Do Nothing");
 	SmartDashboard::PutString("Autonomous/Auton_Selection/AutoChooser/active", "Do Nothing");

@@ -1270,6 +1270,16 @@ public:
 		m_Position = position;
 		m_rotary_legacy->SetIntendedPosition(position);
 	}
+	// Ian: SetIntendedPosition — sets ONLY the legacy Ship_1D intended position without
+	// modifying m_Position.  This is needed for the 3D positioning layer where the IK computes
+	// desired shaft lengths and writes them as intended positions for the PID to chase, while
+	// m_simulated_positions (read via the odometry callback) tracks the actual simulated dart
+	// position driven by the voltage integrator.  Compare with SetPosition() above which sets
+	// both m_Position AND intended — that's used in direct-control mode (EnableArmAutoPosition=false).
+	void SetIntendedPosition(double position)
+	{
+		m_rotary_legacy->SetIntendedPosition(position);
+	}
 	void TimeSlice(double d_time_s)
 	{
 		//Use our setpoint input m_Position compute needed velocity and apply normalized voltage to voltage callback
@@ -1281,7 +1291,9 @@ public:
 	}
 	void Reset(double position = 0.0)
 	{
-		m_Position = 0.0;
+		// Ian: was m_Position = 0.0 which ignored the position parameter, causing SetPosition()
+		// to set the wrong intended position after a Reset with non-zero starting pos.
+		m_Position = position;
 		m_rotary_legacy->ResetPosition(position);
 	}
 	void Set_UpdateCurrentVoltage(std::function<void(double new_voltage)> callback)
@@ -1421,6 +1433,10 @@ void RotarySystem_Position::ShutDown()
 void RotarySystem_Position::SetPosition(double position)
 {
 	m_rotary_system->SetPosition(position);
+}
+void RotarySystem_Position::SetIntendedPosition(double position)
+{
+	m_rotary_system->SetIntendedPosition(position);
 }
 void RotarySystem_Position::TimeSlice(double d_time_s)
 {

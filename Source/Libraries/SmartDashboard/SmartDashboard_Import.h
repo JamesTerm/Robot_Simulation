@@ -29,6 +29,10 @@ public:
 	virtual void PublishNumber(const std::string& keyName, double value) = 0;
 	virtual void PublishString(const std::string& keyName, const std::string& value) = 0;
 	virtual void PublishStringArray(const std::string& keyName, const std::vector<std::string>& values) = 0;
+	// Ian: SetTopicProperties is optional — only NT4Backend overrides it.
+	// Default no-op so NativeLink and other sinks compile without changes.
+	// The propertiesJson carries raw JSON (e.g. {"SmartDashboard":"Scheduler"}).
+	virtual void SetTopicProperties(const std::string& /*keyName*/, int /*typeHint*/, const std::string& /*propertiesJson*/) {}
 };
 
 class SmartDashboardDirectQuerySource
@@ -75,6 +79,9 @@ public:
 	
 	static void PutString(std::string keyName, std::string value);
 	static void PutStringArray(std::string keyName, const std::vector<std::string>& values);
+	// Ian: SetTopicProperties forwards to the DirectPublishSink (NT4 only).
+	// No-op in legacy NT2 mode (sink is NULL). See SmartDashboard.cpp for impl.
+	static void SetTopicProperties(std::string keyName, int typeHint, const std::string& propertiesJson);
 	static int GetString(std::string keyName, char *value, unsigned int valueLen);
 	static std::string GetString(std::string keyName);
 	static std::string GetString(std::string keyName, std::string defaultValue);

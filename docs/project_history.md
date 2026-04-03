@@ -1,5 +1,218 @@
 # Project history
 
+## 2026-03-31 - Excavator goal oscillation fix: SetIntendedPosition-once pattern, Test/ key grouping (`feature/command-subsystem-livewindow`)
+
+Fixed arm oscillation during test goals and grouped all test SmartDashboard keys under the `Test/` prefix.
+
+### Root cause of arm oscillation
+
+The original `Goal_SetArmPosition` wrote target positions to SmartDashboard keys, and Step 1a.5 in `ExcavatorArm::TimeSlice()` read those keys and called `SetIntendedPosition()` on virtual joints **every frame**. Each call reset `m_LockShipToPosition = false`, interfering with Ship_1D's convergence behavior. The joints would never settle because the PID was perpetually restarted.
+
+### The Curivator pattern (correct approach)
+
+The Curivator's `Goal_Rotary_MoveToPosition` (Common/Rotary_System.cpp:1210-1266) calls `SetIntendedPosition()` **ONCE** in `Activate()` and only monitors convergence in `Process()`. This is the correct pattern for Ship_1D-based position goals — set the target once, then let the PID converge undisturbed.
+
+### Fix
+
+- **New `Goal_Ship1D_MoveToPosition`**: Exact analog of Curivator's `Goal_Rotary_MoveToPosition` operating on `Ship_1D&` references. Calls `SetIntendedPosition` once in `Activate()`, monitors `GetPos_m()` vs tolerance in `Process()`, calls `SetRequestedVelocity(0)` and restores max speeds on completion.
+- **New `Move_ArmAndBucket()` helper**: Creates a `MultitaskGoal` of 4 parallel `Goal_Ship1D_MoveToPosition` goals (one per virtual joint: arm_xpos, arm_ypos, bucket_angle, clasp_angle).
+- **`Goal_SetArmPosition` refactored**: Now a `Generic_CompositeGoal` wrapping a single `Move_ArmAndBucket` call instead of the old SmartDashboard-bridge approach.
+- **`ArmGrabSequence`, `ClawGrabSequence` updated**: Hold `Ship_1D&` references to virtual joints directly, passed through factory functions.
+- **Step 1a.5 removed from `ExcavatorArm::TimeSlice()`**: The every-frame SmartDashboard → `SetIntendedPosition` bridge is no longer needed since goals drive joints directly.
+- **`ExcavatorArm::GetVirtualJoint()`**: New public accessor returning `Ship_1D*` for a given virtual joint enum value. Used by `CreateTestGoal()` to extract joint pointers for goal constructors.
+
+### Test/ key grouping
+
+All SmartDashboard keys for test goals are now grouped under the `Test/` prefix:
+- Reads use direct `SmartDashboard::TryGetNumber("Test/target_arm_xpos", ...)` (not `Auton_Smart_GetMultiValue` which would double-prefix).
+- Writes use `SmartDashboard::PutNumber("Test/target_arm_xpos", ...)`.
+- Layout JSON updated with `Test/target_arm_xpos`, `Test/target_arm_ypos`, `Test/target_bucket_angle`, `Test/target_clasp_angle` slider/gauge widgets.
+
+### Known issue: first-enable arm oscillation in Debug builds
+
+On first test goal activation in Debug builds, the arm occasionally oscillates for a few seconds before settling. Subsequent activations work fine. Root cause investigation points to uninitialized Ship_1D members (`m_LockShipToPosition`, `m_Last_RequestedVelocity` sentinel of `-1.0`, etc.) but a fix has not yet been validated. See `docs/roadmap.md` for tracking.
+
+### Files modified
+
+| File | Change |
+|---|---|
+| `ExcavatorGoals.h` | Complete rewrite: `Goal_Ship1D_MoveToPosition`, `Move_ArmAndBucket`, refactored all goal classes to use `Ship_1D&` refs |
+| `ExcavatorArm.h` | Added `GetVirtualJoint(VirtualJoint)` public accessor |
+| `ExcavatorArm.cpp` | Removed Step 1a.5, updated `CreateTestGoal()` to pass `Ship_1D&` refs |
+| `Curivatorlayout.json` | Added `Test/target_*` slider/gauge widgets |
+
+### Verification
+
+- DriverStation.exe builds clean (Release)
+- 29/30 unit tests pass (1 pre-existing TCP flake)
+- User confirmed oscillation is fixed at runtime
+
+---
+
+## 2026-03-31 - Autonomous goal system refactoring: Auton/Test separation, loose-coupled manipulator goals (`feature/command-subsystem-livewindow`)
+
+Refactored the autonomous goal system to separate **Auton mode** (minimal, match-safe) from **Test mode** (full diagnostic/development tests), and added a plugin-based architecture for manipulator-specific test goals.
+
+### Architecture
+
+- **Auton chooser** (`Autonomous/Auton_Selection/AutoChooser`): Reduced to 2 options — "Do Nothing" (default) and "Just Move Forward".
+- **Test chooser** (`Test/Test_Selection/TestChooser`): Contains 6 built-in drive tests (Do Nothing, Just Move Forward, Just Rotate, Move Rotate Sequence, Box Waypoints, Smart Waypoints) plus dynamically-contributed manipulator goals when a plugin is active.
+- **Two-phase chooser lifecycle**: `PublishTestChooser()` seeds the chooser widget when `SetGameMode(eTest)` fires (user clicks Test radio button). `ActivateTest()` reads the user's selection when Enable is pressed. This mirrors how the Auton chooser is seeded by TransportSmoke before activation.
+- **Loose coupling via ManipulatorPlugin**: Each plugin self-describes its test goals via `GetTestGoals()` (returns `TestGoalDescriptor` array) and `CreateTestGoal(int pluginLocalIndex)` (returns `Goal*`). The AI goal system dynamically builds the Test chooser by combining drive options with plugin-contributed options. Plugin goal indices start at `eNoTestDriveTypes` (6).
+
+### Excavator goals ported from Curivator
+
+Three test goals ported from `Curivator_Goals.cpp`, housed in new `ExcavatorGoals.h`:
+- **Goal_SetArmPosition** — drives ExcavatorArm virtual joints to a target pose via SmartDashboard keys (`target_arm_xpos`, `target_arm_ypos`, `target_bucket_angle`, `target_clasp_angle`). Converges when FK feedback matches target within tolerance + settle time.
+- **ArmGrabSequence** — sequential pickup: start → approach → scoop → hover → retract → home.
+- **ClawGrabSequence** — clasp close test.
+
+All goals drive virtual joints directly via `Ship_1D&` references (not through SmartDashboard), following the Curivator's SetIntendedPosition-once pattern.
+
+### Safety: stale selection handling
+
+When a layout persists arm goal labels but the manipulator is set to "None" on relaunch:
+1. `PublishTestChooser(nullptr)` re-publishes with only drive options, overwriting stale labels.
+2. `ResolveAutonSelectionFromChooser` fails to match a stale label → falls back to "Do Nothing".
+3. `ActivateTest` null-checks `manipulatorPlugin` before calling `CreateTestGoal`.
+
+### Compile fixes
+
+- **ExcavatorArm.cpp**: Moved `#include "ExcavatorGoals.h"` outside the `namespace Module::Robot` block — the header transitively pulls in `<chrono>`/`<ratio>` which were parsed as `Module::Robot::std::ratio`.
+- **ManipulatorPlugin.h**: Made `CreateUI()` non-inline (moved default body to new `ManipulatorPlugin.cpp`) because `unique_ptr<ManipulatorUI_Plugin>` needs a complete type for its destructor, and not all translation units include the UI header.
+
+### Files created
+
+| File | Purpose |
+|---|---|
+| `ExcavatorGoals.h` | Excavator test goal classes ported from Curivator |
+| `ManipulatorPlugin.cpp` | Out-of-line default for `CreateUI()` |
+
+### Files modified
+
+| File | Change |
+|---|---|
+| `AI_Input_Example.cpp` | Auton enum reduced to 2, TestType enum with 6 drive tests, `BuildTestChooserOptions`, `PublishTestChooser`, `ActivateTest`, excavator goals removed |
+| `AI_Input_Example.h` | Added `PublishTestChooser()` and `ActivateTest()` declarations |
+| `ManipulatorPlugin.h` | Added `TestGoalDescriptor`, `GetTestGoals()`, `CreateTestGoal()` virtuals; `CreateUI()` made non-inline |
+| `ExcavatorArm.h` | Added `GetTestGoals()` and `CreateTestGoal()` override declarations |
+| `ExcavatorArm.cpp` | Implements test goal contribution; moved ExcavatorGoals.h include outside namespace |
+| `TeleAutonV2.cpp` | Test mode wired to goal framework; `PublishTestChooser` in `SetGameMode`, `ActivateTest` in `Start`, goal processing in TimeSlice |
+| `TransportSmoke.cpp` | Auton chooser seed reduced to 2 options |
+| `NativeLinkAuthorityHelpers.cpp` | Registered `TestChooser/selected` as LeaseSingleWriter |
+| `CMakeLists.txt` | Added `ManipulatorPlugin.cpp` to both targets |
+| `auton_selection_tests.cpp` | Updated to 2-option auton test + 6-option drive test; added Ian comment on generic `maxExclusive` |
+| `Curivatorlayout.json` | Updated to include Test chooser widget |
+| `Curivatorlayout_all.json` | Updated to include Test chooser widget |
+
+### Verification
+
+- DriverStation.exe builds clean (Release)
+- 29/30 unit tests pass (1 pre-existing TCP flake)
+- CRLF line endings verified on all files
+
+---
+
+## 2026-03-30 - Excavator arm Layer 2 zero-voltage fix (`feature/command-subsystem-livewindow`)
+
+Fixed the root cause of ALL physical joints producing zero voltage when driven by Layer 2 (virtual 3D-position joints → IK → SetIntendedPosition).
+
+### Root cause
+
+Robot_Simulation's `RotarySystem.cpp` uses `MinLimitRange`/`MaxLimitRange` for PID output range (unlike Curivator which uses symmetric `±MaxSpeed`). These defaulted to `0.0`, producing `SetOutputRange(0, 0)`. In the PID I-term clamping code, this caused a `0/0 = NaN` division, which propagated through `m_ErrorOffset` → voltage → clamped to 0.
+
+### Fix
+
+Set `MinLimitRange = -maxRange` and `MaxLimitRange = maxRange` in `SetDefaultJointProps` for symmetric PID output range. Also removed temporary diagnostic printf from RotarySystem.cpp and cleaned up debug trace infrastructure from ExcavatorArm.
+
+### Verification
+
+- 12/12 excavator tests pass (including `Layer2_Diagnostic_BucketAngleChain` which traces the full chain: input → virtual joint → IK → PID → voltage → FK)
+- 28/29 full test suite pass (1 pre-existing unrelated failure)
+
+---
+
+## 2026-03-30 - Excavator arm bug fixes, tests, enable_arm_auto_position (`feature/command-subsystem-livewindow`)
+
+Fixed multiple bugs discovered during Layer 2 integration and added comprehensive test coverage.
+
+### Fixes
+
+- IK geometry constant error
+- Reset derives starting positions from IK (consistency at init)
+- Removed PID TimeSlice in Layer 1 direct mode (was causing interference)
+- `MaxSpeed_Reverse` fix: must be negative for Ship_1D velocity clamping
+- Voltage callback dt fix
+- UI geometry smearing fix (OSG visualization)
+- `enable_arm_auto_position` as dedicated boolean (bypasses SmartDashboard for tests)
+
+### Tests added (11 new, 12 total)
+
+Layer 1: InitialFKIsStable, PositiveInputExtendsBigArm, NegativeInputRetractsBigArm, ExtendAndRetractAreOpposite, AllJointsRespond. Layer 2: StableWithNoInput, ActualMatchesDesiredOnReset, AutoOn_NoInputNoMovement, AutoOff_NoInputNoMovement, NoDriftOver10Seconds. Both: IK_FK_RoundTrip.
+
+---
+
+## 2026-03-29 - Excavator arm two-layer control + key polarity fix (`feature/command-subsystem-livewindow`)
+
+Implemented full two-layer arm control, faithfully porting the Curivator architecture.
+
+### Layer 2 implementation
+
+- `SetIntendedPosition` added to `RotarySystem_Position` public API
+- Four virtual `Ship_1D` joints (arm_xpos, arm_ypos, bucket_angle, clasp_angle) act as MASTER when `enable_arm_auto_position=true`
+- Each frame: virtual joint positions → IK → `SetIntendedPosition` on physical joints
+- FK feedback writes actual bucket position back
+- TimeSlice ordering matches Curivator: physical TimeSlice first (processes PREVIOUS frame's target), then virtual TimeChange, then IK → SetIntendedPosition for NEXT frame
+
+### Key polarity fix
+
+Fixed j↔k, l↔;, u↔i keyboard bindings to match Curivator's CurivatorRobot.lua (lines 531-538).
+
+### Properties ported from CurivatorRobot.lua
+
+All match-tuned PID gains (P=100, I=0, D=25), tolerances, dead zones, velocity predict values, max speed, and max accel values ported 1:1 from the lua configuration.
+
+---
+
+## 2026-03-29 - Excavator arm Phase 1 + 1.5 + stabilization (`feature/command-subsystem-livewindow`)
+
+Added an optional excavator arm manipulator module to the robot simulation, porting the Curivator's 4-joint excavator arm (BigArm, Boom, Bucket, Clasp) into the modern framework.
+
+### Architecture
+
+- `ManipulatorPlugin` base class with `ExcavatorArm` concrete implementation
+- Hot-swappable design: `m_manipulator == nullptr` means no manipulator, simulation unchanged
+- Each plugin creates its own UI via `CreateUI()` → `ManipulatorArm_UI` (side-view visualization in OSG_Viewer)
+- Voltage callback lambda integrates PID output into `m_simulated_positions`; odometry callback feeds positions back to PID (closed loop with `LoopState=eClosed`)
+
+### Key fixes included
+
+- `LoopState=eClosed` required for potentiometer feedback (was `eNone`)
+- Actuator drift at startup (race between Init and first TimeSlice)
+- `RotaryPosition_Internal::Reset()` hardcoded `m_Position = 0.0` instead of parameter
+
+### What was added
+
+- Forward kinematics (faithful port of Curivator geometry)
+- Inverse kinematics (faithful port of `ComputeArmPosition`)
+- Per-joint telemetry: shaft position, normalized pot, voltage
+- FK telemetry: all link angles, lengths, heights
+- Voltage detach toggle via SmartDashboard boolean
+- Keyboard bindings: keys 1-8 for direct dart control
+- Side-view arm visualization (ManipulatorArm_UI)
+
+### Files created
+
+ManipulatorPlugin.h, ExcavatorArm.h, ExcavatorArm.cpp, ManipulatorUI_Plugin.h, ManipulatorArm_UI.h
+
+### Files modified
+
+OSG_Viewer.cpp, TeleAutonV2.cpp, SwerveRobot.h, SwerveRobot.cpp, RegistryV1.h, script_loader_example.cpp, CMakeLists.txt
+
+See `docs/CurivatorManipulator.md` for the full architecture reference.
+
+---
+
 ## 2026-03-28 - Transport-agnostic video infrastructure (`feature/transport-agnostic-video`)
 
 Extracted video infrastructure (MJPEG server, frame sources, video source state machine) from `NT4Backend` to `DashboardTransportRouter`, making camera streaming work on ALL transport modes (Direct, NativeLink, NT4, Legacy).

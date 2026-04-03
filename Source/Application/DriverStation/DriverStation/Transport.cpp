@@ -8,6 +8,8 @@
 #include "WebCameraSource.h"
 
 #include "../../../Libraries/SmartDashboard/SmartDashboard_Import.h"
+#include "../../../Libraries/SmartDashboard/NetworkTables/NetworkTable.h"
+#include "../../../Libraries/SmartDashboard/networktables2/type/StringArray.h"
 
 #include <ixwebsocket/IXNetSystem.h>
 
@@ -1411,6 +1413,56 @@ public:
 		{
 			return L"Legacy SmartDashboard";
 		}
+
+		// Ian: Camera discovery via legacy NT2.  The official SmartDashboard's
+		// CameraServerViewer subscribes to NetworkTable.getTable("CameraPublisher")
+		// (root-level, NOT under /SmartDashboard/).  We obtain a separate
+		// NetworkTable* at "/CameraPublisher" — this reuses the same NT2 server
+		// node already running on port 1735 (no second server, no port conflict).
+		//
+		// The SmartDashboard m_table (/SmartDashboard/) is completely untouched;
+		// this is additive only.
+		void PublishCameraDiscoveryKeys(const std::string& sourceDescription) override
+		{
+			if (!SmartDashboard::is_initialized())
+				return;
+
+			// Ian: NetworkTable::GetTable("CameraPublisher") yields path "/CameraPublisher".
+			// The static provider is already initialized by SmartDashboard::init(), so
+			// this just creates/retrieves a cached table object — no re-initialization.
+			NetworkTable* cameraRoot = NetworkTable::GetTable("CameraPublisher");
+			if (!cameraRoot)
+				return;
+			ITable* simCam = cameraRoot->GetSubTable("SimCamera");
+			if (!simCam)
+				return;
+
+			// Publish the three discovery keys the official SmartDashboard expects.
+			// "streams" is a StringArray (ComplexData), not a plain string.
+			StringArray streamsArray;
+			streamsArray.add("mjpg:http://127.0.0.1:1181/?action=stream");
+			simCam->PutValue("streams", streamsArray);
+
+			simCam->PutString("source", sourceDescription);
+			simCam->PutBoolean("connected", true);
+
+			OutputDebugStringW(L"[Transport] CameraPublisher keys published via legacy NT2\n");
+		}
+
+		void ClearCameraDiscoveryKeys() override
+		{
+			if (!SmartDashboard::is_initialized())
+				return;
+
+			NetworkTable* cameraRoot = NetworkTable::GetTable("CameraPublisher");
+			if (!cameraRoot)
+				return;
+			ITable* simCam = cameraRoot->GetSubTable("SimCamera");
+			if (!simCam)
+				return;
+
+			simCam->PutBoolean("connected", false);
+		}
 	};
 
 	class DirectConnectBackend final : public IConnectionBackend
@@ -1641,6 +1693,16 @@ public:
 			if (m_running)
 				m_nt4Server.PublishStringArray(ToNT4Path(keyName), values);
 		}
+		void SetTopicProperties(const std::string& keyName, int typeHint, const std::string& propertiesJson) override
+		{
+			if (m_running)
+			{
+				// Ian: Map the int typeHint to NT4Server's public NT4TypeHint enum.
+				// Values: 0=Boolean, 1=Double, 4=String, 20=StringArray.
+				auto hint = static_cast<NT4Server::NT4TypeHint>(typeHint);
+				m_nt4Server.SetTopicProperties(ToNT4Path(keyName), hint, propertiesJson);
+			}
+		}
 
 		// --- SmartDashboardDirectQuerySource ---
 		// Ian: The simulator reads values with flat keys like "TestMove" or
@@ -1746,6 +1808,19 @@ const wchar_t* GetVideoSourceModeName(VideoSourceMode mode)
 		return L"Synthetic Radar";
 	case VideoSourceMode::eVirtualField:
 		return L"The Grid";
+	default:
+		return L"Unknown";
+	}
+}
+
+const wchar_t* GetManipulatorKindName(ManipulatorKind kind)
+{
+	switch (kind)
+	{
+	case ManipulatorKind::eNone:
+		return L"None";
+	case ManipulatorKind::eExcavatorArm:
+		return L"Excavator Arm";
 	default:
 		return L"Unknown";
 	}

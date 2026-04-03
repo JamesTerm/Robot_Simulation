@@ -56,6 +56,12 @@ namespace NativeLink::detail
 		// only the dashboard slider writes it.
 		core.RegisterTopic(MakeStateTopic("Autonomous/TestMove", ValueType::Double, WriterPolicy::LeaseSingleWriter));
 
+		// --- TestChooser/selected: LeaseSingleWriter descriptor only, NO initial value.
+		// Ian: The Test chooser follows the same protocol as the Auton chooser.
+		// Robot code (AI_Input_Example::ActivateTest -> PublishAutonChooser) publishes
+		// the real selected value.  The dashboard writes the user's choice via lease.
+		core.RegisterTopic(MakeStateTopic("Test/Test_Selection/TestChooser/selected", ValueType::String, WriterPolicy::LeaseSingleWriter));
+
 		// Ian: All other topics (Timer, Y_ft, chooser options/default/active, etc.)
 		// are ServerOnly and auto-register on first write from robot code via
 		// Core::PublishInternal (allowServerOnly=true).  Do NOT add them here.

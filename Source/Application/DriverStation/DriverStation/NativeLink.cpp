@@ -625,6 +625,12 @@ namespace NativeLink
 			if (running.load())
 				return true;
 
+			printf("[NativeLink-Server] Server::Start carrier=%s host=%s port=%d channel=%s\n",
+				ToString(config.carrierKind),
+				config.host.c_str(),
+				static_cast<int>(config.port),
+				config.channelId.c_str());
+
 			if (config.carrierKind == CarrierKind::Tcp)
 			{
 				RegisterDefaultTopics();
@@ -632,9 +638,11 @@ namespace NativeLink
 				tcpCarrier = detail::CreateTcpServerCarrier(config, core);
 				if (!tcpCarrier || !tcpCarrier->Start())
 				{
+					printf("[NativeLink-Server] TCP carrier Start() FAILED\n");
 					tcpCarrier.reset();
 					return false;
 				}
+				printf("[NativeLink-Server] TCP carrier started successfully\n");
 				stopRequested.store(false);
 				running.store(true);
 				worker = std::thread(&Impl::RunLoop, this);

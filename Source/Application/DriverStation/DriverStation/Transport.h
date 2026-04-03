@@ -49,6 +49,20 @@ enum class VideoSourceMode
 
 const wchar_t* GetVideoSourceModeName(VideoSourceMode mode);
 
+// Ian: ManipulatorKind controls which optional manipulator plugin is loaded at
+// init time.  "None" runs the simulation without any manipulator telemetry,
+// which is useful for diagnosing whether the arm's ~50+ per-frame NT keys are
+// causing performance issues (e.g. the NT2 freeze).  The selection is communicated
+// to the robot code via the ROBOT_SIM_MANIPULATOR environment variable, following
+// the same pattern as NativeLink's CarrierKind.  Only takes effect at init() time.
+enum class ManipulatorKind
+{
+	eNone = 0,            // No manipulator — Build_enable_manipulator = false
+	eExcavatorArm = 1     // ExcavatorArm plugin — Build_enable_manipulator = true
+};
+
+const wchar_t* GetManipulatorKindName(ManipulatorKind kind);
+
 const wchar_t* GetConnectionModeName(ConnectionMode mode);
 
 // Forward declarations for video infrastructure (owned by DashboardTransportRouter)
@@ -73,7 +87,10 @@ public:
 	//   - NT4Backend: publishes /CameraPublisher/SimCamera/streams etc. via NT4
 	//   - DirectConnectBackend: publishes via shared-memory ring buffer
 	//   - NativeLinkBackend: publishes via NativeLink topics
-	//   - LegacyBackend: no-op (legacy dashboards don't support CameraPublisher)
+	//   - LegacyBackend: publishes to /CameraPublisher/ via the same NT2 server
+	//     on port 1735, using a separate NetworkTable* (not m_table which is
+	//     bound to /SmartDashboard/).  The official SmartDashboard's
+	//     CameraServerViewer subscribes at the root /CameraPublisher table.
 	//
 	// Ian: LESSON LEARNED — these are "best effort" notifications.  The MJPEG
 	// server is already listening on port 1181 before these are called.  A

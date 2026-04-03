@@ -26,6 +26,11 @@ public:
 	virtual void PublishNumber(const std::string& keyName, double value) = 0;
 	virtual void PublishString(const std::string& keyName, const std::string& value) = 0;
 	virtual void PublishStringArray(const std::string& keyName, const std::vector<std::string>& values) = 0;
+	// Ian: Set NT4 topic properties for WPILib Sendable type identification.
+	// typeHint: 0=bool, 1=double, 4=string, 20=string[].
+	// propertiesJson: e.g. "{\"SmartDashboard\":\"Scheduler\"}".
+	// Default no-op so existing sinks (NativeLink) don't need to implement it.
+	virtual void SetTopicProperties(const std::string& keyName, int typeHint, const std::string& propertiesJson) {}
 };
 
 class SmartDashboardDirectQuerySource
@@ -72,6 +77,11 @@ public:
 	
 	static void PutString(std::string keyName, std::string value);
 	static void PutStringArray(std::string keyName, const std::vector<std::string>& values);
+	// Ian: Set NT4 topic properties for WPILib Sendable type identification.
+	// This tags a topic so dashboards can create the right widget type.
+	// typeHint: 0=bool, 1=double, 4=string, 20=string[].
+	// propertiesJson: e.g. "{\"SmartDashboard\":\"Scheduler\"}".
+	static void SetTopicProperties(std::string keyName, int typeHint, const std::string& propertiesJson);
 	static int GetString(std::string keyName, char *value, unsigned int valueLen);
 	static std::string GetString(std::string keyName);
 	static std::string GetString(std::string keyName,std::string defaultValue);

@@ -10,6 +10,7 @@
 #include <Windows.h>
 #endif
 
+#include <cstring>
 #include <sstream>
 
 
@@ -114,6 +115,33 @@ namespace
 	{
 		if (!g_hasExplicitConnectionMode)
 			g_connectionMode = LoadPersistedConnectionMode();
+	}
+
+	// Ian: When publishing over the legacy NT2 path (eLegacySmartDashboard mode),
+	// the folder-group prefixes added in the NT4 key reorganisation (Drive/, Swerve/,
+	// Autonomous/, Manipulator/) must be stripped so the official SmartDashboard
+	// sees flat keys directly under /SmartDashboard/ — exactly as the baseline did.
+	// Modern transports (Direct, NT4, NativeLink) keep the prefixed keys unchanged.
+	//
+	// The stripping is generic: remove the first path component (everything up to
+	// and including the first '/') for keys that start with a known group prefix.
+	// This keeps the function maintainable if new groups are added later.
+	static const char* const kFolderGroupPrefixes[] = {
+		"Drive/",
+		"Swerve/",
+		"Autonomous/",
+		"Manipulator/",
+	};
+
+	std::string FlattenKeyForLegacyNT(const std::string& keyName)
+	{
+		for (const char* prefix : kFolderGroupPrefixes)
+		{
+			const size_t len = strlen(prefix);
+			if (keyName.compare(0, len, prefix) == 0)
+				return keyName.substr(len);
+		}
+		return keyName;
 	}
 
 	std::string StripSmartDashboardPrefix(const std::string& keyName)
@@ -283,7 +311,7 @@ void SmartDashboard::PutData(std::string key, Sendable *data)
 		//TODO wpi_setWPIErrorWithContext(NullParameter, "value");
 		return;
 	}
-    ITable* dataTable = m_table->GetSubTable(key);
+    ITable* dataTable = m_table->GetSubTable(FlattenKeyForLegacyNT(key));
     dataTable->PutString("~TYPE~", data->GetSmartDashboardType());
 	dataTable->PutString(".type", data->GetSmartDashboardType());
     data->InitTable(dataTable);
@@ -337,7 +365,7 @@ void SmartDashboard::PutValue(std::string keyName, ComplexData& value)
 	if (m_table == NULL)
 		return;
 
-	m_table->PutValue(keyName, value);
+	m_table->PutValue(FlattenKeyForLegacyNT(keyName), value);
 }
 
 /**
@@ -353,7 +381,7 @@ void SmartDashboard::RetrieveValue(std::string keyName, ComplexData& value)
 	if (m_table == NULL)
 		return;
 
-	m_table->RetrieveValue(keyName, value);
+	m_table->RetrieveValue(FlattenKeyForLegacyNT(keyName), value);
 }
 
 /**
@@ -376,7 +404,7 @@ void SmartDashboard::PutBoolean(std::string keyName, bool value)
 	if (m_table == NULL)
 		return;
 
-	m_table->PutBoolean(keyName, value);
+	m_table->PutBoolean(FlattenKeyForLegacyNT(keyName), value);
 }
 
 /**
@@ -402,7 +430,7 @@ bool SmartDashboard::GetBoolean(std::string keyName)
 	if (m_table == NULL)
 		return false;
 
-	return m_table->GetBoolean(keyName);
+	return m_table->GetBoolean(FlattenKeyForLegacyNT(keyName));
 }
 
 bool SmartDashboard::TryGetBoolean(std::string keyName, bool& value)
@@ -415,9 +443,10 @@ bool SmartDashboard::TryGetBoolean(std::string keyName, bool& value)
 		init();
 	if (m_table == NULL)
 		return false;
-	if (!m_table->ContainsKey(keyName))
+	const std::string flatKey = FlattenKeyForLegacyNT(keyName);
+	if (!m_table->ContainsKey(flatKey))
 		return false;
-	value = m_table->GetBoolean(keyName);
+	value = m_table->GetBoolean(flatKey);
 	return true;
 }
 
@@ -441,7 +470,7 @@ void SmartDashboard::PutNumber(std::string keyName, double value){
 		return;
 	if (!is_initialized()) init();
 	if (m_table == NULL) return;
-	m_table->PutNumber(keyName, value);
+	m_table->PutNumber(FlattenKeyForLegacyNT(keyName), value);
 }
 
 /**
@@ -476,7 +505,7 @@ double SmartDashboard::GetNumber(std::string keyName)
 
 	if (!is_initialized()) init();
 	if (m_table == NULL) return 0.0;
-	double value = m_table->GetNumber(keyName);
+	double value = m_table->GetNumber(FlattenKeyForLegacyNT(keyName));
 	if (keyName == "AutonTest")
 	{
 		char dbg[256] = {};
@@ -496,9 +525,10 @@ bool SmartDashboard::TryGetNumber(std::string keyName, double& value)
 		init();
 	if (m_table == NULL)
 		return false;
-	if (!m_table->ContainsKey(keyName))
+	const std::string flatKey = FlattenKeyForLegacyNT(keyName);
+	if (!m_table->ContainsKey(flatKey))
 		return false;
-	value = m_table->GetNumber(keyName);
+	value = m_table->GetNumber(flatKey);
 	return true;
 }
 
@@ -522,7 +552,7 @@ void SmartDashboard::PutString(std::string keyName, std::string value)
 	if (m_table == NULL)
 		return;
 
-	m_table->PutString(keyName, value);
+	m_table->PutString(FlattenKeyForLegacyNT(keyName), value);
 }
 
 void SmartDashboard::PutStringArray(std::string keyName, const std::vector<std::string>& values)
@@ -542,7 +572,15 @@ void SmartDashboard::PutStringArray(std::string keyName, const std::vector<std::
 	for (size_t i = 0; i < values.size(); ++i)
 		arrayValue.add(values[i]);
 
-	m_table->PutValue(keyName, arrayValue);
+	m_table->PutValue(FlattenKeyForLegacyNT(keyName), arrayValue);
+}
+
+void SmartDashboard::SetTopicProperties(std::string keyName, int typeHint, const std::string& propertiesJson)
+{
+	// Ian: Topic properties only apply to NT4 (and future transports that support them).
+	// The sink's default implementation is a no-op, so non-NT4 sinks silently ignore this.
+	if (g_directPublishSink != NULL)
+		g_directPublishSink->SetTopicProperties(keyName, typeHint, propertiesJson);
 }
 
 bool SmartDashboard::IsConnected()
@@ -582,7 +620,7 @@ int SmartDashboard::GetString(std::string keyName, char *outBuffer, unsigned int
 	if (m_table == NULL || outBuffer == NULL || bufferLen == 0)
 		return 0;
 
-	std::string value = m_table->GetString(keyName);
+	std::string value = m_table->GetString(FlattenKeyForLegacyNT(keyName));
 	unsigned int i;
 	for(i = 0; i<bufferLen-1&&i<value.length(); ++i)
 		outBuffer[i] = (char)value.at(i);
@@ -614,7 +652,7 @@ std::string SmartDashboard::GetString(std::string keyName)
 	if (m_table == NULL)
 		return std::string();
 
-	return m_table->GetString(keyName);
+	return m_table->GetString(FlattenKeyForLegacyNT(keyName));
 }
 
 bool SmartDashboard::TryGetString(std::string keyName, std::string& value)
@@ -627,9 +665,10 @@ bool SmartDashboard::TryGetString(std::string keyName, std::string& value)
 		init();
 	if (m_table == NULL)
 		return false;
-	if (!m_table->ContainsKey(keyName))
+	const std::string flatKey = FlattenKeyForLegacyNT(keyName);
+	if (!m_table->ContainsKey(flatKey))
 		return false;
-	value = m_table->GetString(keyName);
+	value = m_table->GetString(flatKey);
 	return true;
 }
 

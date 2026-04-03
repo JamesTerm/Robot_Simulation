@@ -72,6 +72,25 @@ public:
 	void PublishStringArray(const std::string& topicName, const std::vector<std::string>& values);
 	void PublishInt(const std::string& topicName, int64_t value);
 
+	// --- Topic properties API ---
+	// Ian: Set the properties JSON for a topic's announce message.  WPILib dashboards
+	// use this to identify Sendable types (Scheduler, Subsystem, Command, etc.).
+	// The propertiesJson string must be valid JSON, e.g. "{\"SmartDashboard\":\"Scheduler\"}".
+	// If the topic doesn't exist yet, it is created with the given type.
+	// If the topic already exists, its properties are updated (type is ignored).
+
+	// Ian: Type hints for SetTopicProperties — lets callers specify the NT4 type without
+	// depending on the private NT4Type enum.  Maps 1:1 to NT4Type values.
+	enum class NT4TypeHint : uint8_t
+	{
+		Boolean = 0,
+		Double  = 1,
+		String  = 4,
+		StringArray = 20
+	};
+
+	void SetTopicProperties(const std::string& topicName, NT4TypeHint typeHint, const std::string& propertiesJson);
+
 private:
 	// Ian: NT4 data type codes per the spec.
 	// These appear in both the announce JSON and in the binary MessagePack frame.
@@ -97,8 +116,12 @@ private:
 		int32_t id = -1;           // server-assigned topic ID
 		std::string name;          // e.g. "/SmartDashboard/Velocity"
 		NT4Type type = NT4Type::Double;
-		// Ian: Per-client announce tracking is done via ClientState::announcedTopics.
-		// This 'announced' flag is no longer used for gating — kept for future cleanup.
+		// Ian: Topic properties are emitted in the announce JSON's "properties" field.
+		// WPILib dashboards use this to identify Sendable types:
+		//   {"SmartDashboard":"Scheduler"}, {"SmartDashboard":"Subsystem"}, etc.
+		// Stored as pre-serialized JSON string so NT4Server.h doesn't need nlohmann.
+		// Default is empty string → announce emits {} (backward-compatible).
+		std::string propertiesJson;
 	};
 
 	// Ian: Retained value cache — we keep the latest value for each topic so that

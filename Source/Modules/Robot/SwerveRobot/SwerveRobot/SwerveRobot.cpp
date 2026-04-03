@@ -71,6 +71,10 @@ private:
 	std::function<SwerveRobot::PID_Position_proto> m_PID_Position_callback = Default_Position_PID_Monitor;
 	std::function<Robot::SwerveVelocities ()> m_PhysicalOdometry=nullptr;
 	std::function<double ()> m_PhysicalOdometry_heading=nullptr;
+	// Ian: Voltage detach — when true, all 8 motor voltages are zeroed after the PID loop
+	// computes them.  The PID still runs (avoiding integral windup) but no voltage reaches the
+	// simulation.  Toggled via SmartDashboard "Drive/VoltageDetached" from TeleAutonV2.
+	bool m_VoltageDetached = false;
 #pragma endregion
 	void SetHooks(bool enable)
 	{
@@ -547,6 +551,9 @@ public:
 			m_Swivel[i].TimeSlice(d_time_s);
 			//These will hook their updates to here in m_Voltage
 		}
+		// Ian: Voltage detach — zero all motor outputs while still allowing PID to run
+		if (m_VoltageDetached)
+			m_Voltage = {};
 		//We'll go ahead and maintain an internal state of the position and heading even if this gets managed
 		//We can bind to our entity here if client supports it
 		//externally since it doesn't cost any overhead
@@ -697,6 +704,14 @@ public:
 	{
 		m_PhysicalOdometry_heading=callback;
 	}
+	void SetVoltageDetached(bool detach)
+	{
+		m_VoltageDetached = detach;
+	}
+	bool GetVoltageDetached() const
+	{
+		return m_VoltageDetached;
+	}
 	#pragma endregion
 };
 #pragma region _wrapper methods_
@@ -795,6 +810,14 @@ void SwerveRobot::SetPhysicalOdometry(std::function<Robot::SwerveVelocities ()> 
 void SwerveRobot::SetPhysicalOdometry_heading(std::function<double ()> callback)
 {
 	m_SwerveRobot->SetPhysicalOdometry_heading(callback);	
+}
+void SwerveRobot::SetVoltageDetached(bool detach)
+{
+	m_SwerveRobot->SetVoltageDetached(detach);
+}
+bool SwerveRobot::GetVoltageDetached() const
+{
+	return m_SwerveRobot->GetVoltageDetached();
 }
 const SwerveVelocities &SwerveRobot::GetCurrentVelocities() const
 {

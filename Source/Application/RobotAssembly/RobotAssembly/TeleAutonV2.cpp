@@ -7,6 +7,7 @@
 #include <math.h>
 #include <assert.h>
 #include <algorithm>
+#include <array>
 #include "../../../Base/Base_Includes.h"
 #include "../../../Base/Vec2d.h"
 #include "../../../Base/Misc.h"
@@ -21,9 +22,13 @@
 
 #include "../../../Modules/Robot/Entity2D/Entity2D/Entity2D.h"
 #include "../../../Modules/Robot/SwerveRobot/SwerveRobot/SwerveRobot.h"
+#include "../../../Modules/Robot/Manipulator/Manipulator/ManipulatorPlugin.h"
+#include "../../../Modules/Robot/Manipulator/Manipulator/ExcavatorArm.h"
 #include "../../../Modules/Output/OSG_Viewer/OSG_Viewer/OSG_Viewer.h"
 #include "../../../Modules/Output/OSG_Viewer/OSG_Viewer/SwerveRobot_UI.h"
 #include "../../../Modules/Output/OSG_Viewer/OSG_Viewer/Entity_UI.h"
+#include "../../../Modules/Output/OSG_Viewer/OSG_Viewer/ManipulatorUI_Plugin.h"
+#include "../../../Modules/Output/OSG_Viewer/OSG_Viewer/ManipulatorArm_UI.h"
 #include "../../../Modules/Output/OSG_Viewer/OSG_Viewer/Keyboard_State.h"
 #include "../../../Modules/Output/SmartDashboard_PID_Monitor.h"
 #include "../../../Properties/script_loader.h"
@@ -48,6 +53,14 @@ private:
 	Module::Input::dx_Joystick m_joystick;  //Note: always late binding, so we can aggregate direct easy here
 	Module::Input::AI_Example m_Goal;
 	Module::Robot::SwerveRobot m_robot;  //keep track of our intended velocities
+	// Ian: Optional manipulator plugin — nullptr means "no manipulator this year."
+	// Hot-swappable: different year's manipulators (excavator, intake, shooter) can be
+	// instantiated here via config.  Phase 1 delivers ExcavatorArm with FK/IK telemetry.
+	std::unique_ptr<Module::Robot::ManipulatorPlugin> m_manipulator;
+	// Ian: Manipulator UI — created by the plugin's CreateUI() factory method.
+	// Each manipulator provides its own visualization; TeleAutonV2 just calls the interface.
+	// nullptr when no manipulator is configured.
+	std::unique_ptr<Module::Output::ManipulatorUI_Plugin> m_manipulatorUI;
 	
 	Module::Output::OSG_Viewer m_viewer;
 	Module::Output::SwerveRobot_UI m_RobotUI;
@@ -58,6 +71,19 @@ private:
 	double m_max_heading_rad;  //max angular velocity in radians
 	double m_dTime_s=0.016;  //cached so other callbacks can access
     Module::Input::Keyboard_State m_Keyboard;
+
+	// Ian: Arm key state — tracks press/release for keys 1-8 which control manipulator joints.
+	// Keys map in pairs: odd index = extend (+1), even index = retract (-1).
+	// m_armKeyState[0]=key'1'=BigArm+, [1]=key'2'=BigArm-, [2]=key'3'=Boom+, etc.
+	// Each element is true when the key is held down.
+	std::array<bool, 8> m_armKeyState = {};
+
+	// Ian: 3D position key state — tracks press/release for keys that control virtual
+	// 3D-position joints when EnableArmAutoPosition=true.
+	// Pairs: j/k = xpos ±, l/; = ypos ±, u/i = bucket_angle ±, o/p = clasp_angle ±
+	// Index layout: [0]=j(xpos+), [1]=k(xpos-), [2]=l(ypos+), [3]=;(ypos-),
+	//               [4]=u(bucket_angle+), [5]=i(bucket_angle-), [6]=o(clasp_angle+), [7]=p(clasp_angle-)
+	std::array<bool, 8> m_3DPosKeyState = {};
 
 	enum class game_mode
 	{
@@ -290,6 +316,26 @@ private:
 	void UpdateVariables()
 	{
 		m_Advanced_Odometry.UpdateVariables();
+
+		// Ian: Voltage detach toggles — read from SmartDashboard each frame.  When true,
+		// all motor voltages are zeroed (PID still runs to avoid integral windup).
+		// Do NOT pre-publish voltage detach booleans here.  The dashboard (or a test
+		// client) creates them on demand; until then we default to false.
+		// MUST use TryGetBoolean (not the single-arg GetBoolean) — the single-arg
+		// overload throws TableKeyNotDefinedException in NT2 mode if the key doesn't
+		// exist, and that uncaught exception kills the OSG render thread → window freeze.
+		{
+			bool driveDetach = false;
+			SmartDashboard::TryGetBoolean("Drive/VoltageDetached", driveDetach);
+			m_robot.SetVoltageDetached(driveDetach);
+			if (m_manipulator)
+			{
+				bool manipDetach = false;
+				SmartDashboard::TryGetBoolean("Manipulator/VoltageDetached", manipDetach);
+				m_manipulator->SetVoltageDetached(manipDetach);
+			}
+		}
+
 		Module::Localization::Entity2D &entity = GetEntity();
 		using namespace Module::Localization;
 		const Entity2D::Vector2D linear_velocity = entity.GetCurrentVelocity();
@@ -356,6 +402,10 @@ private:
 
 		for (size_t i = 0; i < 8; i++)
 			m_current_state.bits.SwerveVelocitiesFromIndex[i] = cv.Velocity.AsArray[i];
+
+		// Manipulator telemetry (if configured)
+		if (m_manipulator)
+			m_manipulator->PublishTelemetry();
 	}
 	void GetInputSlice(double dTime_s)
 	{
@@ -398,10 +448,46 @@ private:
 			if (goal.GetStatus()==Goal::eActive)
 				goal.Process(dTime_s);
 		}
-		//TODO autonomous and goals here
+		else if (m_game_mode == game_mode::eTest)
+		{
+			// Ian: Test mode uses the same goal framework as Auton.
+			// ActivateTest() populates m_Goal with the selected test goal.
+			using namespace Framework::Base;
+			Goal& goal = m_Goal.GetGoal();
+			if (goal.GetStatus()==Goal::eActive)
+				goal.Process(dTime_s);
+		}
 		//This comes in handy for testing, but could be good to stop robot if autonomous needs to stop
 		if (joyinfo[0].ButtonBank[0] == 1)
 			Reset();
+
+		// Ian: Translate arm key states into manipulator joint inputs.
+		// Keys come in pairs: odd index = extend (+1), even index = retract (-1).
+		// m_armKeyState[0]=key'1'=BigArm+, [1]=key'2'=BigArm-, [2]=key'3'=Boom+, etc.
+		// Net velocity per joint is the sum of the two keys' contributions, clamped to [-1, 1].
+		if (m_manipulator)
+		{
+			const size_t jointCount = m_manipulator->GetJointCount();
+			for (size_t j = 0; j < jointCount && (j * 2 + 1) < m_armKeyState.size(); j++)
+			{
+				double vel = 0.0;
+				if (m_armKeyState[j * 2])      vel += 1.0;   // odd key = extend
+				if (m_armKeyState[j * 2 + 1])  vel -= 1.0;   // even key = retract
+				m_manipulator->SetJointInput(j, vel);
+			}
+
+			// Ian: 3D position inputs — route key states to virtual joints.
+			// Same logic as arm keys: pairs of keys produce +1/-1 normalized velocity.
+			// These only have effect when EnableArmAutoPosition=true (checked in TimeSlice).
+			const size_t posCount = m_manipulator->Get3DPositionCount();
+			for (size_t j = 0; j < posCount && (j * 2 + 1) < m_3DPosKeyState.size(); j++)
+			{
+				double vel = 0.0;
+				if (m_3DPosKeyState[j * 2])      vel += 1.0;   // positive direction
+				if (m_3DPosKeyState[j * 2 + 1])  vel -= 1.0;   // negative direction
+				m_manipulator->Set3DPositionInput(j, vel);
+			}
+		}
 	}
 
 	void TimeSliceLoop(double dTime_s)
@@ -413,13 +499,20 @@ private:
 		m_robot.SimulatorTimeSlice(dTime_s);
 		m_robot.TimeSlice(dTime_s);
 		GetEntity().TimeSlice(dTime_s);
+		// Manipulator physics update (if configured)
+		if (m_manipulator)
+			m_manipulator->TimeSlice(dTime_s);
 		UpdateVariables();
 		m_Advanced_Odometry.TimeSliceLoop(dTime_s);
 	}
-	void UpdateScene(void* geode)
+	void UpdateScene(void* rootNode, void* geode)
 	{
 		m_RobotUI.UpdateScene(geode, true);
 		m_Advanced_Odometry.UpdateScene(geode);
+		// Ian: Manipulator arm rendering — needs rootNode for PositionAttitudeTransform.
+		// Only called when a manipulator UI exists (i.e., when plugin has visualization).
+		if (m_manipulatorUI)
+			m_manipulatorUI->UpdateScene(rootNode, geode, true);
 	}
 
 	void SetUpHooks(bool enable)
@@ -429,7 +522,7 @@ private:
 		{
 			#pragma region _UI Callbacks_
 			OSG_Viewer &viewer = m_viewer;
-			viewer.SetSceneCallback([&](void *rootNode, void *geode) { UpdateScene(geode); });
+			viewer.SetSceneCallback([&](void *rootNode, void *geode) { UpdateScene(rootNode, geode); });
 			//Anytime robot needs updates link it to our current state
 			m_RobotUI.SetSwerveRobot_Callback([&]() {	return m_current_state.bits; });
 			//When viewer updates a frame
@@ -442,6 +535,9 @@ private:
 				TimeSliceLoop(dTime_s);
 				//give the robot its time slice to process them
 				m_RobotUI.TimeChange(dTime_s);
+				// Manipulator UI frame update (if configured)
+				if (m_manipulatorUI)
+					m_manipulatorUI->TimeChange(dTime_s);
 			});
 			viewer.SetKeyboardCallback(
 				[&](int key, bool press)
@@ -450,6 +546,29 @@ private:
 				m_Keyboard.UpdateKeys(m_dTime_s, key, press);
 				if (key == ' ' && press == false)
 		Reset();  //for entity variables
+				// Ian: Arm key tracking — keys '1'-'8' map to m_armKeyState[0]-[7].
+				// Pairs: 1/2=BigArm ±, 3/4=Boom ±, 5/6=Bucket ±, 7/8=Clasp ±.
+				// We just track press/release here; the actual SetJointInput() calls
+				// happen in GetInputSlice() each frame so they get proper dTime_s.
+				if (key >= '1' && key <= '8')
+					m_armKeyState[key - '1'] = press;
+
+				// Ian: 3D position key tracking — when EnableArmAutoPosition=true, these keys
+				// drive the virtual 3D-position joints.  Polarity matches CurivatorRobot.lua
+				// lines 531-538: even index = Advance (+), odd index = Retract (-).
+				//   k=xpos_Advance / j=xpos_Retract
+				//   ;=ypos_Advance / l=ypos_Retract
+				//   i=bucket_angle_Advance / u=bucket_angle_Retract
+				//   o=clasp_angle_Advance / p=clasp_angle_Retract
+				// Like arm keys, we just track press/release here; GetInputSlice() routes them.
+				if (key == 'k') m_3DPosKeyState[0] = press;  // xpos Advance (+)
+				if (key == 'j') m_3DPosKeyState[1] = press;  // xpos Retract (-)
+				if (key == ';') m_3DPosKeyState[2] = press;  // ypos Advance (+)
+				if (key == 'l') m_3DPosKeyState[3] = press;  // ypos Retract (-)
+				if (key == 'i') m_3DPosKeyState[4] = press;  // bucket_angle Advance (+)
+				if (key == 'u') m_3DPosKeyState[5] = press;  // bucket_angle Retract (-)
+				if (key == 'o') m_3DPosKeyState[6] = press;  // clasp_angle Advance (+)
+				if (key == 'p') m_3DPosKeyState[7] = press;  // clasp_angle Retract (-)
 			});
 			#pragma endregion
 			#pragma region _Robot Entity Linking_
@@ -522,6 +641,9 @@ private:
 					m_robot.SetIntendedOrientation(intended_orientation, absolute);
 				});
 			#pragma endregion
+			// Manipulator hooks (if configured)
+			if (m_manipulator)
+				m_manipulator->SetUpHooks();
 		}
 		else
 		{
@@ -534,6 +656,10 @@ private:
 			m_robot.Set_UpdateHeadingVelocity(nullptr);
 			m_robot.Set_GetCurrentPosition(nullptr);
 			m_robot.Set_GetCurrentHeading(nullptr);
+
+			// Manipulator teardown (if configured)
+			if (m_manipulator)
+				m_manipulator->TearDownHooks();
 		}
 	}
 	void InitController(const char* prefix, DriveAxisAssignments::AxisEntry &val)
@@ -587,6 +713,10 @@ public:
 		GetEntity().Reset();
 		m_robot.Reset();
 		m_Keyboard.Reset();
+		m_armKeyState.fill(false);
+		m_3DPosKeyState.fill(false);
+		if (m_manipulator)
+			m_manipulator->Reset();
 	}
 
 	void init()
@@ -615,7 +745,55 @@ public:
 		InitControllers();
 		m_Goal.Initialize(&m_properties);
 		m_robot.Init(&m_properties);
+		// Ian: Instantiate manipulator if enabled in config.  When Build_enable_manipulator is false
+		// (or missing), m_manipulator stays nullptr and all manipulator code paths are skipped.
+		//
+		// Ian: Read the manipulator selection directly from the registry at decision time,
+		// NOT from m_properties.  The properties value was set by script_loader_example::init()
+		// which runs at startup before the message loop — so if the user changes the
+		// DriverStation combo before hitting Enable, the properties value is stale.
+		// The registry always has the latest combo selection.
+		{
+			bool enableManipulator = false;
+			HKEY hKey = nullptr;
+			LONG regResult = RegOpenKeyExW(HKEY_CURRENT_USER,
+				L"SOFTWARE\\RobotSimulation", 0, KEY_QUERY_VALUE, &hKey);
+			if (regResult == ERROR_SUCCESS)
+			{
+				wchar_t regBuf[64] = {};
+				DWORD dataSize = sizeof(regBuf);
+				DWORD dataType = 0;
+				regResult = RegQueryValueExW(hKey, L"ManipulatorKind", nullptr, &dataType,
+					reinterpret_cast<BYTE*>(regBuf), &dataSize);
+				RegCloseKey(hKey);
+				if (regResult == ERROR_SUCCESS && dataType == REG_SZ)
+					enableManipulator = (wcscmp(regBuf, L"excavator_arm") == 0);
+			}
+			OutputDebugStringA(enableManipulator
+				? "[TeleAutonV2] Registry ManipulatorKind => enabled\n"
+				: "[TeleAutonV2] Registry ManipulatorKind => disabled\n");
+
+			if (enableManipulator)
+			{
+				m_manipulator = std::make_unique<Module::Robot::ExcavatorArm>();
+				m_manipulator->Init(m_properties);
+				printf("[TeleAutonV2] Manipulator enabled: %s\n", m_manipulator->GetName());
+				// Ian: Create the manipulator's own visualization object and wire the state callback.
+				// The plugin knows its concrete UI type and FK struct, so SetupUI does all the wiring.
+				m_manipulatorUI = m_manipulator->CreateUI();
+				if (m_manipulatorUI)
+				{
+					m_manipulator->SetupUI(m_manipulatorUI.get());
+					m_manipulatorUI->Initialize();
+					printf("[TeleAutonV2] Manipulator UI created\n");
+				}
+			}
+		}
 		m_Advanced_Odometry.Init(&m_properties);
+		// Ian: Do NOT pre-publish voltage detach booleans here.  The SmartDashboard client
+		// may already have them set to true before the robot starts; publishing false on init
+		// would overwrite the client's desired state.  Instead, UpdateVariables() reads whatever
+		// the current NT value is each frame (defaulting to false if no key exists yet).
 		m_viewer.init();
 		m_RobotUI.Initialize();
 		m_FieldCentricDrive = m_properties.get_bool(properties::registry_v1::csz_Drive_UseFieldCentric, false);
@@ -627,18 +805,68 @@ public:
 	{
 		if (!m_IsStreaming)
 		{
-			m_IsStreaming = true;
-			m_viewer.StartStreaming();
-			//Give driver station a default testing method by invoking here if we are in test mode
-			if (m_game_mode == game_mode::eTest)
+			// Ian: Reconcile the manipulator state with the registry every time the user
+			// presses Enable.  The registry always has the latest combo selection.
+			// Three cases:
+			//   1. m_manipulator==nullptr AND registry=="excavator_arm" → late-create
+			//   2. m_manipulator!=nullptr AND registry=="none"         → tear down
+			//   3. state already matches registry                      → no-op
+			// This fixes the ordering bug where init() creates the manipulator from a
+			// persisted value, but the user switches the combo to "None" before Enable.
 			{
-				int test_to_run = (int)Auton_Smart_GetSingleValue("AutonTest", 0.0);
-				if (test_to_run < 0)
-					test_to_run = 0;
-				test(test_to_run);
+				bool enableManipulator = false;
+				HKEY hKey = nullptr;
+				LONG regResult = RegOpenKeyExW(HKEY_CURRENT_USER,
+					L"SOFTWARE\\RobotSimulation", 0, KEY_QUERY_VALUE, &hKey);
+				if (regResult == ERROR_SUCCESS)
+				{
+					wchar_t regBuf[64] = {};
+					DWORD dataSize = sizeof(regBuf);
+					DWORD dataType = 0;
+					regResult = RegQueryValueExW(hKey, L"ManipulatorKind", nullptr, &dataType,
+						reinterpret_cast<BYTE*>(regBuf), &dataSize);
+					RegCloseKey(hKey);
+					if (regResult == ERROR_SUCCESS && dataType == REG_SZ)
+						enableManipulator = (wcscmp(regBuf, L"excavator_arm") == 0);
+				}
+				if (enableManipulator && !m_manipulator)
+				{
+					// Case 1: user selected ExcavatorArm after init() — create now.
+					// The constructor already called SetUpHooks(true) which skipped the
+					// manipulator (it was null then), so we must call SetUpHooks here too.
+					OutputDebugStringA("[TeleAutonV2::Start] Late-creating manipulator from registry\n");
+					m_manipulator = std::make_unique<Module::Robot::ExcavatorArm>();
+					m_manipulator->Init(m_properties);
+					m_manipulatorUI = m_manipulator->CreateUI();
+					if (m_manipulatorUI)
+					{
+						m_manipulator->SetupUI(m_manipulatorUI.get());
+						m_manipulatorUI->Initialize();
+					}
+					m_manipulator->SetUpHooks();
+				}
+				else if (!enableManipulator && m_manipulator)
+				{
+					// Case 2: init() created the manipulator but user switched to None.
+					// The constructor's SetUpHooks(true) already called m_manipulator->SetUpHooks(),
+					// so we must TearDownHooks() before destroying it.  The viewer callbacks
+					// (UpdateScene, TimeChange) guard with if(m_manipulatorUI) so after reset()
+					// they become no-ops.
+					OutputDebugStringA("[TeleAutonV2::Start] Tearing down manipulator (user switched to None)\n");
+					m_manipulator->TearDownHooks();
+					m_manipulatorUI.reset();
+					m_manipulator.reset();
+				}
 			}
+		m_IsStreaming = true;
+		m_viewer.StartStreaming();
+		// Ian: Test mode now uses the same goal framework as Auton.
+		// The Test chooser was already seeded by PublishTestChooser() in SetGameMode(eTest),
+		// so the user has had a chance to pick a selection.  ActivateTest reads it and runs.
+		if (m_game_mode == game_mode::eTest)
+			m_Goal.ActivateTest(m_manipulator.get());
 			if (m_game_mode == game_mode::eAuton)
-				m_Goal.GetGoal().Activate();
+				m_Goal.ActivateAuton(m_manipulator.get());
 		}
 	}
 	void Stop()
@@ -646,15 +874,16 @@ public:
 		if (m_IsStreaming)
 		{
 			m_IsStreaming = false;
-			if (m_game_mode == game_mode::eAuton)
+			if (m_game_mode == game_mode::eAuton || m_game_mode == game_mode::eTest)
 				m_Goal.GetGoal().Terminate();
 			m_viewer.StopStreaming();
 		}
 	}
 	void SetGameMode(int mode)
 	{
-		//If we are leaving from autonomous while still streaming terminate the goal
-		if ((m_IsStreaming) && (m_game_mode == game_mode::eAuton) && (game_mode::eAuton != (game_mode)mode))
+		//If we are leaving from autonomous or test while still streaming terminate the goal
+		if ((m_IsStreaming) && (m_game_mode == game_mode::eAuton || m_game_mode == game_mode::eTest)
+			&& (m_game_mode != (game_mode)mode))
 			m_Goal.GetGoal().Terminate();
 
 		printf("SetGameMode to ");
@@ -663,15 +892,29 @@ public:
 		{
 		case game_mode::eAuton:
 			printf("Auton \n");
+			// Ian: Publish the Auton chooser as soon as the user selects Auton mode from
+			// the dropdown — even before Enable is pressed.  When a manipulator plugin is
+			// active, its auton goals (e.g. "Grab and Return") are appended to the chooser.
+			if (m_game_mode != game_mode::eAuton)
+				m_Goal.PublishAutonChooserOptions(m_manipulator.get());
 			//If we are entering into autonomous already streaming activate the goal
 			if ((m_IsStreaming) && (m_game_mode != game_mode::eAuton))
-				m_Goal.GetGoal().Activate();
+				m_Goal.ActivateAuton(m_manipulator.get());
 			break;
 		case game_mode::eTele:
 			printf("Tele \n");
 			break;
 		case game_mode::eTest:
 			printf("Test \n");
+			// Ian: Publish the Test chooser as soon as the user selects Test mode from
+			// the dropdown — even before Enable is pressed.  This seeds the chooser
+			// widget so the user can make a selection before starting.  Without this,
+			// the chooser would remain empty until ActivateTest fires on Enable.
+			if (m_game_mode != game_mode::eTest)
+				m_Goal.PublishTestChooser(m_manipulator.get());
+			// Ian: If we are entering test mode already streaming, activate the test goal.
+			if ((m_IsStreaming) && (m_game_mode != game_mode::eTest))
+				m_Goal.ActivateTest(m_manipulator.get());
 			break;
 		default:
 			printf("Unknown \n");
@@ -681,6 +924,10 @@ public:
 		if (IsValid)
 			m_game_mode = (game_mode)mode;
 	}
+	// Ian: Legacy test(int) — retained for console-based test invocation from RobotAssembly.
+	// The DriverStation flow now uses SetGameMode(eTest) + Start() which calls ActivateTest()
+	// using the goal framework.  This method provides simple one-shot robot commands for
+	// quick debugging without the goal framework overhead.
 	void test(int test)
 	{
 		switch (test)

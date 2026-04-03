@@ -101,6 +101,8 @@ add_library(RobotAssembly_static STATIC
     Source/Modules/Robot/SwerveRobot/SwerveRobot/RotarySystem.cpp
     Source/Modules/Robot/SwerveRobot/SwerveRobot/SimulatedOdometry.cpp
     Source/Modules/Robot/SwerveRobot/SwerveRobot/SwerveRobot.cpp
+    Source/Modules/Robot/Manipulator/Manipulator/ExcavatorArm.cpp
+    Source/Modules/Robot/Manipulator/Manipulator/ManipulatorPlugin.cpp
     Source/Properties/script_loader_example.cpp
 )
 target_link_libraries(RobotAssembly_static
@@ -270,6 +272,7 @@ if(BUILD_UNIT_TESTS)
         tests/entity1d_tests.cpp
         tests/entity2d_tests.cpp
         tests/drivekinematics_tests.cpp
+        tests/excavator_arm_tests.cpp
         Source/Application/DriverStation/DriverStation/NativeLinkAuthorityHelpers.cpp
         Source/Application/DriverStation/DriverStation/NativeLink.cpp
         Source/Application/DriverStation/DriverStation/NativeLinkSharedMemory.cpp
@@ -277,6 +280,10 @@ if(BUILD_UNIT_TESTS)
         Source/Modules/Robot/Entity1D/Entity1D/Entity1D.cpp
         Source/Modules/Robot/Entity2D/Entity2D/Entity2D.cpp
         Source/Modules/Robot/DriveKinematics/DriveKinematics/Vehicle_Drive.cpp
+        Source/Modules/Robot/SwerveRobot/SwerveRobot/RotarySystem.cpp
+        Source/Modules/Input/AI_Input/AI_Input.cpp
+        Source/Modules/Robot/Manipulator/Manipulator/ExcavatorArm.cpp
+        Source/Modules/Robot/Manipulator/Manipulator/ManipulatorPlugin.cpp
     )
     target_include_directories(robot_unit_tests
         PRIVATE
@@ -288,6 +295,7 @@ if(BUILD_UNIT_TESTS)
         PRIVATE
             BaseCore
             SmartDashboard
+            OSG_Viewer
             GTest::gtest
             GTest::gtest_main
             ws2_32

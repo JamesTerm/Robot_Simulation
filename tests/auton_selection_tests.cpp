@@ -64,15 +64,39 @@ TEST(AutonSelectionTests, ClampsOutOfRangeToDefault)
 	EXPECT_EQ(index, 0);
 }
 
-TEST(AutonSelectionTests, ChooserSelectionMapsLabelToIndex)
+// Ian: The ResolveAutonIndex tests above use maxExclusive=6 as an arbitrary
+// bound for the generic numeric fallback -- they are not tied to the actual
+// auton enum size (which is now 2).  They remain valid as protocol tests.
+
+TEST(AutonSelectionTests, ChooserSelectionMapsLabelToIndex_Auton)
 {
+	// Matches the 2-option auton chooser layout
+	const AutonChooserOption options[] =
+	{
+		{0, "Do Nothing"},
+		{1, "Just Move Forward"}
+	};
+
+	EXPECT_EQ(ResolveAutonSelectionFromLabel("Just Move Forward", options, 2, 0), 1);
+	EXPECT_EQ(ResolveAutonSelectionFromLabel("Do Nothing", options, 2, 0), 0);
+	// Unknown label falls back to defaultIndex
+	EXPECT_EQ(ResolveAutonSelectionFromLabel("Unknown", options, 2, 0), 0);
+}
+
+TEST(AutonSelectionTests, ChooserSelectionMapsLabelToIndex_TestDrive)
+{
+	// Matches the drive-test portion of the test chooser layout
 	const AutonChooserOption options[] =
 	{
 		{0, "Do Nothing"},
 		{1, "Just Move Forward"},
-		{2, "Just Rotate"}
+		{2, "Just Rotate"},
+		{3, "Move Rotate Sequence"},
+		{4, "Box Waypoints"},
+		{5, "Smart Waypoints"}
 	};
 
-	EXPECT_EQ(ResolveAutonSelectionFromLabel("Just Move Forward", options, 3, 2), 1);
-	EXPECT_EQ(ResolveAutonSelectionFromLabel("Unknown", options, 3, 2), 2);
+	EXPECT_EQ(ResolveAutonSelectionFromLabel("Just Rotate", options, 6, 0), 2);
+	EXPECT_EQ(ResolveAutonSelectionFromLabel("Smart Waypoints", options, 6, 0), 5);
+	EXPECT_EQ(ResolveAutonSelectionFromLabel("Unknown", options, 6, 0), 0);
 }

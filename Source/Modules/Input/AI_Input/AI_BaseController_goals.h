@@ -186,10 +186,15 @@ protected:
 		const Vec2d currPos = m_Controller->GetCurrentPosition();
 		double position_delta = (m_Point.Position - currPos).length();
 		bool ret = position_delta < tolerance2;
-#if 0
-		printf("\r%f        ", position_delta);
+		// Ian: Enable this block to diagnose waypoint arrival issues — shows position delta every frame
+		// and announces completion.  Disable once auton is confirmed working (very spammy).
+#if 1
+		printf("\r[HitWayPoint] delta=%f tol=%f pos=(%f,%f) tgt=(%f,%f)        ",
+			position_delta, tolerance2,
+			currPos.x(), currPos.y(),
+			m_Point.Position.x(), m_Point.Position.y());
 		if (ret)
-			printf("completed %f\n", position_delta);
+			printf("\n[HitWayPoint] COMPLETED delta=%f\n", position_delta);
 #endif
 		return ret;
 	}

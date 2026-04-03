@@ -329,7 +329,11 @@ std::string NT4Server::BuildAnnounceJson(const TopicInfo& topic) const
 	// Omitting it is fine per spec: "If this message was sent in response to a
 	// publish message, the Publisher UID. Otherwise absent."
 	// However, some ntcore implementations may expect it. We omit for now.
-	msg["params"]["properties"] = json::object();
+	// Ian: Emit stored topic properties if set, otherwise empty object (backward-compat).
+	if (!topic.propertiesJson.empty())
+		msg["params"]["properties"] = json::parse(topic.propertiesJson, nullptr, false);
+	else
+		msg["params"]["properties"] = json::object();
 	// Ian: Wrap in array — NT4 spec says each text frame is a JSON array of messages.
 	json arr = json::array();
 	arr.push_back(msg);
@@ -421,7 +425,11 @@ void NT4Server::SendMatchingTopicsToClient(ix::WebSocket& ws, ClientState& cs)
 		msg["params"]["name"] = topic.name;
 		msg["params"]["id"] = topic.id;
 		msg["params"]["type"] = NT4TypeString(topic.type);
-		msg["params"]["properties"] = json::object();
+		// Ian: Emit stored topic properties if set, otherwise empty object.
+		if (!topic.propertiesJson.empty())
+			msg["params"]["properties"] = json::parse(topic.propertiesJson, nullptr, false);
+		else
+			msg["params"]["properties"] = json::object();
 		announcements.push_back(msg);
 
 		cs.announcedTopics.insert(topic.id);
@@ -799,6 +807,36 @@ void NT4Server::PublishInt(const std::string& topicName, int64_t value)
 		}
 		client->sendBinary(BuildValueFrame(topic, rv));
 	}
+}
+
+// ============================================================================
+// Topic properties
+// ============================================================================
+// Ian: SetTopicProperties lets the simulator tag a topic with WPILib Sendable type
+// metadata.  The properties string is stored verbatim and emitted in every announce
+// message for this topic.  WPILib dashboards use this to identify widget types:
+//   SetTopicProperties("/SmartDashboard/Scheduler/.type", NT4TypeHint::String,
+//                      "{\"SmartDashboard\":\"Scheduler\"}");
+//
+// If the topic doesn't exist yet it is created with the given type hint.  If it
+// already exists, only the properties are updated (the existing type is kept).
+
+void NT4Server::SetTopicProperties(const std::string& topicName, NT4TypeHint typeHint, const std::string& propertiesJson)
+{
+	// Map public NT4TypeHint → private NT4Type
+	NT4Type nt4Type;
+	switch (typeHint)
+	{
+	case NT4TypeHint::Boolean:     nt4Type = NT4Type::Boolean;   break;
+	case NT4TypeHint::Double:      nt4Type = NT4Type::Double;    break;
+	case NT4TypeHint::String:      nt4Type = NT4Type::String;    break;
+	case NT4TypeHint::StringArray: nt4Type = NT4Type::StringArr; break;
+	default:                       nt4Type = NT4Type::String;    break;
+	}
+
+	std::lock_guard<std::mutex> lock(m_topicsMutex);
+	TopicInfo& topic = GetOrCreateTopic(topicName, nt4Type);
+	topic.propertiesJson = propertiesJson;
 }
 
 // ============================================================================
@@ -1314,7 +1352,11 @@ void NT4Server::HandleClientTextMessage(ix::WebSocket& ws, const std::string& te
 					announceMsg["params"]["id"] = topic.id;
 					announceMsg["params"]["type"] = NT4TypeString(topic.type);
 					announceMsg["params"]["pubuid"] = pubuid;
-					announceMsg["params"]["properties"] = json::object();
+					// Ian: Emit stored topic properties if set, otherwise empty object.
+					if (!topic.propertiesJson.empty())
+						announceMsg["params"]["properties"] = json::parse(topic.propertiesJson, nullptr, false);
+					else
+						announceMsg["params"]["properties"] = json::object();
 
 					json arr = json::array();
 					arr.push_back(announceMsg);

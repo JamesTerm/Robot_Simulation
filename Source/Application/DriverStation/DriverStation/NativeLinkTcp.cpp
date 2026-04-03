@@ -160,11 +160,17 @@ namespace NativeLink::detail
 			if (m_running.load())
 				return true;
 			if (!GetWinsockRuntime().IsStarted())
+			{
+				printf("[NativeLink-Server] Winsock not started — cannot bind TCP\n");
 				return false;
+			}
 
 			m_listenSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 			if (m_listenSocket == INVALID_SOCKET)
+			{
+				printf("[NativeLink-Server] socket() failed — WSAError=%d\n", WSAGetLastError());
 				return false;
+			}
 
 			const BOOL reuse = 1;
 			setsockopt(m_listenSocket, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&reuse), sizeof(reuse));
@@ -173,11 +179,24 @@ namespace NativeLink::detail
 			address.sin_family = AF_INET;
 			address.sin_port = htons(m_config.port);
 			if (InetPtonA(AF_INET, m_config.host.c_str(), &address.sin_addr) != 1)
+			{
+				printf("[NativeLink-Server] InetPtonA failed for host='%s'\n", m_config.host.c_str());
 				return false;
+			}
 			if (bind(m_listenSocket, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) == SOCKET_ERROR)
+			{
+				printf("[NativeLink-Server] bind(%s:%d) failed — WSAError=%d\n",
+					m_config.host.c_str(), static_cast<int>(m_config.port), WSAGetLastError());
 				return false;
+			}
 			if (listen(m_listenSocket, SOMAXCONN) == SOCKET_ERROR)
+			{
+				printf("[NativeLink-Server] listen() failed — WSAError=%d\n", WSAGetLastError());
 				return false;
+			}
+
+			printf("[NativeLink-Server] TCP listening on %s:%d\n",
+				m_config.host.c_str(), static_cast<int>(m_config.port));
 
 			m_stopRequested.store(false);
 			m_running.store(true);
@@ -294,11 +313,18 @@ namespace NativeLink::detail
 
 		void AcceptLoop()
 		{
+			printf("[NativeLink-Server] AcceptLoop started — waiting for clients\n");
 			while (!m_stopRequested.load())
 			{
 				SOCKET clientSocket = accept(m_listenSocket, nullptr, nullptr);
 				if (clientSocket == INVALID_SOCKET)
+				{
+					if (!m_stopRequested.load())
+						printf("[NativeLink-Server] accept() failed — WSAError=%d\n", WSAGetLastError());
 					break;
+				}
+				printf("[NativeLink-Server] Client TCP connected (socket=%llu)\n",
+					static_cast<unsigned long long>(clientSocket));
 				auto client = std::make_unique<ClientSlot>();
 				client->socketHandle = clientSocket;
 				client->alive.store(true);
@@ -307,6 +333,7 @@ namespace NativeLink::detail
 				std::lock_guard<std::mutex> lock(m_mutex);
 				m_clients.push_back(std::move(client));
 			}
+			printf("[NativeLink-Server] AcceptLoop exiting\n");
 		}
 
 		void HeartbeatLoop()
@@ -333,6 +360,7 @@ namespace NativeLink::detail
 				|| kind != TcpFrameKind::ClientHello
 				|| payload.size() != sizeof(TcpHelloPayload))
 			{
+				printf("[NativeLink-Server] ClientHello not received — closing client\n");
 				client->alive.store(false);
 				return;
 			}
@@ -342,6 +370,8 @@ namespace NativeLink::detail
 			{
 				std::lock_guard<std::mutex> lock(m_mutex);
 				client->clientId = ReadUtf8(hello.clientId, sizeof(hello.clientId));
+				printf("[NativeLink-Server] ClientHello from '%s' — sending ServerHello + snapshot\n",
+					client->clientId.c_str());
 				TcpServerHelloPayload serverHello {};
 				serverHello.serverSessionId = m_core.GetServerSessionId();
 				SendFrame(client->socketHandle, TcpFrameKind::ServerHello, &serverHello, sizeof(serverHello));
@@ -353,6 +383,8 @@ namespace NativeLink::detail
 				const std::vector<SnapshotEvent> snapshot = m_core.ConnectClient(client->clientId).snapshotEvents;
 				for (std::size_t i = 0; i < snapshot.size(); ++i)
 					SendEnvelopeLocked(*client, SnapshotEventToEnvelope(snapshot[i], m_core.GetServerSessionId()));
+				printf("[NativeLink-Server] Snapshot sent (%zu events) — client '%s' entering recv loop\n",
+					snapshot.size(), client->clientId.c_str());
 			}
 
 			while (!m_stopRequested.load() && client->alive.load())
@@ -380,6 +412,8 @@ namespace NativeLink::detail
 				break;
 			}
 
+			printf("[NativeLink-Server] Client '%s' recv loop ended — disconnecting\n",
+				client->clientId.c_str());
 			client->alive.store(false);
 			if (client->socketHandle != INVALID_SOCKET)
 			{

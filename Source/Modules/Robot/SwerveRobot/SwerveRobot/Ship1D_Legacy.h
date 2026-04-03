@@ -242,8 +242,8 @@ private:
 	using PhysicsEntity_1D = Framework::Base::PhysicsEntity_1D;
 	//Only used with SetRequestedVelocity_FromNormalized()
 	//this is managed direct from being set to avoid need for precision tolerance
-	double m_LastNormalizedVelocity;
-	bool m_LockShipToPosition; ///< Locks the ship to intended position (Joystick and Keyboard controls use this)
+	double m_LastNormalizedVelocity = 0.0;
+	bool m_LockShipToPosition = false; ///< Locks the ship to intended position (Joystick and Keyboard controls use this)
 	#pragma endregion
 protected:
 	#pragma region _protected members_
@@ -251,19 +251,24 @@ protected:
 	Ship_1D_Props m_Ship_1D_Props;
 
 	//Stuff needed for physics
-	double m_Mass;
+	double m_Mass = 0.0;
 
 	//Use this technique when m_AlterTrajectory is true
-	double m_RequestedVelocity;
+	double m_RequestedVelocity = 0.0;
 	//All input for turn pitch and roll apply to this, both the camera and ship need to align to it
-	double m_IntendedPosition;
+	double m_IntendedPosition = 0.0;
 	//We need the m_IntendedPosition to work with its own physics
 	PhysicsEntity_1D m_IntendedPositionPhysics;
 
 	//For slide mode all strafe is applied here
-	double m_currAccel;  //This is the immediate request for thruster levels
-	double m_Last_RequestedVelocity;  ///< This monitors the last caught requested velocity  from a speed delta change
-	bool m_SimFlightMode;  ///< If true auto strafing will occur to keep ship in line with its position
+	double m_currAccel = 0.0;  //This is the immediate request for thruster levels
+	double m_Last_RequestedVelocity = -1.0;  ///< This monitors the last caught requested velocity  from a speed delta change
+	// Ian: m_SimFlightMode must be initialized before the constructor body calls SetSimFlightMode(true),
+	// which has a guard: if (m_SimFlightMode != SimFlightMode).  Without initialization, the guard
+	// reads uninitialized memory (UB).  In MSVC Debug builds 0xCC != 0x01 passes by coincidence;
+	// in Release, garbage could be 0x01, causing the guard to skip and leaving m_SimFlightMode
+	// and m_RequestedVelocity in an inconsistent state.
+	bool m_SimFlightMode = false;  ///< If true auto strafing will occur to keep ship in line with its position
 	#pragma endregion
 	static void InitNetworkProperties(const Ship_1D_Props &props)
 	{
@@ -302,6 +307,17 @@ protected:
 	}
 	virtual void TimeChange(double dTime_s)
 	{
+		// Ian: Clamp dTime_s to prevent Euler integration overshoot from large timesteps.
+		// In Debug builds (or when a debugger/window-drag stalls the frame loop), the first
+		// frame after a pause can deliver the full accumulated wall-clock delta as a single
+		// physics step.  With simple Euler integration (velocity += force/mass * dt), a large
+		// dt causes velocity overshoot past the target position, which on the next frame
+		// produces a large correction in the opposite direction — oscillation.
+		// 50ms cap = 20Hz minimum effective physics rate.  Normal frames are ~10-16ms.
+		// This matches the analysis in Agent_Session_Notes.md "Factor 2: No dTime_s clamping".
+		const double kMaxTimeStep = 0.05;  // 50ms
+		if (dTime_s > kMaxTimeStep)
+			dTime_s = kMaxTimeStep;
 		const Ship_1D_Props &props=m_Ship_1D_Props;
 		// Find the current velocity and use to determine the flight characteristics we will WANT to us
 		double LocalVelocity=m_Physics.GetVelocity();

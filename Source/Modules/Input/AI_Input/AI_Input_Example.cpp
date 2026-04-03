@@ -7,6 +7,9 @@
 #include "AI_BaseController_goals.h"
 #include "DirectAutonChainLog.h"
 #include "../../../Properties/RegistryV1.h"
+// Ian: ManipulatorPlugin is needed by ActivateTest() to query the active manipulator's
+// test goals via GetTestGoals()/CreateTestGoal() for the Test chooser.
+#include "../../Robot/Manipulator/Manipulator/ManipulatorPlugin.h"
 using namespace Framework::Base;
 
 namespace Module
@@ -282,18 +285,38 @@ private:
 		return goal;
 	}
 	#pragma endregion
+	// Ian: Excavator-specific test goals have been moved to ExcavatorGoals.h alongside
+	// the ExcavatorArm plugin.  They are contributed dynamically via ManipulatorPlugin's
+	// GetTestGoals()/CreateTestGoal() virtual methods — the AI goal system never hard-codes
+	// manipulator-specific goal classes.  See ExcavatorArm.cpp for the plugin registration.
+
 	//Reserved Drive Tracking
 public:
+	// Ian: AutonType — the minimal auton chooser for match use.
+	// Only "Do Nothing" (safe default) and "Just Move Forward" (minimal safe auton).
+	// All other test goals live in the Test chooser (TestType enum below).
 	enum AutonType
 	{
 		eDoNothing,
 		eJustMoveForward,
-		eJustRotate,
-		eSimpleMoveRotateSequence,
+		eNoAutonTypes
+	};
+
+	// Ian: TestType — the full test chooser, available in DriverStation Test mode.
+	// Drive tests are always present.  Manipulator-specific test goals are contributed
+	// dynamically by the active ManipulatorPlugin via GetTestGoals()/CreateTestGoal().
+	// This enum only covers the built-in drive tests.  Plugin goals get indices
+	// starting at eNoTestDriveTypes.
+	enum TestType
+	{
+		eTestDoNothing,
+		// Drive tests
+		eTestJustMoveForward,
+		eTestJustRotate,
+		eTestMoveRotateSequence,
 		eTestBoxWayPoints,
 		eTestSmartWayPoints,
-		//eDriveTracking,
-		eNoAutonTypes
+		eNoTestDriveTypes  // Ian: sentinel — plugin goals are indexed starting here
 	};
 
 	static const AutonChooserOption* GetAutonChooserOptions(size_t& optionCount)
@@ -301,14 +324,78 @@ public:
 		static const AutonChooserOption kOptions[] =
 		{
 			{eDoNothing, "Do Nothing"},
-			{eJustMoveForward, "Just Move Forward"},
-			{eJustRotate, "Just Rotate"},
-			{eSimpleMoveRotateSequence, "Move Rotate Sequence"},
-			{eTestBoxWayPoints, "Box Waypoints"},
-			{eTestSmartWayPoints, "Smart Waypoints"}
+			{eJustMoveForward, "Just Move Forward"}
 		};
 		optionCount = _countof(kOptions);
 		return kOptions;
+	}
+
+	// Ian: GetDriveTestOptions — returns the static drive-only test options.
+	// These are always present regardless of which manipulator is active.
+	static const AutonChooserOption* GetDriveTestOptions(size_t& optionCount)
+	{
+		static const AutonChooserOption kDriveOptions[] =
+		{
+			{eTestDoNothing, "Do Nothing"},
+			{eTestJustMoveForward, "Just Move Forward"},
+			{eTestJustRotate, "Just Rotate"},
+			{eTestMoveRotateSequence, "Move Rotate Sequence"},
+			{eTestBoxWayPoints, "Box Waypoints"},
+			{eTestSmartWayPoints, "Smart Waypoints"}
+		};
+		optionCount = _countof(kDriveOptions);
+		return kDriveOptions;
+	}
+
+	// Ian: BuildTestChooserOptions — dynamically combines drive options with plugin options.
+	// Drive tests get their TestType enum indices.  Plugin tests get indices starting at
+	// eNoTestDriveTypes, with the plugin-local index recoverable as (chooserIndex - eNoTestDriveTypes).
+	// Returns a vector that the caller must keep alive while the chooser is in use.
+	static std::vector<AutonChooserOption> BuildTestChooserOptions(Module::Robot::ManipulatorPlugin* plugin)
+	{
+		size_t driveCount = 0;
+		const AutonChooserOption* driveOptions = GetDriveTestOptions(driveCount);
+		std::vector<AutonChooserOption> combined(driveOptions, driveOptions + driveCount);
+
+		if (plugin)
+		{
+			size_t pluginCount = 0;
+			const Module::Robot::TestGoalDescriptor* pluginGoals = plugin->GetTestGoals(pluginCount);
+			for (size_t i = 0; i < pluginCount; i++)
+			{
+				AutonChooserOption opt;
+				opt.index = (int)eNoTestDriveTypes + pluginGoals[i].index;
+				opt.label = pluginGoals[i].label;
+				combined.push_back(opt);
+			}
+		}
+		return combined;
+	}
+
+	// Ian: BuildAutonChooserOptions — dynamically combines drive auton options with plugin
+	// auton options.  Same pattern as BuildTestChooserOptions but for the Auton chooser.
+	// Drive autons (Do Nothing, Just Move Forward) always appear.  Plugin autons (e.g.
+	// ExcavatorArm's "Grab and Return") are appended with indices starting at eNoAutonTypes.
+	// Returns a vector the caller must keep alive while the chooser is in use.
+	static std::vector<AutonChooserOption> BuildAutonChooserOptions(Module::Robot::ManipulatorPlugin* plugin)
+	{
+		size_t driveCount = 0;
+		const AutonChooserOption* driveOptions = GetAutonChooserOptions(driveCount);
+		std::vector<AutonChooserOption> combined(driveOptions, driveOptions + driveCount);
+
+		if (plugin)
+		{
+			size_t pluginCount = 0;
+			const Module::Robot::TestGoalDescriptor* pluginGoals = plugin->GetAutonGoals(pluginCount);
+			for (size_t i = 0; i < pluginCount; i++)
+			{
+				AutonChooserOption opt;
+				opt.index = (int)eNoAutonTypes + pluginGoals[i].index;
+				opt.label = pluginGoals[i].label;
+				combined.push_back(opt);
+			}
+		}
+		return combined;
 	}
 
 	AI_Example_internal(AI_Input* parent) : m_pParent(parent), m_Timer(0.0),
@@ -320,16 +407,22 @@ public:
 	{
 		m_properties = props;  //just reference it we know it stays active
 	}
+	// Ian: m_autonPlugin — cached manipulator plugin pointer for auton goal creation.
+	// Set by ActivateAuton() before calling Activate().  Null when no manipulator is active.
+	Module::Robot::ManipulatorPlugin* m_autonPlugin = nullptr;
 	void Activate()
 	{
 		m_Primer.AsGoal().Terminate();  //sanity check clear previous session
 		//reset timer
 		m_Timer = 0.0;
-		AutonType AutonTest = eDoNothing;
 		const char* const AutonTestSelection = "AutonTest";
 		const char* const AutonChooserBase = "Autonomous/Auton_Selection/AutoChooser";
-		size_t autonOptionCount = 0;
-		const AutonChooserOption* autonOptions = GetAutonChooserOptions(autonOptionCount);
+		// Ian: Build the auton chooser options dynamically.  Drive auton options are always
+		// present.  The manipulator plugin contributes its own options via GetAutonGoals().
+		std::vector<AutonChooserOption> autonOptionsVec = BuildAutonChooserOptions(m_autonPlugin);
+		const AutonChooserOption* autonOptions = autonOptionsVec.data();
+		const size_t autonOptionCount = autonOptionsVec.size();
+		const int totalAutonCount = autonOptionCount > 0 ? autonOptionsVec.back().index + 1 : (int)eNoAutonTypes;
 		// Ian: Keep chooser state on its own key path so Direct chooser work never
 		// masks the numeric `AutonTest` baseline that legacy NT and regression
 		// testing still depend on.
@@ -454,7 +547,6 @@ public:
 			return false;
 		};
 		const bool useChooser = IsChooserEnabledForCurrentConnection();
-		#if 1
 		int autonIndex = ResolveAutonIndex(
 			[&](double& outSelection)
 			{
@@ -469,7 +561,7 @@ public:
 				return tryReadAutonSelectionDouble(outSelection);
 			},
 			(int)eDoNothing,
-			(int)eNoAutonTypes,
+			totalAutonCount,
 			20,
 			std::chrono::milliseconds(10));
 
@@ -492,54 +584,33 @@ public:
 				autonIndex,
 				false);
 		}
-		AutonTest = (AutonType)autonIndex;
-		#else
-		#if !defined __USE_LEGACY_WPI_LIBRARIES__
-		SmartDashboard::SetDefaultNumber(AutonTestSelection, 0.0);
-		AutonTest = (AutonType)((size_t)SmartDashboard::GetNumber(AutonTestSelection));
-		#else
-		//for cRIO checked in using zero in lua (default) to prompt the variable and then change to -1 to use it
-		if (auton.AutonTest != (size_t)-1)
-		{
-			SmartDashboard::PutNumber(AutonTestSelection, (double)0.0);
-			SmartDashboard::PutBoolean("TestVariables_set", false);
-		}
-		else
-			AutonTest = (AutonType)((size_t)SmartDashboard::GetNumber(AutonTestSelection));
-		#endif
-		#endif
 
-		printf("Testing=%d \n", AutonTest);
-		switch (AutonTest)
+		// Ian: Auton goal creation — drive goals vs plugin goals are distinguished by index range.
+		// Built-in auton types (Do Nothing, Just Move Forward) are handled by the switch.
+		// Plugin auton goals (indices >= eNoAutonTypes) are created by the manipulator plugin.
+		printf("Testing=%d \n", autonIndex);
+		Goal* autonGoal = nullptr;
+		if (autonIndex < (int)eNoAutonTypes)
 		{
-		case eJustMoveForward:
-			m_Primer.AddGoal(new MoveForward(m_pParent));
-			break;
-		case eJustRotate:
-			m_Primer.AddGoal(new RotateWithWait(m_pParent));
-			break;
-		case eSimpleMoveRotateSequence:
-			m_Primer.AddGoal(new TestMoveRotateSequence(m_pParent));
-			break;
-		case eTestBoxWayPoints:
-			m_Primer.AddGoal(GiveRobotSquareWayPointGoal(m_pParent));
-			break;
-		case eTestSmartWayPoints:
+			switch ((AutonType)autonIndex)
+			{
+			case eJustMoveForward:
+				autonGoal = new MoveForward(m_pParent);
+				break;
+			case eDoNothing:
+			case eNoAutonTypes:
+				break;
+			}
+		}
+		else if (m_autonPlugin)
 		{
-			using namespace properties::registry_v1;
-			std::string max_speed_name = csz_CommonDrive_;
-			max_speed_name += csz_Ship_1D_MAX_SPEED;
-			const double max_speed = m_properties ? m_properties->get_number(max_speed_name.c_str(), 1.0) : 1.0;
-			m_Primer.AddGoal(SmartWaypoints(m_pParent,max_speed));
+			// Ian: Plugin auton goal — recover the plugin-local index by subtracting the drive offset.
+			const int pluginLocalIndex = autonIndex - (int)eNoAutonTypes;
+			autonGoal = m_autonPlugin->CreateAutonGoal(pluginLocalIndex, m_pParent);
 		}
-			break;
-		//case eDriveTracking:
-		//	m_Primer.AddGoal(new DriveTracking(this));
-		//	break;
-		case eDoNothing:
-		case eNoAutonTypes: //grrr windriver and warning 1250
-			break;
-		}
+
+		if (autonGoal)
+			m_Primer.AddGoal(autonGoal);
 		m_Primer.AddGoal(new goal_clock(this));
 		m_Primer.AddGoal(new goal_watchdog(this));
 		m_Status = eActive;
@@ -558,6 +629,206 @@ public:
 		m_Status = eFailed;
 	}
 
+	// Ian: CreateDriveTestGoal — factory for the built-in drive test goals (TestType enum).
+	// Manipulator-specific goals are NOT handled here — they are created by the plugin's
+	// CreateTestGoal() method via ActivateTest().
+	Goal* CreateDriveTestGoal(TestType testType)
+	{
+		switch (testType)
+		{
+		case eTestJustMoveForward:
+			return new MoveForward(m_pParent);
+		case eTestJustRotate:
+			return new RotateWithWait(m_pParent);
+		case eTestMoveRotateSequence:
+			return new TestMoveRotateSequence(m_pParent);
+		case eTestBoxWayPoints:
+			return GiveRobotSquareWayPointGoal(m_pParent);
+		case eTestSmartWayPoints:
+		{
+			using namespace properties::registry_v1;
+			std::string max_speed_name = csz_CommonDrive_;
+			max_speed_name += csz_Ship_1D_MAX_SPEED;
+			const double max_speed = m_properties ? m_properties->get_number(max_speed_name.c_str(), 1.0) : 1.0;
+			return SmartWaypoints(m_pParent, max_speed);
+		}
+		case eTestDoNothing:
+		case eNoTestDriveTypes:
+		default:
+			return nullptr;
+		}
+	}
+
+	// Ian: PublishTestChooser — seeds the Test chooser with the full option list so the
+	// dashboard widget populates as soon as the user selects Test mode.  This must be called
+	// BEFORE ActivateTest() to give the user time to make a selection in the chooser widget.
+	//
+	// Called from TeleAutonV2::SetGameMode(eTest) — which fires when the mode dropdown
+	// changes, potentially before Enable is pressed.  The auton chooser gets its seed from
+	// TransportSmoke; the test chooser gets its seed here because its option list is dynamic
+	// (depends on which manipulator is active).
+	void PublishTestChooser(Module::Robot::ManipulatorPlugin* manipulatorPlugin)
+	{
+		if (!IsChooserEnabledForCurrentConnection())
+			return;
+
+		std::vector<AutonChooserOption> testOptionsVec = BuildTestChooserOptions(manipulatorPlugin);
+		const char* const TestChooserBase = "Test/Test_Selection/TestChooser";
+
+		// Ian: publishSelected = true here (unlike ActivateTest which passes false).
+		// On the initial seed we MUST write the `selected` key so the chooser widget
+		// has a valid default.  Once the widget exists, the dashboard client writes its
+		// own value into `selected` when the user picks an option.  ActivateTest later
+		// reads that client-written value without overwriting it.
+		PublishAutonChooser(
+			TestChooserBase,
+			testOptionsVec.data(),
+			testOptionsVec.size(),
+			(int)eTestDoNothing,   // defaultIndex
+			(int)eTestDoNothing,   // activeIndex  (no test running yet)
+			(int)eTestDoNothing,   // selectedIndex (seed to default)
+			true);                 // publishSelected = true (initial seed)
+
+		printf("[AI TestMode] Test chooser published with %zu options\n", testOptionsVec.size());
+	}
+
+	// Ian: ActivateTest — called from TeleAutonV2 when DriverStation is in Test mode
+	// and the user presses Start.  Reads the Test chooser, resolves to an index, and
+	// creates the appropriate goal using the same goal framework as Auton.
+	// This replaces the old hardcoded test(int) switch.
+	//
+	// The chooser is dynamically built from:
+	//   - Built-in drive test goals (indices 0 .. eNoTestDriveTypes-1)
+	//   - Plugin-contributed test goals (indices eNoTestDriveTypes+0, eNoTestDriveTypes+1, ...)
+	//
+	// If the resolved index falls in the drive range, CreateDriveTestGoal() handles it.
+	// If it falls in the plugin range, manipulatorPlugin->CreateTestGoal(pluginLocalIndex).
+	//
+	// manipulatorPlugin: pointer to the active ManipulatorPlugin (may be nullptr).
+	void ActivateTest(Module::Robot::ManipulatorPlugin* manipulatorPlugin)
+	{
+		m_Primer.AsGoal().Terminate();  //clear previous session
+		m_Timer = 0.0;
+
+		// Ian: Build the test chooser options dynamically.  Drive goals are always present.
+		// The manipulator plugin contributes its own options via GetTestGoals().
+		std::vector<AutonChooserOption> testOptionsVec = BuildTestChooserOptions(manipulatorPlugin);
+		const AutonChooserOption* testOptions = testOptionsVec.data();
+		const size_t testOptionCount = testOptionsVec.size();
+
+		const char* const TestChooserBase = "Test/Test_Selection/TestChooser";
+		const char* const TestLegacyKey = "AutonTest";
+
+		const int totalTestCount = testOptionCount > 0 ? testOptionsVec.back().index + 1 : (int)eNoTestDriveTypes;
+
+		const bool useChooser = IsChooserEnabledForCurrentConnection();
+		int testIndex = ResolveAutonIndex(
+			[&](double& outSelection)
+			{
+				if (useChooser)
+				{
+					std::string selectedLabel;
+					try { selectedLabel = SmartDashboard::GetString(std::string(TestChooserBase) + "/selected"); }
+					catch (...) {}
+					if (!selectedLabel.empty())
+					{
+						outSelection = static_cast<double>(
+							ResolveAutonSelectionFromChooser(TestChooserBase, TestLegacyKey,
+								testOptions, testOptionCount, (int)eTestDoNothing));
+						printf("[AI TestMode] source=chooser selected='%s' index=%d\n",
+							selectedLabel.c_str(), (int)outSelection);
+						return true;
+					}
+				}
+				// Fallback: try reading numeric AutonTest key
+				if (SmartDashboard::TryGetNumber(TestLegacyKey, outSelection))
+				{
+					printf("[AI TestMode] source=number value=%g\n", outSelection);
+					return true;
+				}
+				return false;
+			},
+			(int)eTestDoNothing,
+			totalTestCount,
+			20,
+			std::chrono::milliseconds(10));
+
+		printf("[AI TestMode] final_index=%d\n", testIndex);
+		{
+			char dbg[256] = {};
+			sprintf_s(dbg, "[AI TestMode] chooser_enabled=%d final_index=%d", useChooser ? 1 : 0, testIndex);
+			AppendDirectAutonChainLog(dbg);
+		}
+
+		// Publish the Test chooser state
+		if (useChooser)
+		{
+			PublishAutonChooser(
+				TestChooserBase,
+				testOptions,
+				testOptionCount,
+				(int)eTestDoNothing,
+				testIndex,
+				testIndex,
+				false);
+		}
+
+		printf("Test=%d \n", testIndex);
+
+		// Ian: Create the goal — drive goals vs plugin goals are distinguished by index range.
+		Goal* testGoal = nullptr;
+		if (testIndex < (int)eNoTestDriveTypes)
+		{
+			testGoal = CreateDriveTestGoal((TestType)testIndex);
+		}
+		else if (manipulatorPlugin)
+		{
+			// Ian: Plugin goal — recover the plugin-local index by subtracting the drive offset.
+			const int pluginLocalIndex = testIndex - (int)eNoTestDriveTypes;
+			testGoal = manipulatorPlugin->CreateTestGoal(pluginLocalIndex);
+		}
+
+		if (testGoal)
+			m_Primer.AddGoal(testGoal);
+
+		m_Primer.AddGoal(new goal_clock(this));
+		m_Primer.AddGoal(new goal_watchdog(this));
+		m_Status = eActive;
+	}
+
+	// Ian: PublishAutonChooserOptions — seeds the Auton chooser with the full option list
+	// including any manipulator-contributed auton routines.  Called from TeleAutonV2 when
+	// switching to Auton mode or during initialization.  Similar to PublishTestChooser but
+	// for the Auton chooser path.
+	void PublishAutonChooserOptions(Module::Robot::ManipulatorPlugin* manipulatorPlugin)
+	{
+		if (!IsChooserEnabledForCurrentConnection())
+			return;
+
+		std::vector<AutonChooserOption> autonOptionsVec = BuildAutonChooserOptions(manipulatorPlugin);
+		const char* const AutonChooserBase = "Autonomous/Auton_Selection/AutoChooser";
+
+		PublishAutonChooser(
+			AutonChooserBase,
+			autonOptionsVec.data(),
+			autonOptionsVec.size(),
+			(int)eDoNothing,    // defaultIndex
+			(int)eDoNothing,    // activeIndex (no auton running yet)
+			(int)eDoNothing,    // selectedIndex (seed to default)
+			true);              // publishSelected = true (initial seed)
+
+		printf("[AI AutonMode] Auton chooser published with %zu options\n", autonOptionsVec.size());
+	}
+
+	// Ian: ActivateAuton — stores the manipulator plugin pointer and calls Activate().
+	// This is the entry point for auton mode when a manipulator may contribute auton goals.
+	// Called from TeleAutonV2 instead of the raw GetGoal().Activate() to thread the plugin.
+	void ActivateAuton(Module::Robot::ManipulatorPlugin* manipulatorPlugin)
+	{
+		m_autonPlugin = manipulatorPlugin;
+		Activate();
+	}
+
 };
 
 AI_Example::AI_Example()
@@ -573,6 +844,26 @@ void AI_Example::Initialize(const Framework::Base::asset_manager* props)
 Goal& AI_Example::GetGoal()
 {
 	return *m_AI_Input;
+}
+
+void AI_Example::ActivateTest(Module::Robot::ManipulatorPlugin* manipulatorPlugin)
+{
+	m_AI_Input->ActivateTest(manipulatorPlugin);
+}
+
+void AI_Example::PublishTestChooser(Module::Robot::ManipulatorPlugin* manipulatorPlugin)
+{
+	m_AI_Input->PublishTestChooser(manipulatorPlugin);
+}
+
+void AI_Example::PublishAutonChooserOptions(Module::Robot::ManipulatorPlugin* manipulatorPlugin)
+{
+	m_AI_Input->PublishAutonChooserOptions(manipulatorPlugin);
+}
+
+void AI_Example::ActivateAuton(Module::Robot::ManipulatorPlugin* manipulatorPlugin)
+{
+	m_AI_Input->ActivateAuton(manipulatorPlugin);
 }
 	}
 }

@@ -32,6 +32,8 @@ HWND g_hNativeLinkCarrierLabel = nullptr;
 HWND g_hNativeLinkCarrierCombo = nullptr;
 HWND g_hVideoSourceLabel = nullptr;
 HWND g_hVideoSourceCombo = nullptr;
+HWND g_hManipulatorLabel = nullptr;
+HWND g_hManipulatorCombo = nullptr;
 
 //Since the lambda cannot capture, we must give it access to the robot here
 RobotTester *s_pRobotTester = nullptr;  
@@ -45,25 +47,96 @@ bool s_populatingCombo = false;
 
 namespace
 {
-	const wchar_t* c_ConnectionSettingsDir = L"RobotSimulation";
-	const wchar_t* c_ConnectionSettingsFile = L"DriverStation.ini";
-	const wchar_t* c_ConnectionSettingsSection = L"Connection";
-	const wchar_t* c_ConnectionSettingsKey = L"Mode";
-	const wchar_t* c_NativeLinkCarrierKey = L"NativeLinkCarrier";
-	const wchar_t* c_WindowSettingsSection = L"Window";
-	const wchar_t* c_WindowPosXKey = L"PosX";
-	const wchar_t* c_WindowPosYKey = L"PosY";
+	// Ian: All UI settings are persisted in the Windows Registry under this key.
+	// This replaced the DriverStation.ini file — the registry is reliable across
+	// CRT/DLL/static-lib boundaries (no stale-cache issues like env vars or INI).
+	// Values stored here:
+	//   ConnectionMode     REG_DWORD  (0-3, ConnectionMode enum)
+	//   NativeLinkCarrier  REG_SZ     ("tcp" or "shm")
+	//   WindowPosX         REG_DWORD  (signed int, screen pixels)
+	//   WindowPosY         REG_DWORD  (signed int, screen pixels)
+	//   VideoSource        REG_DWORD  (0-3, VideoSourceMode enum)
+	//   ManipulatorKind    REG_SZ     ("none" or "excavator_arm")
+	const wchar_t* c_RegistrySubKey = L"SOFTWARE\\RobotSimulation";
+
 	const int c_NativeLinkCarrierLabelId = 1010;
 	const int c_NativeLinkCarrierComboId = 1011;
 	const int c_VideoSourceLabelId = 1012;
 	const int c_VideoSourceComboId = 1013;
-	const wchar_t* c_VideoSettingsSection = L"Video";
-	const wchar_t* c_VideoSourceKey = L"Source";
+	const int c_ManipulatorLabelId = 1014;
+	const int c_ManipulatorComboId = 1015;
+	bool s_populatingManipulatorCombo = false;
 
 	// Ian: Guard flag for video source combo — same pattern as s_populatingCombo
 	// for the connection mode combo.
 	bool s_populatingVideoCombo = false;
 
+	// --- Registry helper functions ---
+	// Ian: Thin wrappers around RegCreateKeyExW / RegQueryValueExW / RegSetValueExW
+	// to eliminate boilerplate across the six persisted settings.  All use
+	// HKCU\SOFTWARE\RobotSimulation (c_RegistrySubKey) as the parent key.
+
+	bool RegistryReadDword(const wchar_t* valueName, DWORD& outValue)
+	{
+		HKEY hKey = nullptr;
+		LONG result = RegOpenKeyExW(HKEY_CURRENT_USER, c_RegistrySubKey, 0, KEY_QUERY_VALUE, &hKey);
+		if (result != ERROR_SUCCESS)
+			return false;
+		DWORD dataSize = sizeof(DWORD);
+		DWORD dataType = 0;
+		result = RegQueryValueExW(hKey, valueName, nullptr, &dataType,
+			reinterpret_cast<BYTE*>(&outValue), &dataSize);
+		RegCloseKey(hKey);
+		return (result == ERROR_SUCCESS && dataType == REG_DWORD);
+	}
+
+	void RegistryWriteDword(const wchar_t* valueName, DWORD value)
+	{
+		HKEY hKey = nullptr;
+		LONG result = RegCreateKeyExW(HKEY_CURRENT_USER, c_RegistrySubKey,
+			0, nullptr, REG_OPTION_NON_VOLATILE, KEY_SET_VALUE, nullptr, &hKey, nullptr);
+		if (result == ERROR_SUCCESS)
+		{
+			RegSetValueExW(hKey, valueName, 0, REG_DWORD,
+				reinterpret_cast<const BYTE*>(&value), sizeof(DWORD));
+			RegCloseKey(hKey);
+		}
+	}
+
+	bool RegistryReadString(const wchar_t* valueName, wchar_t* outBuffer, DWORD bufferChars)
+	{
+		HKEY hKey = nullptr;
+		LONG result = RegOpenKeyExW(HKEY_CURRENT_USER, c_RegistrySubKey, 0, KEY_QUERY_VALUE, &hKey);
+		if (result != ERROR_SUCCESS)
+			return false;
+		DWORD dataSize = bufferChars * sizeof(wchar_t);
+		DWORD dataType = 0;
+		result = RegQueryValueExW(hKey, valueName, nullptr, &dataType,
+			reinterpret_cast<BYTE*>(outBuffer), &dataSize);
+		RegCloseKey(hKey);
+		return (result == ERROR_SUCCESS && dataType == REG_SZ);
+	}
+
+	void RegistryWriteString(const wchar_t* valueName, const wchar_t* value)
+	{
+		HKEY hKey = nullptr;
+		LONG result = RegCreateKeyExW(HKEY_CURRENT_USER, c_RegistrySubKey,
+			0, nullptr, REG_OPTION_NON_VOLATILE, KEY_SET_VALUE, nullptr, &hKey, nullptr);
+		if (result == ERROR_SUCCESS)
+		{
+			RegSetValueExW(hKey, valueName, 0, REG_SZ,
+				reinterpret_cast<const BYTE*>(value),
+				static_cast<DWORD>((wcslen(value) + 1) * sizeof(wchar_t)));
+			RegCloseKey(hKey);
+		}
+	}
+
+	// Ian: Default to DirectConnect — this is the safe "it just works" baseline.
+	// NativeLink is something you explicitly opt into.  If DriverStation falls
+	// back to DirectConnect, that's immediately visible in the UI, which signals
+	// "something was wrong with your saved config, go check it."
+	// See the April 2026 investigation: the fix isn't to silently pick the right
+	// mode — it's to make the wrong mode obvious so the operator notices.
 	ConnectionMode GetDefaultConnectionMode()
 	{
 		return ConnectionMode::eDirectConnect;
@@ -75,7 +148,7 @@ namespace
 		// used in Debug when the developer explicitly selects it via the carrier
 		// combo (which is #ifdef _DEBUG only). In Release there is no UI to change
 		// this, so always default to TCP so a clean release build just works
-		// without requiring a DriverStation.ini on the target machine.
+		// without requiring a registry entry on the target machine.
 #ifdef _DEBUG
 		return NativeLink::CarrierKind::SharedMemory;
 #else
@@ -83,28 +156,15 @@ namespace
 #endif
 	}
 
-	bool TryGetConnectionSettingsPath(std::wstring& settingsPath)
+	void PersistConnectionMode(ConnectionMode mode)
 	{
-		DWORD required = GetEnvironmentVariableW(L"LOCALAPPDATA", nullptr, 0);
-		if (!required)
-			return false;
-
-		std::wstring basePath(required - 1, L'\0');
-		if (GetEnvironmentVariableW(L"LOCALAPPDATA", &basePath[0], required) != (required - 1))
-			return false;
-
-		wchar_t settingsDir[MAX_PATH];
-		wcscpy_s(settingsDir, basePath.c_str());
-		PathAppendW(settingsDir, c_ConnectionSettingsDir);
-		CreateDirectoryW(settingsDir, nullptr);
-
-		wchar_t settingsFile[MAX_PATH];
-		wcscpy_s(settingsFile, settingsDir);
-		PathAppendW(settingsFile, c_ConnectionSettingsFile);
-		settingsPath = settingsFile;
-		return true;
+		RegistryWriteDword(L"ConnectionMode", static_cast<DWORD>(mode));
 	}
 
+	// Ian: "Reset fresh" self-cleaning — if the registry value is garbage, wipe
+	// it and persist the clean default so next launch doesn't hit the same issue.
+	// Philosophy: "turn it off and back on" — corrupt state gets nuked, not
+	// patched.  The operator sees DirectConnect in the UI and knows to reconfigure.
 	ConnectionMode NormalizeConnectionMode(int rawMode)
 	{
 		switch (rawMode)
@@ -118,59 +178,85 @@ namespace
 		case static_cast<int>(ConnectionMode::eNativeLink):
 			return ConnectionMode::eNativeLink;
 		default:
+			printf("[DriverStation] WARNING: ConnectionMode registry value %d is "
+				"out of range — resetting to DirectConnect. Reconfigure the "
+				"transport mode if this is not what you want.\n", rawMode);
+			PersistConnectionMode(GetDefaultConnectionMode());
 			return GetDefaultConnectionMode();
 		}
 	}
 
 	ConnectionMode LoadPersistedConnectionMode()
 	{
-		std::wstring settingsPath;
-		if (!TryGetConnectionSettingsPath(settingsPath))
+		DWORD rawMode = 0;
+		if (!RegistryReadDword(L"ConnectionMode", rawMode))
+		{
+			// Ian: Registry key missing (fresh install or wiped registry).
+			// Write the default so subsequent launches don't hit this path again.
+			printf("[DriverStation] ConnectionMode registry key not found "
+				"— writing default DirectConnect (%d)\n",
+				static_cast<int>(GetDefaultConnectionMode()));
+			PersistConnectionMode(GetDefaultConnectionMode());
 			return GetDefaultConnectionMode();
-
-		const UINT rawMode = GetPrivateProfileIntW(
-			c_ConnectionSettingsSection,
-			c_ConnectionSettingsKey,
-			static_cast<UINT>(GetDefaultConnectionMode()),
-			settingsPath.c_str());
+		}
 		return NormalizeConnectionMode(static_cast<int>(rawMode));
 	}
 
-	void PersistConnectionMode(ConnectionMode mode)
-	{
-		std::wstring settingsPath;
-		if (!TryGetConnectionSettingsPath(settingsPath))
-			return;
+	// --- Manipulator persistence ---
 
-		wchar_t buffer[16];
-		_swprintf_p(buffer, _countof(buffer), L"%d", static_cast<int>(mode));
-		WritePrivateProfileStringW(
-			c_ConnectionSettingsSection,
-			c_ConnectionSettingsKey,
-			buffer,
-			settingsPath.c_str());
+	ManipulatorKind GetDefaultManipulatorKind()
+	{
+		// Ian: Default to None so a clean launch has no manipulator overhead.
+		// This is the safe default for diagnosing the NT2 freeze.
+		return ManipulatorKind::eNone;
+	}
+
+	ManipulatorKind LoadPersistedManipulatorKind()
+	{
+		// Ian: Read from registry — same key that ApplyManipulatorRegistry writes.
+		// This unifies the persistence to a single location (no more INI).
+		wchar_t buffer[32] = {};
+		if (RegistryReadString(L"ManipulatorKind", buffer, _countof(buffer)))
+		{
+			std::wstring value(buffer);
+			std::transform(value.begin(), value.end(), value.begin(), towlower);
+			if (value == L"excavator_arm")
+				return ManipulatorKind::eExcavatorArm;
+		}
+		return GetDefaultManipulatorKind();
+	}
+
+	// Ian: PersistManipulatorKind now just delegates to RegistryWriteString since
+	// all settings are stored in the registry.  Kept as a named function so call
+	// sites read clearly (Persist = "save for next launch").
+	void PersistManipulatorKind(ManipulatorKind kind)
+	{
+		const wchar_t* value = (kind == ManipulatorKind::eExcavatorArm) ? L"excavator_arm" : L"none";
+		RegistryWriteString(L"ManipulatorKind", value);
+	}
+
+	// Ian: Write the manipulator selection to the registry so script_loader_example.cpp
+	// can read it at init time.  Registry is reliable across CRT/DLL boundaries —
+	// unlike environment variables, which have stale-cache issues on MSVC when set
+	// via SetEnvironmentVariableA and read via getenv/_dupenv_s across modules.
+	//
+	// Key: HKCU\SOFTWARE\RobotSimulation\ManipulatorKind (REG_SZ)
+	// Values: "none" or "excavator_arm"
+	void ApplyManipulatorRegistry(ManipulatorKind kind)
+	{
+		PersistManipulatorKind(kind);
+
+		const wchar_t* value = (kind == ManipulatorKind::eExcavatorArm) ? L"excavator_arm" : L"none";
+		OutputDebugStringW(L"[DS] ApplyManipulatorRegistry: ManipulatorKind = ");
+		OutputDebugStringW(value);
+		OutputDebugStringW(L"\n");
 	}
 
 	NativeLink::CarrierKind LoadPersistedNativeLinkCarrier()
 	{
-		std::wstring settingsPath;
-		if (!TryGetConnectionSettingsPath(settingsPath))
-			return GetDefaultNativeLinkCarrier();
-
-		// Ian: use GetDefaultNativeLinkCarrier() as the INI fallback so a clean
-		// machine (no DriverStation.ini) gets the same default as a fresh launch.
-		// In Release that is Tcp; in Debug it is SharedMemory.
-		const wchar_t* defaultCarrierStr =
-			GetDefaultNativeLinkCarrier() == NativeLink::CarrierKind::Tcp ? L"tcp" : L"shm";
-
 		wchar_t buffer[16] = {};
-		GetPrivateProfileStringW(
-			c_ConnectionSettingsSection,
-			c_NativeLinkCarrierKey,
-			defaultCarrierStr,
-			buffer,
-			static_cast<DWORD>(_countof(buffer)),
-			settingsPath.c_str());
+		if (!RegistryReadString(L"NativeLinkCarrier", buffer, _countof(buffer)))
+			return GetDefaultNativeLinkCarrier();
 
 		std::wstring value(buffer);
 		std::transform(value.begin(), value.end(), value.begin(), towlower);
@@ -179,15 +265,8 @@ namespace
 
 	void PersistNativeLinkCarrier(NativeLink::CarrierKind carrier)
 	{
-		std::wstring settingsPath;
-		if (!TryGetConnectionSettingsPath(settingsPath))
-			return;
-
-		WritePrivateProfileStringW(
-			c_ConnectionSettingsSection,
-			c_NativeLinkCarrierKey,
-			carrier == NativeLink::CarrierKind::Tcp ? L"tcp" : L"shm",
-			settingsPath.c_str());
+		RegistryWriteString(L"NativeLinkCarrier",
+			carrier == NativeLink::CarrierKind::Tcp ? L"tcp" : L"shm");
 	}
 
 	void ApplyNativeLinkEnvironment(NativeLink::CarrierKind carrier)
@@ -363,31 +442,15 @@ namespace
 
 	VideoSourceMode LoadPersistedVideoSource()
 	{
-		std::wstring settingsPath;
-		if (!TryGetConnectionSettingsPath(settingsPath))
+		DWORD rawMode = 0;
+		if (!RegistryReadDword(L"VideoSource", rawMode))
 			return GetDefaultVideoSource();
-
-		const UINT rawMode = GetPrivateProfileIntW(
-			c_VideoSettingsSection,
-			c_VideoSourceKey,
-			static_cast<UINT>(GetDefaultVideoSource()),
-			settingsPath.c_str());
 		return NormalizeVideoSourceMode(static_cast<int>(rawMode));
 	}
 
 	void PersistVideoSource(VideoSourceMode mode)
 	{
-		std::wstring settingsPath;
-		if (!TryGetConnectionSettingsPath(settingsPath))
-			return;
-
-		wchar_t buffer[16];
-		_swprintf_p(buffer, _countof(buffer), L"%d", static_cast<int>(mode));
-		WritePrivateProfileStringW(
-			c_VideoSettingsSection,
-			c_VideoSourceKey,
-			buffer,
-			settingsPath.c_str());
+		RegistryWriteDword(L"VideoSource", static_cast<DWORD>(mode));
 	}
 
 	void PopulateVideoSourceCombo(VideoSourceMode selectedMode)
@@ -516,20 +579,135 @@ namespace
 		PopulateVideoSourceCombo(LoadPersistedVideoSource());
 	}
 
+	// --- Manipulator combo UI ---
+
+	void PopulateManipulatorCombo(ManipulatorKind selectedKind)
+	{
+		if (!g_hManipulatorCombo)
+			return;
+
+		s_populatingManipulatorCombo = true;
+		SendMessageW(g_hManipulatorCombo, CB_RESETCONTENT, 0, 0);
+
+		const ManipulatorKind kinds[] =
+		{
+			ManipulatorKind::eNone,
+			ManipulatorKind::eExcavatorArm,
+		};
+
+		int selectedIndex = 0;
+		for (int i = 0; i < static_cast<int>(_countof(kinds)); ++i)
+		{
+			const wchar_t* label = GetManipulatorKindName(kinds[i]);
+			const LRESULT index = SendMessageW(g_hManipulatorCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(label));
+			SendMessageW(g_hManipulatorCombo, CB_SETITEMDATA, static_cast<WPARAM>(index), static_cast<LPARAM>(kinds[i]));
+			if (kinds[i] == selectedKind)
+				selectedIndex = static_cast<int>(index);
+		}
+
+		SendMessageW(g_hManipulatorCombo, CB_SETCURSEL, static_cast<WPARAM>(selectedIndex), 0);
+		s_populatingManipulatorCombo = false;
+	}
+
+	// Ian: Create the Manipulator label + combo box dynamically.
+	// Placed below the Video Source combo, extending the dialog height.
+	// Follows the exact same pattern as CreateVideoSourceControls.
+	void CreateManipulatorControls(HWND hWnd)
+	{
+		// Extend the dialog height to fit the new row
+		RECT windowRect = {};
+		if (GetWindowRect(hWnd, &windowRect))
+		{
+			SetWindowPos(hWnd, nullptr, 0, 0,
+				windowRect.right - windowRect.left,
+				(windowRect.bottom - windowRect.top) + 26,
+				SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+		}
+
+		const HFONT dialogFont = reinterpret_cast<HFONT>(SendMessageW(hWnd, WM_GETFONT, 0, 0));
+
+		// Ian: Position the Manipulator controls directly below the Video Source combo
+		// by querying the Video combo's actual pixel position at runtime.
+		int xLabel = 26;   // fallback
+		int xCombo = 78;
+		int comboWidth = 112;
+		int yCombo = 116;
+		int labelHeight = 12;
+		constexpr int kRowGap = 4;  // pixels between Video bottom and Manipulator top
+
+		if (g_hVideoSourceCombo)
+		{
+			RECT rcCombo = {};
+			GetWindowRect(g_hVideoSourceCombo, &rcCombo);
+			POINT ptComboTL = { rcCombo.left, rcCombo.top };
+			POINT ptComboBR = { rcCombo.right, rcCombo.bottom };
+			ScreenToClient(hWnd, &ptComboTL);
+			ScreenToClient(hWnd, &ptComboBR);
+			xCombo = ptComboTL.x;
+			comboWidth = ptComboBR.x - ptComboTL.x;
+			yCombo = ptComboBR.y + kRowGap;
+		}
+		if (g_hVideoSourceLabel)
+		{
+			RECT rcLabel = {};
+			GetWindowRect(g_hVideoSourceLabel, &rcLabel);
+			POINT ptLabelTL = { rcLabel.left, rcLabel.top };
+			POINT ptLabelBR = { rcLabel.left, rcLabel.bottom };
+			ScreenToClient(hWnd, &ptLabelTL);
+			ScreenToClient(hWnd, &ptLabelBR);
+			xLabel = ptLabelTL.x;
+			labelHeight = ptLabelBR.y - ptLabelTL.y;
+		}
+		const int yLabel = yCombo + 4;
+
+		g_hManipulatorLabel = CreateWindowW(
+			L"STATIC",
+			L"Manipulator",
+			WS_CHILD | WS_VISIBLE,
+			xLabel,
+			yLabel,
+			56,
+			labelHeight,
+			hWnd,
+			reinterpret_cast<HMENU>(static_cast<INT_PTR>(c_ManipulatorLabelId)),
+			hInst,
+			nullptr);
+		g_hManipulatorCombo = CreateWindowW(
+			L"COMBOBOX",
+			L"",
+			WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST | WS_VSCROLL,
+			xCombo,
+			yCombo,
+			comboWidth,
+			100,
+			hWnd,
+			reinterpret_cast<HMENU>(static_cast<INT_PTR>(c_ManipulatorComboId)),
+			hInst,
+			nullptr);
+
+		if (dialogFont)
+		{
+			if (g_hManipulatorLabel)
+				SendMessageW(g_hManipulatorLabel, WM_SETFONT, reinterpret_cast<WPARAM>(dialogFont), TRUE);
+			if (g_hManipulatorCombo)
+				SendMessageW(g_hManipulatorCombo, WM_SETFONT, reinterpret_cast<WPARAM>(dialogFont), TRUE);
+		}
+
+		PopulateManipulatorCombo(LoadPersistedManipulatorKind());
+	}
+
 	bool LoadPersistedWindowPosition(POINT& windowPosition)
 	{
-		std::wstring settingsPath;
-		if (!TryGetConnectionSettingsPath(settingsPath))
+		DWORD rawX = 0, rawY = 0;
+		if (!RegistryReadDword(L"WindowPosX", rawX))
 			return false;
-
-		const int sentinel = 0x7fffffff;
-		const int posX = GetPrivateProfileIntW(c_WindowSettingsSection, c_WindowPosXKey, sentinel, settingsPath.c_str());
-		const int posY = GetPrivateProfileIntW(c_WindowSettingsSection, c_WindowPosYKey, sentinel, settingsPath.c_str());
-		if (posX == sentinel || posY == sentinel)
+		if (!RegistryReadDword(L"WindowPosY", rawY))
 			return false;
-
-		windowPosition.x = posX;
-		windowPosition.y = posY;
+		// Ian: Sentinel 0x7fffffff means "not set" — same logic as the old INI code.
+		if (rawX == 0x7fffffff || rawY == 0x7fffffff)
+			return false;
+		windowPosition.x = static_cast<LONG>(rawX);
+		windowPosition.y = static_cast<LONG>(rawY);
 		return true;
 	}
 
@@ -542,15 +720,8 @@ namespace
 		if (!GetWindowRect(hWnd, &windowRect))
 			return;
 
-		std::wstring settingsPath;
-		if (!TryGetConnectionSettingsPath(settingsPath))
-			return;
-
-		wchar_t buffer[32];
-		_swprintf_p(buffer, _countof(buffer), L"%ld", windowRect.left);
-		WritePrivateProfileStringW(c_WindowSettingsSection, c_WindowPosXKey, buffer, settingsPath.c_str());
-		_swprintf_p(buffer, _countof(buffer), L"%ld", windowRect.top);
-		WritePrivateProfileStringW(c_WindowSettingsSection, c_WindowPosYKey, buffer, settingsPath.c_str());
+		RegistryWriteDword(L"WindowPosX", static_cast<DWORD>(windowRect.left));
+		RegistryWriteDword(L"WindowPosY", static_cast<DWORD>(windowRect.top));
 	}
 
 	void RestorePersistedWindowPosition(HWND hWnd)
@@ -668,7 +839,7 @@ void ApplyVideoSource(VideoSourceMode mode)
 		s_pRobotTester->SetVideoSource(mode);
 		// Ian: The backend may fall back to Off if the requested source fails
 		// (e.g. Camera selected but no camera connected).  Read back the actual
-		// mode so the UI combo and INI stay in sync with reality.
+		// mode so the UI combo and registry stay in sync with reality.
 		const VideoSourceMode actualMode = s_pRobotTester->GetVideoSource();
 		if (actualMode != mode)
 		{
@@ -686,6 +857,26 @@ void ApplyVideoSource(VideoSourceMode mode)
 	vmsg += GetVideoSourceModeName(mode);
 	vmsg += L"\n";
 	OutputDebugStringW(vmsg.c_str());
+}
+
+// Ian: ApplyManipulator — updates the registry, UI combo, and persistence.
+// Unlike connection mode and video source, the manipulator selection is
+// NOT hot-swappable at runtime.  The registry value is read once during init().
+// Changing the combo mid-session updates the registry, but the change only
+// takes effect on the next launch.  A log message makes this clear.
+void ApplyManipulator(ManipulatorKind kind)
+{
+	ApplyManipulatorRegistry(kind);
+	if (g_hManipulatorCombo)
+	{
+		PopulateManipulatorCombo(kind);
+	}
+	PersistManipulatorKind(kind);
+
+	std::wstring mmsg = L"Manipulator: ";
+	mmsg += GetManipulatorKindName(kind);
+	mmsg += L" (takes effect on next launch)\n";
+	OutputDebugStringW(mmsg.c_str());
 }
 
 //Keyboard *s_Keyboard = nullptr;
@@ -720,6 +911,15 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	UNREFERENCED_PARAMETER(hPrevInstance);
 	s_InitialConnectionMode = LoadPersistedConnectionMode();
 	ApplyNativeLinkEnvironment(LoadPersistedNativeLinkCarrier());
+	// Ian: Apply the persisted manipulator selection to the registry early — before
+	// the dialog and RobotTester are created — so script_loader_example.cpp can
+	// read HKCU\SOFTWARE\RobotSimulation\ManipulatorKind during init().
+	{
+		const ManipulatorKind persistedKind = LoadPersistedManipulatorKind();
+		printf("[DS] LoadPersistedManipulatorKind() = %d (%ls)\n",
+			static_cast<int>(persistedKind), GetManipulatorKindName(persistedKind));
+		ApplyManipulatorRegistry(persistedKind);
+	}
 	ConnectionMode commandLineMode = s_InitialConnectionMode;
 	if (TryParseConnectionModeFromCmdLine(lpCmdLine, commandLineMode))
 	{
@@ -749,6 +949,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 			CheckDlgButton(hWnd, IDC_Stop, BM_SETCHECK);
 			PopulateConnectionModeCombo(hWnd, s_InitialConnectionMode);
 			CreateVideoSourceControls(hWnd);
+			CreateManipulatorControls(hWnd);
 			CreateNativeLinkCarrierControls(hWnd);
 			RestorePersistedWindowPosition(hWnd);
 			return (INT_PTR)TRUE;
@@ -844,6 +1045,20 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 				{
 					const LRESULT itemData = SendMessageW(g_hVideoSourceCombo, CB_GETITEMDATA, static_cast<WPARAM>(selectedIndex), 0);
 					ApplyVideoSource(static_cast<VideoSourceMode>(itemData));
+				}
+			}
+			break;
+		// Ian: Manipulator combo — same guard pattern as video source.
+		// Only updates the env var and INI; does NOT restart the robot.
+		// The new selection takes effect on the next program launch.
+		case c_ManipulatorComboId:
+			if (HIWORD(wParam) == CBN_SELCHANGE && !s_populatingManipulatorCombo)
+			{
+				const LRESULT selectedIndex = SendMessageW(g_hManipulatorCombo, CB_GETCURSEL, 0, 0);
+				if (selectedIndex != CB_ERR)
+				{
+					const LRESULT itemData = SendMessageW(g_hManipulatorCombo, CB_GETITEMDATA, static_cast<WPARAM>(selectedIndex), 0);
+					ApplyManipulator(static_cast<ManipulatorKind>(itemData));
 				}
 			}
 			break;

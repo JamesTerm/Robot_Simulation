@@ -81,6 +81,10 @@ public:
 	//Hook up the physical odometry if we have it
 	void SetPhysicalOdometry(std::function<Robot::SwerveVelocities ()> callback);
 	void SetPhysicalOdometry_heading(std::function<double ()> callback);
+	// Ian: Voltage detach — zero all 8 motor voltages (drive + swivel) while PID still runs.
+	// Toggled via SmartDashboard "Drive/VoltageDetached" boolean.
+	void SetVoltageDetached(bool detach);
+	bool GetVoltageDetached() const;
 private:
 	std::shared_ptr<SwerveRobot_Internal> m_SwerveRobot;
 };

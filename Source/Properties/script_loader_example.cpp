@@ -3,6 +3,10 @@
 
 #include "script_loader.h"
 #include "RegistryV1.h"
+#include <cstring>
+#ifdef _WIN32
+#include <Windows.h>
+#endif
 
 namespace properties
 {
@@ -805,6 +809,57 @@ public:
 		//TestIndivualWheels();
 		//TestCurivator();
 		TestAndromeda();
+		// Ian: Read the manipulator selection from the Windows Registry at
+		// HKCU\SOFTWARE\RobotSimulation\ManipulatorKind (REG_SZ).
+		// This is written by the DriverStation's Manipulator combo box.
+		// Default is "none" — no manipulator overhead — matching ManipulatorKind::eNone.
+		// The value "excavator_arm" enables the ExcavatorArm plugin.
+		//
+		// Ian: LESSON LEARNED — the registry is the only reliable cross-module
+		// persistence on MSVC.  Environment variables (getenv, _dupenv_s,
+		// GetEnvironmentVariableA) all failed due to stale CRT caches and
+		// separate static-lib CRT instances.  The registry works across
+		// CRT/DLL/static-lib boundaries without any caching issues.
+		{
+			bool enableManipulator = false;
+			HKEY hKey = nullptr;
+			LONG result = RegOpenKeyExW(HKEY_CURRENT_USER,
+				L"SOFTWARE\\RobotSimulation", 0, KEY_QUERY_VALUE, &hKey);
+			if (result == ERROR_SUCCESS)
+			{
+				wchar_t regBuf[64] = {};
+				DWORD dataSize = sizeof(regBuf);
+				DWORD dataType = 0;
+				result = RegQueryValueExW(hKey, L"ManipulatorKind", nullptr, &dataType,
+					reinterpret_cast<BYTE*>(regBuf), &dataSize);
+				RegCloseKey(hKey);
+
+				if (result == ERROR_SUCCESS && dataType == REG_SZ)
+				{
+					char dbg[256];
+					sprintf_s(dbg, "[script_loader] Registry ManipulatorKind = \"%ls\"\n", regBuf);
+					OutputDebugStringA(dbg);
+					enableManipulator = (wcscmp(regBuf, L"excavator_arm") == 0);
+				}
+				else
+				{
+					char dbg[128];
+					sprintf_s(dbg, "[script_loader] RegQueryValueExW failed (result=%ld, type=%lu)\n",
+						result, dataType);
+					OutputDebugStringA(dbg);
+				}
+			}
+			else
+			{
+				char dbg[128];
+				sprintf_s(dbg, "[script_loader] RegOpenKeyExW failed (result=%ld)\n", result);
+				OutputDebugStringA(dbg);
+			}
+			OutputDebugStringA(enableManipulator
+				? "[script_loader] Build_enable_manipulator = true\n"
+				: "[script_loader] Build_enable_manipulator = false\n");
+			assets.put_bool(csz_Build_enable_manipulator, enableManipulator);
+		}
 		//This customizes the controller, add your own controller
 		//especially if your axis assignments need to change
 		Test_Controls(eLogitech);
