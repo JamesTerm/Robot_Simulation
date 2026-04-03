@@ -37,7 +37,10 @@ public:
 	//max speed is optional where 0.0 means the max speed in properties
 	//if can strafe is true caller manages its own orientation as it deems fit; otherwise if it can't strafe
 	//it must manage the orientation to always drive forward in the direction toward the way point
-	using DriveTo_proto = void(double north, double east, bool absolute, bool stop_at_destination, double max_speed, bool can_strafe);
+	// Ian: safestop_tolerance added so the goal can propagate its waypoint tolerance all the way
+	// down to the DriveTo_Controller, keeping both HitWayPoint() checks in agreement.
+	using DriveTo_proto = void(double north, double east, bool absolute, bool stop_at_destination, double max_speed, bool can_strafe,
+		double safestop_tolerance);
 	void Set_DriveToLocation(std::function<DriveTo_proto> callback);
 
 	//AI localization methods:  ------------------------------------------------------------------------------
@@ -50,7 +53,8 @@ public:
 	#pragma region _goal interface methods_
 	//The methods in this section are to assist derived classes access to the foundational resources
 	void SetIntendedOrientation(double intended_orientation, bool absolute);
-	void DriveToLocation(double north, double east, bool absolute, bool stop_at_destination, double max_speed, bool can_strafe);
+	void DriveToLocation(double north, double east, bool absolute, bool stop_at_destination, double max_speed, bool can_strafe,
+		double safestop_tolerance = 0.3048);  // Ian: Feet2Meters(1.0)
 	Vec2D GetCurrentPosition() const;
 	double GetCurrentHeading() const;
 	#pragma endregion

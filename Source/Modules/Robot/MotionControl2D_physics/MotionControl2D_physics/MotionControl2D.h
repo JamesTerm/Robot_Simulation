@@ -62,7 +62,8 @@ public:
 	//max speed is optional where 0.0 means the max speed in properties
 	//if can strafe is true caller manages its own orientation as it deems fit; otherwise if it can't strafe
 	//it must manage the orientation to always drive forward in the direction toward the way point
-	void DriveToLocation(double north, double east, bool absolute=true, bool stop_at_destination=true, double max_speed = 0.0, bool can_strafe = true);
+	void DriveToLocation(double north, double east, bool absolute=true, bool stop_at_destination=true, double max_speed = 0.0, bool can_strafe = true,
+		double safestop_tolerance = 0.3048);  // Ian: Feet2Meters(1.0) — default matches legacy controller tolerance
 	//Use a simple struct to keep methods simple
 	struct Vector2D
 	{

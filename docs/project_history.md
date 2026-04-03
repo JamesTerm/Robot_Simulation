@@ -1,5 +1,55 @@
 # Project history
 
+## 2026-04-03 - Auton waypoint ping-pong fix: AutoActivate + tolerance threading (`master`)
+
+Fixed an infinite ping-pong bug in the autonomous goal system where the robot endlessly alternated between waypoint 1 and (0,0) without progressing through its full 16-subgoal `AutonGrabAndReturn` sequence. Two root causes identified and fixed.
+
+### Root cause #1: AutoActivate=false on composite subgoals (primary)
+
+`ArmGrabSequence` and `ClawGrabSequence` extended `Generic_CompositeGoal` with default `AutoActivate=false`. When used as subgoals inside `AutonGrabAndReturn`, their `Activate()` was never called by the parent's `ProcessSubgoals()`. Their inherited `Process()` returned `eInactive` every frame, which propagated up and caused the parent to re-Activate and re-push all 16 subgoals repeatedly. The robot ping-ponged between the first two waypoints because each re-push restarted the sequence.
+
+**Fix:** Pass `AutoActivate=true` to the `Generic_CompositeGoal` base constructor in both classes.
+
+**The AutoActivate rule:** Any `Generic_CompositeGoal` subclass that (1) overrides `Activate()` to push subgoals, (2) does NOT override `Process()` to call `ActivateIfInactive()`, and (3) is used as a subgoal inside another composite — MUST pass `AutoActivate=true`. All 8 `Generic_CompositeGoal` subclasses in the codebase were audited; only these two had the bug.
+
+### Root cause #2: safestop_tolerance not threaded through DriveToLocation (contributing)
+
+The goal layer's `safestop_tolerance` was not passed through the 7-layer `DriveToLocation` call chain to the `DriveTo_Controller`. The goal checked `HitWayPoint()` with tolerance `Feet2Meters(3.0)`, but the controller used a hardcoded default of `Feet2Meters(1.0)`. The two independent checks could disagree, causing waypoint hits to be unreliable.
+
+**Fix:** Added `double safestop_tolerance` parameter through all 7 layers: `AI_BaseController_goals.h` → `AI_Input.h/.cpp` → `SwerveRobot.h/.cpp` → `MotionControl2D.h` → `MotionControl2D_physics.cpp`. Also added interface parity in `MotionControl2D_simple` (param accepted, ignored).
+
+### Cleanup
+
+- Removed all DIAG `OutputDebugStringA` blocks and `<Windows.h>` include from `AI_BaseController_goals.h`
+- Removed temporary `GetSubgoalCount()`/`GetFrontSubgoal()` diagnostic accessors from `Goal_Types.h`
+- Removed DIAG block from `AutonGrabAndReturn::Process()` in `ExcavatorGoals.h`
+- Changed `#if 1` → `#if 0` on HitWayPoint printf and heartbeat printf
+- Fixed misleading indentation at `TeleAutonV2.cpp` Start() lines 869-872
+
+### Files modified
+
+| File | Change |
+|---|---|
+| `ExcavatorGoals.h` | `ArmGrabSequence` and `ClawGrabSequence`: `Generic_CompositeGoal(true)`; removed DIAG block |
+| `AI_BaseController_goals.h` | Tolerance threading; removed DIAG blocks + `<Windows.h>` |
+| `Goal_Types.h` | Removed temporary diagnostic accessors |
+| `TeleAutonV2.cpp` | Indentation fix |
+| `AI_Input.h/.cpp` | Tolerance parameter in DriveTo_proto and DriveToLocation |
+| `SwerveRobot.h/.cpp` | Tolerance parameter pass-through |
+| `MotionControl2D.h` (physics) | Tolerance parameter in DriveToLocation |
+| `MotionControl2D_physics.cpp` | Tolerance parameter in DriveTo_Controller |
+| `TeleAutonV1.cpp` | Parallel tolerance parameter |
+| `MotionControl2D.h/.cpp` (simple) | Interface parity |
+
+### Verification
+
+- DriverStation.exe builds clean (Release)
+- 29/30 unit tests pass (1 pre-existing TCP flake)
+- User confirmed: auton runs to completion, subgoal count decreases monotonically, no ping-pong
+- See `docs/journal/2026-04-03-autoactivate-ping-pong-fix.md` for full investigation
+
+---
+
 ## 2026-03-31 - Excavator goal oscillation fix: SetIntendedPosition-once pattern, Test/ key grouping (`feature/command-subsystem-livewindow`)
 
 Fixed arm oscillation during test goals and grouped all test SmartDashboard keys under the `Test/` prefix.

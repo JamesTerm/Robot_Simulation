@@ -611,30 +611,33 @@ private:
 				{
 					return m_robot.GetCurrentHeading();
 				});
-			m_Goal.Set_DriveToLocation([&](double north, double east, bool absolute, bool stop_at_destination, double max_speed, bool can_strafe)
+			m_Goal.Set_DriveToLocation([&](double north, double east, bool absolute, bool stop_at_destination, double max_speed, bool can_strafe,
+				double safestop_tolerance)
 				{
 					printf(
-						"[TeleAutonV2] DriveToLocation north=%g east=%g absolute=%d stop=%d max_speed=%g can_strafe=%d\n",
+						"[TeleAutonV2] DriveToLocation north=%g east=%g absolute=%d stop=%d max_speed=%g can_strafe=%d tol=%g\n",
 						north,
 						east,
 						absolute ? 1 : 0,
 						stop_at_destination ? 1 : 0,
 						max_speed,
-						can_strafe ? 1 : 0);
+						can_strafe ? 1 : 0,
+						safestop_tolerance);
 					{
 						char dbg[256] = {};
 						sprintf_s(
 							dbg,
-							"[TeleAutonV2] DriveToLocation north=%g east=%g absolute=%d stop=%d max_speed=%g can_strafe=%d",
+							"[TeleAutonV2] DriveToLocation north=%g east=%g absolute=%d stop=%d max_speed=%g can_strafe=%d tol=%g",
 							north,
 							east,
 							absolute ? 1 : 0,
 							stop_at_destination ? 1 : 0,
 							max_speed,
-							can_strafe ? 1 : 0);
+							can_strafe ? 1 : 0,
+							safestop_tolerance);
 						Module::Input::AppendDirectAutonChainLog(dbg);
 					}
-					m_robot.DriveToLocation(north, east, absolute, stop_at_destination, max_speed, can_strafe);
+					m_robot.DriveToLocation(north, east, absolute, stop_at_destination, max_speed, can_strafe, safestop_tolerance);
 				});
 			m_Goal.Set_SetIntendedOrientation([&](double intended_orientation, bool absolute)
 				{
@@ -865,8 +868,8 @@ public:
 		// so the user has had a chance to pick a selection.  ActivateTest reads it and runs.
 		if (m_game_mode == game_mode::eTest)
 			m_Goal.ActivateTest(m_manipulator.get());
-			if (m_game_mode == game_mode::eAuton)
-				m_Goal.ActivateAuton(m_manipulator.get());
+		if (m_game_mode == game_mode::eAuton)
+			m_Goal.ActivateAuton(m_manipulator.get());
 		}
 	}
 	void Stop()

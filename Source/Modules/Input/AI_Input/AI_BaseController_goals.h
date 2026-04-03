@@ -142,7 +142,10 @@ public:
 			Module::Input::AppendDirectAutonChainLog(dbg);
 		}
 		//Unlike before the controller does all the work, we only have to monitor the waypoint activity
-		m_Controller->DriveToLocation(m_Point.Position.y(), m_Point.Position.x(), true, m_UseSafeStop, m_Point.Power, m_LockOrientation);
+		// Ian: Pass m_SafeStopTolerance so the controller's HitWayPoint() uses the same tolerance as ours.
+		// Without this the controller defaults to Feet2Meters(1.0) regardless of what the goal was given.
+		m_Controller->DriveToLocation(m_Point.Position.y(), m_Point.Position.x(), true, m_UseSafeStop, m_Point.Power, m_LockOrientation,
+			m_SafeStopTolerance);
 	}
 	virtual Goal_Status Process(double dTime_s)
 	{
@@ -188,7 +191,7 @@ protected:
 		bool ret = position_delta < tolerance2;
 		// Ian: Enable this block to diagnose waypoint arrival issues — shows position delta every frame
 		// and announces completion.  Disable once auton is confirmed working (very spammy).
-#if 1
+#if 0
 		printf("\r[HitWayPoint] delta=%f tol=%f pos=(%f,%f) tgt=(%f,%f)        ",
 			position_delta, tolerance2,
 			currPos.x(), currPos.y(),

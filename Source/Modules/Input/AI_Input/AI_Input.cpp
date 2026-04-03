@@ -27,9 +27,10 @@ protected:
 	{
 		m_SetIntendedOrientation_callback(intended_orientation, absolute);
 	}
-	void DriveToLocation(double north, double east, bool absolute, bool stop_at_destination, double max_speed, bool can_strafe)
+	void DriveToLocation(double north, double east, bool absolute, bool stop_at_destination, double max_speed, bool can_strafe,
+		double safestop_tolerance)
 	{
-		m_DriveToLocation_callback(north, east, absolute, stop_at_destination, max_speed, can_strafe);
+		m_DriveToLocation_callback(north, east, absolute, stop_at_destination, max_speed, can_strafe, safestop_tolerance);
 	}
 	Vec2D GetCurrentPosition() const
 	{
@@ -51,7 +52,8 @@ public:
 	{
 		m_SetIntendedOrientation_callback = callback;
 	}
-	void Set_DriveToLocation(std::function<void(double north, double east, bool absolute, bool stop_at_destination, double max_speed, bool can_strafe)> callback)
+	void Set_DriveToLocation(std::function<void(double north, double east, bool absolute, bool stop_at_destination, double max_speed, bool can_strafe,
+		double safestop_tolerance)> callback)
 	{
 		m_DriveToLocation_callback = callback;
 	}
@@ -99,9 +101,10 @@ void AI_Input::SetIntendedOrientation(double intended_orientation, bool absolute
 {
 	m_AI_Input->SetIntendedOrientation(intended_orientation, absolute);
 }
-void AI_Input::DriveToLocation(double north, double east, bool absolute, bool stop_at_destination, double max_speed, bool can_strafe)
+void AI_Input::DriveToLocation(double north, double east, bool absolute, bool stop_at_destination, double max_speed, bool can_strafe,
+	double safestop_tolerance)
 {
-	m_AI_Input->DriveToLocation(north, east, absolute, stop_at_destination, max_speed, can_strafe);
+	m_AI_Input->DriveToLocation(north, east, absolute, stop_at_destination, max_speed, can_strafe, safestop_tolerance);
 }
 Vec2D AI_Input::GetCurrentPosition() const
 {

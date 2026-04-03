@@ -248,9 +248,11 @@ private:
 				{
 					return m_robot.GetCurrentHeading();
 				});
-			m_Goal.Set_DriveToLocation([&](double north, double east, bool absolute, bool stop_at_destination, double max_speed, bool can_strafe)
+			// Ian: safestop_tolerance threaded through so the goal's tolerance reaches the controller
+			m_Goal.Set_DriveToLocation([&](double north, double east, bool absolute, bool stop_at_destination, double max_speed, bool can_strafe,
+				double safestop_tolerance)
 				{
-					m_robot.DriveToLocation(north, east, absolute, stop_at_destination, max_speed, can_strafe);
+					m_robot.DriveToLocation(north, east, absolute, stop_at_destination, max_speed, can_strafe, safestop_tolerance);
 				});
 			m_Goal.Set_SetIntendedOrientation([&](double intended_orientation, bool absolute)
 				{

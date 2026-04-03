@@ -374,7 +374,12 @@ public:
 		double length_in, double height_in,
 		Goal_ArmHoldStill::SetBoolFn setFreezeArm = nullptr,
 		Goal_ArmHoldStill::SetBoolFn setLockPosition = nullptr)
-		: m_armXpos(armXpos), m_armYpos(armYpos)
+		// Ian: AutoActivate=true is critical — without it Generic_CompositeGoal::Process() skips
+		// ActivateIfInactive(), Activate() never fires, Process() returns eInactive every frame,
+		// and any parent composite goal that assigns this return value to m_Status will reset to
+		// eInactive and re-push all its own subgoals on the next frame (infinite ping-pong).
+		: Generic_CompositeGoal(true)
+		, m_armXpos(armXpos), m_armYpos(armYpos)
 		, m_bucketAngle(bucketAngle), m_claspAngle(claspAngle)
 		, m_length_in(length_in), m_height_in(height_in)
 		, m_setFreezeArm(std::move(setFreezeArm))
@@ -452,7 +457,10 @@ public:
 		Legacy::Ship_1D& bucketAngle, Legacy::Ship_1D& claspAngle,
 		Goal_ArmHoldStill::SetBoolFn setFreezeArm = nullptr,
 		Goal_ArmHoldStill::SetBoolFn setLockPosition = nullptr)
-		: m_armXpos(armXpos), m_armYpos(armYpos)
+		// Ian: AutoActivate=true — same fix as ArmGrabSequence (see comment there).
+		// Without it, Process() returns eInactive forever causing parent to re-Activate.
+		: Generic_CompositeGoal(true)
+		, m_armXpos(armXpos), m_armYpos(armYpos)
 		, m_bucketAngle(bucketAngle), m_claspAngle(claspAngle)
 		, m_setFreezeArm(std::move(setFreezeArm))
 		, m_setLockPosition(std::move(setLockPosition))
@@ -686,7 +694,7 @@ public:
 		if (m_Status == eInactive)
 			return m_Status;
 
-#if 1
+#if 0
 		// Ian: Throttled diagnostic — print position once per second
 		m_logTimer += dTime_s;
 		if (m_logTimer >= 1.0)

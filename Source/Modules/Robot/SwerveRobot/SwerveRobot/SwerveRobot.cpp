@@ -601,9 +601,10 @@ public:
 	{
 		m_MotionControl2D.SetIntendedOrientation(intended_orientation, absolute);
 	}
-	void DriveToLocation(double north, double east, bool absolute = true, bool stop_at_destination = true, double max_speed = 0.0, bool can_strafe = true)
+	void DriveToLocation(double north, double east, bool absolute = true, bool stop_at_destination = true, double max_speed = 0.0, bool can_strafe = true,
+		double safestop_tolerance = Feet2Meters(1.0))
 	{
-		m_MotionControl2D.DriveToLocation(north, east, absolute, stop_at_destination, max_speed, can_strafe);
+		m_MotionControl2D.DriveToLocation(north, east, absolute, stop_at_destination, max_speed, can_strafe, safestop_tolerance);
 	}
 	#pragma endregion
 	#pragma region _accessors_
@@ -743,9 +744,10 @@ void SwerveRobot::SetIntendedOrientation(double intended_orientation, bool absol
 {
 	m_SwerveRobot->SetIntendedOrientation(intended_orientation, absolute);
 }
-void SwerveRobot::DriveToLocation(double north, double east, bool absolute, bool stop_at_destination, double max_speed, bool can_strafe)
+void SwerveRobot::DriveToLocation(double north, double east, bool absolute, bool stop_at_destination, double max_speed, bool can_strafe,
+	double safestop_tolerance)
 {
-	m_SwerveRobot->DriveToLocation(north, east, absolute, stop_at_destination, max_speed, can_strafe);
+	m_SwerveRobot->DriveToLocation(north, east, absolute, stop_at_destination, max_speed, can_strafe, safestop_tolerance);
 }
 void SwerveRobot::TimeSlice(double d_time_s)
 {

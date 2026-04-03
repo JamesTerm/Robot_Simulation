@@ -10,9 +10,9 @@ Actionable future work for this repository.
 
 ## Active: Autonomous goal system — remaining items
 
-### Write a "cool real autonomous goal" for the Auton chooser
+### ~~Write a "cool real autonomous goal" for the Auton chooser~~ **DONE** (2026-04-03)
 
-The Auton chooser currently only has "Do Nothing" and "Just Move Forward". A more interesting autonomous sequence should be written as a fun task (user's words). This could be a multi-waypoint path, a timed scoring sequence, or any creative autonomous routine.
+`AutonGrabAndReturn` — a 16-subgoal triangle-pattern drive+grab autonomous (3 waypoints + arm grab sequence + return). Confirmed working at runtime. Moved to `docs/project_history.md`.
 
 ### Runtime verification of Test chooser workflow
 

@@ -519,7 +519,11 @@ protected:
 		{
 			return m_IsDriven;
 		}
-		void DriveToLocation(double north, double east, bool absolute, bool stop_at_destination, double max_speed, bool can_strafe)
+		// Ian: safestop_tolerance — propagated from the goal layer so the controller and goal agree on how
+		// close is "close enough" to a waypoint.  Before this fix the controller was hardcoded at Feet2Meters(1.0)
+		// while the goal could pass any value, causing the two independent HitWayPoint() checks to disagree.
+		void DriveToLocation(double north, double east, bool absolute, bool stop_at_destination, double max_speed, bool can_strafe,
+			double safestop_tolerance = Feet2Meters(1.0))
 		{
 			//Drives to a location at given by coordinates at max speed given
 			//It can either stop at location or continue to drive past it once it hits (allows for path driving)
@@ -535,6 +539,7 @@ protected:
 			m_LastSimFlightMode = m_ship.GetSimFlightMode(); // put the slide mode back to this when we are done
 			m_stop_at_destination = stop_at_destination;
 			m_want_strafe = can_strafe;
+			m_safestop_tolerance = safestop_tolerance;
 			m_Power = max_speed == 0.0 ? 1.0 : max_speed / m_ship.GetShipProperties().GetEngagedMaxSpeed();
 			//This part is like the activate on the legacy ship goals
 			if (absolute)
@@ -1598,9 +1603,10 @@ public:
 		//Note: SetRequestedVelocity is local
 		SetRequestedVelocity(LocalToGlobal(-GetAtt_r(),Vec2D(right, forward)));
 	}
-	void DriveToLocation(double north, double east, bool absolute, bool stop_at_destination, double max_speed, bool can_strafe)
+	void DriveToLocation(double north, double east, bool absolute, bool stop_at_destination, double max_speed, bool can_strafe,
+		double safestop_tolerance = Feet2Meters(1.0))
 	{
-		m_controller.DriveToLocation(north, east, absolute, stop_at_destination, max_speed, can_strafe);
+		m_controller.DriveToLocation(north, east, absolute, stop_at_destination, max_speed, can_strafe, safestop_tolerance);
 	}
 	bool GetIsDrivenLinear() const
 	{
@@ -1695,9 +1701,10 @@ void MotionControl2D::SetIntendedOrientation(double intended_orientation, bool a
 {
 	m_MotionControl2D->SetIntendedOrientation(intended_orientation, absolute);
 }
-void MotionControl2D::DriveToLocation(double north, double east,bool absolute, bool stop_at_destination, double max_speed, bool can_strafe)
+void MotionControl2D::DriveToLocation(double north, double east,bool absolute, bool stop_at_destination, double max_speed, bool can_strafe,
+	double safestop_tolerance)
 {
-	m_MotionControl2D->DriveToLocation(north, east, absolute, stop_at_destination, max_speed, can_strafe);
+	m_MotionControl2D->DriveToLocation(north, east, absolute, stop_at_destination, max_speed, can_strafe, safestop_tolerance);
 }
 
 //Accessors:---------------------------------------------
