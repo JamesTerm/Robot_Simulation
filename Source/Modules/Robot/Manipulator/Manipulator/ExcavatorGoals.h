@@ -390,37 +390,39 @@ public:
 	virtual void Activate() override
 	{
 		if (m_Status == eActive) return;
-		// Ian: Positions ported from Curivator_Goals.cpp Robot_TesterCode path.
+		// Ian: Positions ported from Curivator_Goals.cpp Robot_TesterCode path (ArmGrabSequence::Activate).
 		// StartingPosition = {13.0, 4.0, 60.0, 5.0} (xpos, ypos, bucket, clasp)
 		// HoverPosition    = {39.0, 0.0, 90.0, 45.0}
 		// PickupPosition   = {39.0, -20.0, 90.0, 45.0}
 		const double StartXpos = 13.0, StartYpos = 4.0, StartBucket = 60.0, StartClasp = 5.0;
 		const double PickupBucket = 90.0, PickupClasp = 45.0;
-		// Sequence (LIFO — added in reverse execution order for Generic_CompositeGoal):
-		// 1. Return to starting position
+		// Sequence (LIFO — AddSubgoal=push_front, ProcessSubgoals processes front first,
+		// so add in REVERSE execution order: last-to-execute first, first-to-execute last).
+		// Execution order: start → hover → pickup → grab → scoop → return home.
+		// 6. Return to starting position (with object grabbed)
 		AddSubgoal(new Goal_SetArmPosition(m_armXpos, m_armYpos, m_bucketAngle, m_claspAngle,
-			StartXpos, StartYpos, StartBucket, StartClasp,
+			StartXpos, StartYpos, 50.0, -7.0,
 			m_setFreezeArm, m_setLockPosition));
-		// 2. Hover — lift from pickup to hover height
-		AddSubgoal(new Goal_SetArmPosition(m_armXpos, m_armYpos, m_bucketAngle, m_claspAngle,
-			m_length_in, 0.0, PickupBucket, PickupClasp,
-			m_setFreezeArm, m_setLockPosition));
-		// 3. Pickup position — open clasp at pickup
-		AddSubgoal(new Goal_SetArmPosition(m_armXpos, m_armYpos, m_bucketAngle, m_claspAngle,
-			m_length_in, m_height_in, PickupBucket, PickupClasp,
-			m_setFreezeArm, m_setLockPosition));
-		// 4. Close clasp (grab)
-		AddSubgoal(new Goal_SetArmPosition(m_armXpos, m_armYpos, m_bucketAngle, m_claspAngle,
-			m_length_in, m_height_in, PickupBucket, -7.0,
-			m_setFreezeArm, m_setLockPosition));
-		// 5. Rotate bucket slowly (approach) — bucket_speed=0.5 matching legacy line 825
+		// 5. Rotate bucket slowly (scoop) — bucket_speed=0.5 matching legacy line 825
 		AddSubgoal(new Goal_SetArmPosition(m_armXpos, m_armYpos, m_bucketAngle, m_claspAngle,
 			m_length_in, m_height_in, 40.0, -7.0,
 			m_setFreezeArm, m_setLockPosition,
 			1.0, 1.0, 0.5, 1.0));  // bucket_speed=0.5
-		// 6. Start from starting position
+		// 4. Close clasp (grab)
 		AddSubgoal(new Goal_SetArmPosition(m_armXpos, m_armYpos, m_bucketAngle, m_claspAngle,
-			StartXpos, StartYpos, 50.0, -7.0,
+			m_length_in, m_height_in, PickupBucket, -7.0,
+			m_setFreezeArm, m_setLockPosition));
+		// 3. Pickup position — lower to pickup, clasp open
+		AddSubgoal(new Goal_SetArmPosition(m_armXpos, m_armYpos, m_bucketAngle, m_claspAngle,
+			m_length_in, m_height_in, PickupBucket, PickupClasp,
+			m_setFreezeArm, m_setLockPosition));
+		// 2. Hover — extend to hover position above pickup
+		AddSubgoal(new Goal_SetArmPosition(m_armXpos, m_armYpos, m_bucketAngle, m_claspAngle,
+			m_length_in, 0.0, PickupBucket, PickupClasp,
+			m_setFreezeArm, m_setLockPosition));
+		// 1. Start from starting position
+		AddSubgoal(new Goal_SetArmPosition(m_armXpos, m_armYpos, m_bucketAngle, m_claspAngle,
+			StartXpos, StartYpos, StartBucket, StartClasp,
 			m_setFreezeArm, m_setLockPosition));
 		m_Status = eActive;
 	}
