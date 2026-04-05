@@ -123,10 +123,11 @@ private:
 		SmartDashboard::PutNumber("Swerve/Swivel_fr_Voltage", vo.Velocity.AsArray[5]);
 		SmartDashboard::PutNumber("Swerve/Swivel_rl_Voltage", vo.Velocity.AsArray[6]);
 		SmartDashboard::PutNumber("Swerve/Swivel_rr_Voltage", vo.Velocity.AsArray[7]);
-		SmartDashboard::PutNumber("Swerve/swivel_fl_Raw", RAD_2_DEG(cv.Velocity.AsArray[4]));
-		SmartDashboard::PutNumber("Swerve/swivel_fr_Raw", RAD_2_DEG(cv.Velocity.AsArray[5]));
-		SmartDashboard::PutNumber("Swerve/swivel_rl_Raw", RAD_2_DEG(cv.Velocity.AsArray[6]));
-		SmartDashboard::PutNumber("Swerve/swivel_rr_Raw", RAD_2_DEG(cv.Velocity.AsArray[7]));
+		// Ian: Normalize swivel angles to [-180,180] for dashboard gauge display
+		SmartDashboard::PutNumber("Swerve/swivel_fl_Raw", NormalizeAngle_deg(RAD_2_DEG(cv.Velocity.AsArray[4])));
+		SmartDashboard::PutNumber("Swerve/swivel_fr_Raw", NormalizeAngle_deg(RAD_2_DEG(cv.Velocity.AsArray[5])));
+		SmartDashboard::PutNumber("Swerve/swivel_rl_Raw", NormalizeAngle_deg(RAD_2_DEG(cv.Velocity.AsArray[6])));
+		SmartDashboard::PutNumber("Swerve/swivel_rr_Raw", NormalizeAngle_deg(RAD_2_DEG(cv.Velocity.AsArray[7])));
 
 		for (size_t i = 0; i < 8; i++)
 			m_current_state.bits.SwerveVelocitiesFromIndex[i] = cv.Velocity.AsArray[i];

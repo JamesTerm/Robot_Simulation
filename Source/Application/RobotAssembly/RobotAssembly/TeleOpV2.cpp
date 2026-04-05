@@ -89,10 +89,11 @@ private:
 		SmartDashboard::PutNumber("Drive/Wheel_rr_Velocity", Meters2Feet(m_robot.GetIntendedVelocitiesFromIndex(3)));
 		//For the angles either show raw or use simple dial using 180 to -180 with a 45 tick interval
 		//its not perfect, but it gives a good enough direction to tell (especially when going down)
-		SmartDashboard::PutNumber("Swerve/swivel_fl_Raw", RAD_2_DEG(m_robot.GetSwerveVelocitiesFromIndex(0)));
-		SmartDashboard::PutNumber("Swerve/swivel_fr_Raw", RAD_2_DEG(m_robot.GetSwerveVelocitiesFromIndex(1)));
-		SmartDashboard::PutNumber("Swerve/swivel_rl_Raw", RAD_2_DEG(m_robot.GetSwerveVelocitiesFromIndex(2)));
-		SmartDashboard::PutNumber("Swerve/swivel_rr_Raw", RAD_2_DEG(m_robot.GetSwerveVelocitiesFromIndex(3)));
+		// Ian: Normalize swivel angles to [-180,180] for dashboard gauge display
+		SmartDashboard::PutNumber("Swerve/swivel_fl_Raw", NormalizeAngle_deg(RAD_2_DEG(m_robot.GetSwerveVelocitiesFromIndex(0))));
+		SmartDashboard::PutNumber("Swerve/swivel_fr_Raw", NormalizeAngle_deg(RAD_2_DEG(m_robot.GetSwerveVelocitiesFromIndex(1))));
+		SmartDashboard::PutNumber("Swerve/swivel_rl_Raw", NormalizeAngle_deg(RAD_2_DEG(m_robot.GetSwerveVelocitiesFromIndex(2))));
+		SmartDashboard::PutNumber("Swerve/swivel_rr_Raw", NormalizeAngle_deg(RAD_2_DEG(m_robot.GetSwerveVelocitiesFromIndex(3))));
 		//but for our current state of the UI, use the actual velocities from the entity 
 		//(which will be different as it accounts for mechanical resolve of momentum)
 		Vec2D global_velocity= LocalToGlobal(entity.GetCurrentHeading(), Vec2D(linear_velocity.y,linear_velocity.x));

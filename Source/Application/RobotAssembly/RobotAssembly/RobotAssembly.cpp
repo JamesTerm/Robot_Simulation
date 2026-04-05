@@ -280,10 +280,11 @@ public:
 					SmartDashboard::PutNumber("Wheel_rr_Velocity", Meters2Feet(m_robot.GetIntendedVelocitiesFromIndex(3)));
 					//For the angles either show raw or use simple dial using 180 to -180 with a 45 tick interval
 					//its not perfect, but it gives a good enough direction to tell (especially when going down)
-					SmartDashboard::PutNumber("swivel_fl_Raw", RAD_2_DEG(m_robot.GetSwerveVelocitiesFromIndex(0)));
-					SmartDashboard::PutNumber("swivel_fr_Raw", RAD_2_DEG(m_robot.GetSwerveVelocitiesFromIndex(1)));
-					SmartDashboard::PutNumber("swivel_rl_Raw", RAD_2_DEG(m_robot.GetSwerveVelocitiesFromIndex(2)));
-					SmartDashboard::PutNumber("swivel_rr_Raw", RAD_2_DEG(m_robot.GetSwerveVelocitiesFromIndex(3)));
+					// Ian: Normalize swivel angles to [-180,180] for dashboard gauge display
+					SmartDashboard::PutNumber("swivel_fl_Raw", NormalizeAngle_deg(RAD_2_DEG(m_robot.GetSwerveVelocitiesFromIndex(0))));
+					SmartDashboard::PutNumber("swivel_fr_Raw", NormalizeAngle_deg(RAD_2_DEG(m_robot.GetSwerveVelocitiesFromIndex(1))));
+					SmartDashboard::PutNumber("swivel_rl_Raw", NormalizeAngle_deg(RAD_2_DEG(m_robot.GetSwerveVelocitiesFromIndex(2))));
+					SmartDashboard::PutNumber("swivel_rr_Raw", NormalizeAngle_deg(RAD_2_DEG(m_robot.GetSwerveVelocitiesFromIndex(3))));
 					if (joyinfo.ButtonBank[0] == 2)
 						done = true;
 				}
@@ -356,10 +357,11 @@ public:
 					SmartDashboard::PutNumber("Wheel_fr_Velocity", Meters2Feet(m_robot.GetIntendedVelocitiesFromIndex(1)));
 					SmartDashboard::PutNumber("Wheel_rl_Velocity", Meters2Feet(m_robot.GetIntendedVelocitiesFromIndex(2)));
 					SmartDashboard::PutNumber("Wheel_rr_Velocity", Meters2Feet(m_robot.GetIntendedVelocitiesFromIndex(3)));
-					SmartDashboard::PutNumber("swivel_fl_Raw", RAD_2_DEG(m_robot.GetSwerveVelocitiesFromIndex(0)));
-					SmartDashboard::PutNumber("swivel_fr_Raw", RAD_2_DEG(m_robot.GetSwerveVelocitiesFromIndex(1)));
-					SmartDashboard::PutNumber("swivel_rl_Raw", RAD_2_DEG(m_robot.GetSwerveVelocitiesFromIndex(2)));
-					SmartDashboard::PutNumber("swivel_rr_Raw", RAD_2_DEG(m_robot.GetSwerveVelocitiesFromIndex(3)));
+					// Ian: Normalize swivel angles to [-180,180] for dashboard gauge display
+					SmartDashboard::PutNumber("swivel_fl_Raw", NormalizeAngle_deg(RAD_2_DEG(m_robot.GetSwerveVelocitiesFromIndex(0))));
+					SmartDashboard::PutNumber("swivel_fr_Raw", NormalizeAngle_deg(RAD_2_DEG(m_robot.GetSwerveVelocitiesFromIndex(1))));
+					SmartDashboard::PutNumber("swivel_rl_Raw", NormalizeAngle_deg(RAD_2_DEG(m_robot.GetSwerveVelocitiesFromIndex(2))));
+					SmartDashboard::PutNumber("swivel_rr_Raw", NormalizeAngle_deg(RAD_2_DEG(m_robot.GetSwerveVelocitiesFromIndex(3))));
 					if (joyinfo.ButtonBank[0] == 2)
 						done = true;
 				}

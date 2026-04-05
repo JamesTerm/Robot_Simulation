@@ -444,6 +444,22 @@ const double PI_2 = 1.57079632679489661923;
 
 #define DEG_2_RAD(x)		((x)*M_PI/180.0)
 #define RAD_2_DEG(x)		((x)*180.0/M_PI)
+
+// Ian: Robust angle normalization to [-180, 180] degrees using fmod.
+// Unlike NormalizeRotation2 (single-pass +/-2pi wrap), this handles any
+// accumulated angle magnitude.  Used for dashboard gauge display of swerve
+// swivel angles where the simulated potentiometer can accumulate beyond one
+// full revolution.
+inline double NormalizeAngle_deg(double deg)
+{
+	deg = fmod(deg, 360.0);
+	if (deg > 180.0)
+		deg -= 360.0;
+	else if (deg < -180.0)
+		deg += 360.0;
+	return deg;
+}
+
 #define ARRAY_SIZE(things)	((sizeof(things)/sizeof(*(things))))
 
 #define Inches2Meters(x)	((x)*0.0254)
